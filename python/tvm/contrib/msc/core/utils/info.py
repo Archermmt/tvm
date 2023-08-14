@@ -66,3 +66,33 @@ def dump_dict(dict_obj: dict, flavor: str = "dmlc") -> str:
     if flavor == "dmlc":
         return json.dumps({k: int(v) if isinstance(v, bool) else v for k, v in dict_obj.items()})
     return json.dumps(dict_obj)
+
+
+def dict_equal(dict_A: dict, dict_B: dict) -> bool:
+    """Check if two dicts are the same.
+
+    Parameters
+    ----------
+    dict_A: dict
+        The A dict.
+    dict_B: dict
+        The B dict.
+
+    Returns
+    -------
+    equal: bool
+        Whether two dicts are the same.
+    """
+
+    if not isinstance(dict_A, dict) or not isinstance(dict_B, dict):
+        return False
+    if dict_A.keys() != dict_B.keys():
+        return False
+    for k, v in dict_A.items():
+        if type(v) != type(dict_B[k]):
+            return False
+        if isinstance(v, dict) and not dict_equal(v, dict_B[k]):
+            return False
+        if v != dict_B[k]:
+            return False
+    return True

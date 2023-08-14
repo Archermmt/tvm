@@ -16,7 +16,7 @@
 # under the License.
 """tvm.contrib.msc.core.ir.graph"""
 
-from typing import Dict, Tuple, List, Optional, Union
+from typing import Dict, Tuple, List, Optional, Union, Iterable, Any
 import numpy as np
 
 import tvm
@@ -57,15 +57,45 @@ class MSCTensor(Object):
             _ffi_api.MSCTensor, name, dtype, layout, shape, alias or ""
         )
 
-    def get_shape(self):
+    def get_shape(self) -> List[int]:
         return [int(i) for i in self.shape]
 
+    def get_size(self) -> int:
+        return int(_ffi_api.MSCTensorGetSize(self))
+
+    def dim_at(self, axis: Union[int, str]) -> int:
+        if isinstance(axis, int):
+            return int(self.shape[axis])
+        return int(_ffi_api.MSCTensorDimAt(self, axis))
+
+    def equal(self, other: Object) -> bool:
+        """A fast method to check if two nodes are same.
+
+        Parameters
+        -------
+        other: MSCTensor
+            The tensor to be compared.
+
+        Returns
+        -------
+        equal: bool
+            Whether two tensors are the same.
+        """
+
+        if not isinstance(other, MSCTensor):
+            return False
+        if self.get_shape() != other.get_shape():
+            return False
+        if self.dtype != other.dtype:
+            return False
+        return True
+
     @property
-    def dtype_name(self):
+    def dtype_name(self) -> str:
         return _ffi_api.MSCTensorDTypeName(self)
 
     @property
-    def ndim(self):
+    def ndim(self) -> int:
         return len(self.shape)
 
 
@@ -177,6 +207,63 @@ class MSCJoint(BaseJoint):
         """
 
         return _ffi_api.MSCJointGetOutputs(self)
+
+    def get_attrs(self) -> Dict[str, str]:
+        """Get all the attributes from node
+
+        Returns
+        -------
+        attributes: dict<str, str>
+            The attributes of node.
+        """
+
+        return _ffi_api.MSCJointGetAttrs(self)
+
+    def get_attr(self, key: str, default: Optional[Any] = None) -> str:
+        """Get all the attribute from node
+
+        Parameters
+        -------
+        key: str
+            The key of the attribute.
+        default: Any
+            The default value when key is missing.
+
+        Returns
+        -------
+        attribute: str
+            The attributes of node.
+        """
+
+        return self.get_attrs().get(key, default)
+
+    def equal(self, other: BaseJoint) -> bool:
+        """A fast method to check if two nodes are same.
+
+        Parameters
+        -------
+        other: MSCJoint
+            The node to be compared.
+
+        Returns
+        -------
+        equal: bool
+            Whether two nodes are the same.
+        """
+
+        if not isinstance(other, MSCJoint):
+            return False
+        if len(self.get_inputs()) != len(other.get_inputs()):
+            return False
+        if len(self.get_inputs()) != len(other.get_inputs()):
+            return False
+        for s_i, o_i in zip(self.get_inputs(), other.get_inputs()):
+            if not s_i.equal(o_i):
+                return False
+        for s_o, o_o in zip(self.get_inputs(), other.get_inputs()):
+            if not s_o.equal(o_o):
+                return False
+        return msc_utils.dict_equal(self.get_attrs(), other.get_attrs())
 
 
 @tvm._ffi.register_object("msc.core.WeightJoint")
@@ -331,7 +418,7 @@ class MSCGraph(BaseGraph):
 
         return _ffi_api.MSCGraphFindConsumers(self, name)
 
-    def get_nodes(self):
+    def get_nodes(self) -> Iterable[MSCJoint]:
         """Get all the nodes in the graph.
 
         Returns
@@ -446,32 +533,36 @@ class MSCGraph(BaseGraph):
 
         return MSCGraph.from_json(self.to_json())
 
-    def is_same(self, other: BaseGraph) -> bool:
+    def equal(self, other: BaseGraph) -> bool:
         """A fast method to check if two graphs are same.
 
-        Returns
+        Parameters
         -------
         other: MSCGraph
             The graph to be compared.
 
         Returns
         -------
-        is_same: bool
+        equal: bool
             Whether two graphs are the same.
         """
 
-        if self.node_names != other.node_names:
+        if not isinstance(other, MSCGraph):
             return False
-        if self.input_names != other.input_names or self.output_names != other.output_names:
+        if len(self.input_names) != len(other.input_names):
+            return False
+        if len(self.output_names) != len(other.output_names):
+            return False
+        if len(self.node_names) != len(other.node_names):
             return False
         for s_i, o_i in zip(self.get_inputs(), other.get_inputs()):
-            if not s_i.is_same(o_i):
+            if not s_i.equal(o_i):
                 return False
         for s_o, o_o in zip(self.get_outputs(), other.get_outputs()):
-            if not s_o.is_same(o_o):
+            if not s_o.equal(o_o):
                 return False
         for s_n, o_n in zip(self.get_nodes(), other.get_nodes()):
-            if not s_n.is_same(o_n):
+            if not s_n.equal(o_n):
                 return False
         return True
 
@@ -518,3 +609,23 @@ class WeightGraph(Object):
             name,
             nodes,
         )
+
+    def visualize(self, path: Optional[str] = None) -> str:
+        """Dump the graph to prototxt format.
+
+        Parameters
+        ----------
+        path: string
+            The file_path to save prototxt.
+
+        Returns
+        -------
+        graph_proto: string
+            The graph in prototxt format.
+        """
+
+        graph_proto = _ffi_api.WeightGraphToPrototxt(self)
+        if path:
+            with open(path, "w") as f:
+                f.write(graph_proto)
+        return graph_proto

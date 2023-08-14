@@ -1053,8 +1053,22 @@ TVM_REGISTER_GLOBAL("msc.core.MSCJointGetInputs")
 TVM_REGISTER_GLOBAL("msc.core.MSCJointGetOutputs")
     .set_body_typed([](const MSCJoint& node) -> Array<MSCTensor> { return node->GetOutputs(); });
 
+TVM_REGISTER_GLOBAL("msc.core.MSCJointGetAttrs")
+    .set_body_typed([](const MSCJoint& node) -> Map<String, String> { return node->attrs; });
+
 TVM_REGISTER_GLOBAL("msc.core.MSCTensorDTypeName")
     .set_body_typed([](const MSCTensor& tensor) -> String { return tensor->DTypeName(); });
+
+TVM_REGISTER_GLOBAL("msc.core.MSCTensorDimAt")
+    .set_body_typed([](const MSCTensor& tensor, const String& axis) -> Integer {
+      return tensor->DimAt(axis);
+    });
+
+TVM_REGISTER_GLOBAL("msc.core.MSCTensorGetSize")
+    .set_body_typed([](const MSCTensor& tensor) -> Integer { return tensor->GetSize(); });
+
+TVM_REGISTER_GLOBAL("msc.core.WeightGraphToPrototxt")
+    .set_body_typed([](const WeightGraph& graph) -> String { return graph->ToPrototxt(); });
 
 }  // namespace msc
 }  // namespace contrib

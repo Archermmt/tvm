@@ -16,6 +16,7 @@
 # under the License.
 """tvm.contrib.msc.core.utils.namespace"""
 
+from typing import Any
 import copy
 
 
@@ -25,25 +26,25 @@ class MSCMap:
     MAP = {}
 
     @classmethod
-    def set(cls, key, value):
+    def set(cls, key: str, value: Any):
         cls.MAP[key] = value
 
     @classmethod
-    def get(cls, key, default=None):
+    def get(cls, key: str, default: Optional[Any] = None):
         return cls.MAP.get(key, default)
 
     @classmethod
-    def clone(cls, key, default=None):
+    def clone(cls, key: str, default: Optional[Any] = None):
         return copy.deepcopy(cls.get(key, default))
 
     @classmethod
-    def delete(cls, key):
+    def delete(cls, key: str):
         if key in cls.MAP:
             return cls.MAP.pop(key)
         return None
 
     @classmethod
-    def contains(cls, key):
+    def contains(cls, key: str):
         return key in cls.MAP
 
 

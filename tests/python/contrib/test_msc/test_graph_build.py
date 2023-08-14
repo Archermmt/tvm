@@ -29,7 +29,11 @@ def verify_model(torch_model, input_info, expected):
     with torch.no_grad():
         mod = from_fx(graph_model, input_info)
     graph = _ffi_api.BuildFromRelax(mod, "main")
+    print("graph " + str(graph))
+    print("json " + str(graph.to_json()))
+    raise Exception("stop here!!")
     assert msc_utils.dict_equal(graph.abstract(), expected)
+
 
 def test_conv1d():
     class Conv1D1(Module):
@@ -1007,4 +1011,5 @@ def test_attention():
 
 
 if __name__ == "__main__":
-    tvm.testing.main()
+    # tvm.testing.main()
+    test_conv1d()
