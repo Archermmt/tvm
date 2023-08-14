@@ -90,6 +90,17 @@ class MSCTensor(Object):
             return False
         return True
 
+    def inspect(self) -> dict:
+        """Extract important info of the tensor.
+
+        Returns
+        -------
+        abstract: dict
+            The tensor abstract in json format.
+        """
+
+        return {"name": self.alias, "shape": self.get_shape(), "dtype": self.dtype_name}
+
     @property
     def dtype_name(self) -> str:
         return _ffi_api.MSCTensorDTypeName(self)
@@ -484,13 +495,8 @@ class MSCGraph(BaseGraph):
 
         return _ffi_api.MSCGraphGetOutputs(self)
 
-    def to_json(self, path: Optional[str] = None) -> str:
+    def to_json(self) -> str:
         """Dump the graph to json.
-
-        Parameters
-        ----------
-        path: string
-            The file_path for save json.
 
         Returns
         -------
@@ -498,11 +504,29 @@ class MSCGraph(BaseGraph):
             The graph in json format.
         """
 
-        graph_json = _ffi_api.MSCGraphToJson(self)
-        if path:
-            with open(path, "w") as f:
-                f.write(graph_json)
-        return graph_json
+        return _ffi_api.MSCGraphToJson(self)
+
+    def inspect(self) -> dict:
+        """Extract important info of the graph.
+
+        Returns
+        -------
+        abstract: dict
+            The graph abstract in json format.
+        """
+
+        graph_abs = {
+            "inputs": [i.inspect() for i in self.get_inputs()],
+            "outputs": [o.inspect() for o in self.get_outputs()],
+            "nodes": {"total": 0},
+        }
+        for node in self.get_nodes():
+            graph_abs["nodes"]["total"] += 1
+            if node.optype not in graph_abs["nodes"]:
+                graph_abs["nodes"][node.optype] = 1
+            else:
+                graph_abs["nodes"][node.optype] += 1
+        return graph_abs
 
     @classmethod
     def from_json(cls, json_str: str) -> BaseGraph:

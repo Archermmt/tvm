@@ -104,9 +104,9 @@ const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>
     optype = "constant";
   } else if (expr->IsInstance<relax::ShapeExprNode>()) {
     optype = "shape";
-  } else if (expr->IsInstance<relax::TupleGetItem>()) {
+  } else if (expr->IsInstance<relax::TupleGetItemNode>()) {
     optype = "get_item";
-  } else if (expr->IsInstance<relax::Tuple>()) {
+  } else if (expr->IsInstance<relax::TupleNode>()) {
     optype = "tuple";
   } else if (const auto* call_node = expr.as<relax::CallNode>()) {
     if (const auto* op_node = call_node->op.as<OpNode>()) {
@@ -409,9 +409,9 @@ MSCJoint RelayGraphBuilder::AddNode(const Expr& expr, const String& name) {
     optype = "input";
   } else if (expr->IsInstance<relay::ConstantNode>()) {
     optype = "constant";
-  } else if (expr->IsInstance<relay::TupleGetItem>()) {
+  } else if (expr->IsInstance<relay::TupleGetItemNode>()) {
     optype = "get_item";
-  } else if (expr->IsInstance<relay::Tuple>()) {
+  } else if (expr->IsInstance<relay::TupleNode>()) {
     optype = "tuple";
   } else if (const auto* call_node = expr.as<relay::CallNode>()) {
     if (const auto* op_node = call_node->op.as<OpNode>()) {

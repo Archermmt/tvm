@@ -16,7 +16,7 @@
 # under the License.
 """tvm.contrib.msc.core.utils.namespace"""
 
-from typing import Any
+from typing import Any, Optional
 import copy
 
 
