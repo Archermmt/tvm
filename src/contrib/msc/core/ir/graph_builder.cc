@@ -98,15 +98,15 @@ const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>
   const auto& node_name = name.size() > 0 ? name : SpanUtils::GetAttr(expr->span, "name");
   const auto& master_name = SpanUtils::GetAttr(expr->span, "master");
   String optype;
-  if (const auto* var = expr.as<relax::VarNode>()) {
+  if (expr->IsInstance<relax::VarNode>()) {
     optype = "input";
-  } else if (expr.as<relax::ConstantNode>()) {
+  } else if (expr->IsInstance<relax::ConstantNode>()) {
     optype = "constant";
-  } else if (expr.as<relax::ShapeExprNode>()) {
+  } else if (expr->IsInstance<relax::ShapeExprNode>()) {
     optype = "shape";
-  } else if (expr.as<relax::TupleGetItem>()) {
+  } else if (expr->IsInstance<relax::TupleGetItem>()) {
     optype = "get_item";
-  } else if (expr.as<relax::Tuple>()) {
+  } else if (expr->IsInstance<relax::Tuple>()) {
     optype = "tuple";
   } else if (const auto* call_node = expr.as<relax::CallNode>()) {
     if (const auto* op_node = call_node->op.as<OpNode>()) {
@@ -132,7 +132,7 @@ const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>
     if (const auto* v_node = call_node->op.as<GlobalVarNode>()) {
       const auto& func = Downcast<relax::Function>(ref_module_->Lookup(v_node->name_hint));
       attrs = RelaxFuncAttrGetter().GetAttrs(func);
-    } else if (const auto* f_node = call_node->op.as<relax::FunctionNode>()) {
+    } else if (call_node->op->IsInstance<relax::FunctionNode>()) {
       attrs = RelaxFuncAttrGetter().GetAttrs(call_node->op);
     } else if (call_node->attrs.defined()) {
       AttrGetter getter(&attrs);
@@ -171,7 +171,7 @@ const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>
         continue;
       }
       ICHECK(expr_tensor_map_.count(arg)) << "Missing argument " << arg;
-      if (input_types[i] != "input" && arg.as<relax::ConstantNode>()) {
+      if (input_types[i] != "input" && arg->IsInstance<relax::ConstantNode>()) {
         const auto& t_name = expr_tensor_map_[arg][0];
         const auto& w_name = SpanUtils::GetAttr(arg->span, "name");
         const auto& pair = tensor_input_map_[t_name];
@@ -405,13 +405,13 @@ MSCJoint RelayGraphBuilder::AddNode(const Expr& expr, const String& name) {
   const auto& node_name = name.size() > 0 ? name : SpanUtils::GetAttr(expr->span, "name");
   const auto& master_name = SpanUtils::GetAttr(expr->span, "master");
   String optype;
-  if (const auto* var = expr.as<relay::VarNode>()) {
+  if (expr->IsInstance<relay::VarNode>()) {
     optype = "input";
-  } else if (expr.as<relay::ConstantNode>()) {
+  } else if (expr->IsInstance<relay::ConstantNode>()) {
     optype = "constant";
-  } else if (expr.as<relay::TupleGetItem>()) {
+  } else if (expr->IsInstance<relay::TupleGetItem>()) {
     optype = "get_item";
-  } else if (expr.as<relay::Tuple>()) {
+  } else if (expr->IsInstance<relay::Tuple>()) {
     optype = "tuple";
   } else if (const auto* call_node = expr.as<relay::CallNode>()) {
     if (const auto* op_node = call_node->op.as<OpNode>()) {
@@ -433,7 +433,7 @@ MSCJoint RelayGraphBuilder::AddNode(const Expr& expr, const String& name) {
       AttrGetter getter(&attrs);
       const_cast<BaseAttrsNode*>(call_node->attrs.get())->VisitAttrs(&getter);
     }
-  } else if (expr.as<relay::FunctionNode>()) {
+  } else if (expr->IsInstance<relay::FunctionNode>()) {
     attrs = RelayFuncAttrGetter().GetAttrs(expr);
   } else if (const auto* const_node = expr.as<relay::ConstantNode>()) {
     if (const_node->is_scalar()) {
@@ -456,7 +456,7 @@ MSCJoint RelayGraphBuilder::AddNode(const Expr& expr, const String& name) {
     for (size_t i = 0; i < call_node->args.size(); i++) {
       const auto& arg = call_node->args[i];
       ICHECK(expr_tensor_map_.count(arg)) << "Missing argument " << arg;
-      if (input_types[i] != "input" && arg.as<relay::ConstantNode>()) {
+      if (input_types[i] != "input" && arg->IsInstance<relay::ConstantNode>()) {
         const auto& t_name = expr_tensor_map_[arg][0];
         const auto& w_name = SpanUtils::GetAttr(arg->span, "name");
         const auto& pair = tensor_input_map_[t_name];
@@ -519,7 +519,7 @@ MSCJoint RelayGraphBuilder::AddNode(const Expr& expr, const String& name) {
   Array<MSCTensor> outputs;
   const auto& layout = SpanUtils::GetAttr(expr->span, "layout");
   Type checked_type = expr->checked_type_;
-  if (checked_type.defined() && checked_type.as<relay::FuncTypeNode>()) {
+  if (checked_type.defined() && checked_type->IsInstance<relay::FuncTypeNode>()) {
     checked_type = Downcast<FuncType>(checked_type)->ret_type;
   }
   if (checked_type.defined()) {

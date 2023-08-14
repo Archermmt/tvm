@@ -1,4 +1,3 @@
-#!/usr/bin/env bash
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -16,26 +15,36 @@
 # specific language governing permissions and limitations
 # under the License.
 
-set -euxo pipefail
+import tvm
+import tvm.testing
+from tvm import relax
+import json
 
-source tests/scripts/setup-pytest-env.sh
-export PYTHONPATH=${PYTHONPATH}:${TVM_PATH}/apps/extension/python
-export LD_LIBRARY_PATH="build:${LD_LIBRARY_PATH:-}"
 
-# to avoid CI CPU thread throttling.
-export TVM_BIND_THREADS=0
-export TVM_NUM_THREADS=2
+# 0.13 BACKWARDS COMPATIBILITY TESTS
+def test_vdevice():
+    nodes = [
+        {"type_key": ""},
+        {
+            "type_key": "relax.TensorStructInfo",
+            "attrs": {
+                "dtype": "float32",
+                "ndim": "-1",
+                "shape": "0",
+                "span": "0",
+            },
+        },
+    ]
+    data = {
+        "root": 1,
+        "nodes": nodes,
+        "attrs": {"tvm_version": "0.13.0"},
+        "b64ndarrays": [],
+    }
+    tsinfo = tvm.ir.load_json(json.dumps(data))
+    assert isinstance(tsinfo, relax.TensorStructInfo)
+    assert not tsinfo.vdevice
 
-make cython3
 
-# Run Relax tests
-TVM_TEST_TARGETS="${TVM_RELAY_TEST_TARGETS:-llvm}" pytest tests/python/relax
-TVM_TEST_TARGETS="${TVM_RELAY_TEST_TARGETS:-llvm}" pytest tests/python/dlight
-
-# Run Relax examples
-# python3 ./apps/relax_examples/mlp.py
-# python3 ./apps/relax_examples/nn_module.py
-# python3 ./apps/relax_examples/resnet.py
-
-# Test for MSC
-pytest tests/python/contrib/test_msc
+if __name__ == "__main__":
+    tvm.testing.main()
