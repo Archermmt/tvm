@@ -1131,6 +1131,9 @@ class LayoutInfer : public ExprVisitor {
     if (IsNestedTensor(binding->var)) {
       var_layout_map_[binding->var] = input_layout;
     }
+    if (LayoutUtils::SetLayout(GetRef<Tuple>(val), NLayout(input_layout))) {
+      infered_ = true;
+    }
     RecordExpr(binding->var, GetRef<Tuple>(val));
   }
 
@@ -1139,7 +1142,11 @@ class LayoutInfer : public ExprVisitor {
     NLayout input_layout = binding->var->IsInstance<DataflowVarNode>()
                                ? GetNLayout(var_layout_map_, val->tuple)
                                : InitialNLayout(val->tuple);
-    var_layout_map_[binding->var] = input_layout.NestedArray()[val->index];
+    const NLayout& out_layout = input_layout.NestedArray()[val->index];
+    var_layout_map_[binding->var] = out_layout;
+    if (LayoutUtils::SetLayout(GetRef<TupleGetItem>(val), out_layout)) {
+      infered_ = true;
+    }
     RecordExpr(binding->var, GetRef<TupleGetItem>(val));
   }
 

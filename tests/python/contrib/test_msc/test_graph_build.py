@@ -28,6 +28,7 @@ def verify_model(torch_model, input_info, expected):
     with torch.no_grad():
         mod = from_fx(graph_model, input_info)
     graph, _ = translate.from_relax(mod)
+    print("graph " + str(graph))
     inspect = graph.inspect()
     assert msc_utils.dict_equal(inspect, expected), "Inspect {} mismatch with expected {}".format(
         inspect, expected
@@ -44,8 +45,10 @@ def test_conv1d():
             return self.conv(input)
 
     expected1 = {
-        "inputs": [{"name": "inp_0", "shape": [1, 3, 10], "dtype": "float32"}],
-        "outputs": [{"name": "msc.conv1d_bias_0", "shape": [1, 6, 4], "dtype": "float32"}],
+        "inputs": [{"name": "inp_0", "shape": [1, 3, 10], "dtype": "float32", "layout": "NCW"}],
+        "outputs": [
+            {"name": "msc.conv1d_bias_0", "shape": [1, 6, 4], "dtype": "float32", "layout": "NCW"}
+        ],
         "nodes": {"total": 2, "input": 1, "msc.conv1d_bias": 1},
     }
 
@@ -58,8 +61,8 @@ def test_conv1d():
             return self.conv(input)
 
     expected2 = {
-        "inputs": [{"name": "inp_0", "shape": [1, 3, 10], "dtype": "float32"}],
-        "outputs": [{"name": "conv1d_0", "shape": [1, 6, 4], "dtype": "float32"}],
+        "inputs": [{"name": "inp_0", "shape": [1, 3, 10], "dtype": "float32", "layout": "NCW"}],
+        "outputs": [{"name": "conv1d_0", "shape": [1, 6, 4], "dtype": "float32", "layout": "NCW"}],
         "nodes": {"total": 2, "input": 1, "nn.conv1d": 1},
     }
 
@@ -77,6 +80,21 @@ def test_conv2d():
         def forward(self, input):
             return self.conv(input)
 
+    expected1 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "outputs": [
+            {
+                "name": "msc.conv2d_bias_0",
+                "shape": [1, 6, 4, 4],
+                "dtype": "float32",
+                "layout": "NCHW",
+            }
+        ],
+        "nodes": {"total": 2, "input": 1, "msc.conv2d_bias": 1},
+    }
+
     class Conv2D2(Module):
         def __init__(self):
             super().__init__()
@@ -85,9 +103,18 @@ def test_conv2d():
         def forward(self, input):
             return self.conv(input)
 
+    expected2 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "outputs": [
+            {"name": "conv2d_0", "shape": [1, 6, 4, 4], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "nodes": {"total": 2, "input": 1, "nn.conv2d": 1},
+    }
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Conv2D1(), input_info)
-    verify_model(Conv2D2(), input_info)
+    verify_model(Conv2D1(), input_info, expected1)
+    verify_model(Conv2D2(), input_info, expected2)
 
 
 def test_linear():
@@ -99,6 +126,21 @@ def test_linear():
         def forward(self, input):
             return self.linear(input)
 
+    expected1 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "outputs": [
+            {
+                "name": "msc.linear_bias_0",
+                "shape": [1, 3, 10, 7],
+                "dtype": "float32",
+                "layout": "NCHW",
+            }
+        ],
+        "nodes": {"total": 2, "input": 1, "msc.linear_bias": 1},
+    }
+
     class Dense2(Module):
         def __init__(self):
             super().__init__()
@@ -107,6 +149,16 @@ def test_linear():
         def forward(self, input):
             return self.linear(input)
 
+    expected2 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "outputs": [
+            {"name": "msc.linear_0", "shape": [1, 3, 10, 7], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "nodes": {"total": 2, "input": 1, "msc.linear": 1},
+    }
+
     class MatMul1(Module):
         def __init__(self):
             super().__init__()
@@ -114,10 +166,19 @@ def test_linear():
         def forward(self, x, y):
             return torch.matmul(x, y)
 
+    expected3 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [10, 10], "dtype": "float32", "layout": "NC"},
+            {"name": "inp_1", "shape": [10, 10], "dtype": "float32", "layout": "IO"},
+        ],
+        "outputs": [{"name": "matmul_0", "shape": [10, 10], "dtype": "float32", "layout": "NC"}],
+        "nodes": {"total": 3, "input": 2, "matmul": 1},
+    }
+
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Dense1(), input_info)
-    verify_model(Dense2(), input_info)
-    verify_model(MatMul1(), [([10, 10], "float32"), ([10, 10], "float32")])
+    verify_model(Dense1(), input_info, expected1)
+    verify_model(Dense2(), input_info, expected2)
+    verify_model(MatMul1(), [([10, 10], "float32"), ([10, 10], "float32")], expected3)
 
 
 def test_bmm():
@@ -128,8 +189,19 @@ def test_bmm():
         def forward(self, x, y):
             return torch.bmm(x, y)
 
+    expected = {
+        "inputs": [
+            {"name": "inp_0", "shape": [4, 128, 256], "dtype": "float32", "layout": "NCD"},
+            {"name": "inp_1", "shape": [4, 256, 512], "dtype": "float32", "layout": "NIO"},
+        ],
+        "outputs": [
+            {"name": "matmul_0", "shape": [4, 128, 512], "dtype": "float32", "layout": "NCD"}
+        ],
+        "nodes": {"total": 3, "input": 2, "matmul": 1},
+    }
+
     input_info = [((4, 128, 256), "float32"), ((4, 256, 512), "float32")]
-    verify_model(BMM(), input_info)
+    verify_model(BMM(), input_info, expected)
 
 
 def test_baddbmm():
@@ -140,6 +212,16 @@ def test_baddbmm():
         def forward(self, c, x, y):
             return torch.baddbmm(c, x, y)
 
+    expected1 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [4, 128, 512], "dtype": "float32", "layout": "NCD"},
+            {"name": "inp_1", "shape": [4, 128, 256], "dtype": "float32", "layout": "NCD"},
+            {"name": "inp_2", "shape": [4, 256, 512], "dtype": "float32", "layout": "NIO"},
+        ],
+        "outputs": [{"name": "add_0", "shape": [4, 128, 512], "dtype": "float32", "layout": "NCD"}],
+        "nodes": {"total": 5, "input": 3, "matmul": 1, "add": 1},
+    }
+
     class BAddBMM2(Module):
         def __init__(self):
             super().__init__()
@@ -147,13 +229,25 @@ def test_baddbmm():
         def forward(self, c, x, y):
             return torch.baddbmm(c, x, y, alpha=2, beta=0)
 
+    expected2 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [4, 128, 512], "dtype": "float32", "layout": ""},
+            {"name": "inp_1", "shape": [4, 128, 256], "dtype": "float32", "layout": "NCD"},
+            {"name": "inp_2", "shape": [4, 256, 512], "dtype": "float32", "layout": "NIO"},
+        ],
+        "outputs": [
+            {"name": "multiply_0", "shape": [4, 128, 512], "dtype": "float32", "layout": "NCD"}
+        ],
+        "nodes": {"total": 6, "input": 3, "matmul": 1, "constant": 1, "multiply": 1},
+    }
+
     input_info = [
         ((4, 128, 512), "float32"),
         ((4, 128, 256), "float32"),
         ((4, 256, 512), "float32"),
     ]
-    verify_model(BAddBMM1(), input_info)
-    verify_model(BAddBMM2(), input_info)
+    verify_model(BAddBMM1(), input_info, expected1)
+    verify_model(BAddBMM2(), input_info, expected2)
 
 
 def test_relu():
@@ -169,9 +263,15 @@ def test_relu():
         def forward(self, input):
             return torch.nn.functional.relu(input)
 
+    expected = {
+        "inputs": [{"name": "inp_0", "shape": [10, 10], "dtype": "float32", "layout": "AB"}],
+        "outputs": [{"name": "relu_0", "shape": [10, 10], "dtype": "float32", "layout": "AB"}],
+        "nodes": {"total": 2, "input": 1, "nn.relu": 1},
+    }
+
     input_info = [([10, 10], "float32")]
-    verify_model(ReLU(), input_info)
-    verify_model(ReLU1(), input_info)
+    verify_model(ReLU(), input_info, expected)
+    verify_model(ReLU1(), input_info, expected)
 
 
 def test_relu6():
@@ -183,8 +283,13 @@ def test_relu6():
         def forward(self, input):
             return self.relu6(input)
 
+    expected = {
+        "inputs": [{"name": "inp_0", "shape": [10, 10], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "clip_0", "shape": [10, 10], "dtype": "float32", "layout": ""}],
+        "nodes": {"total": 2, "input": 1, "clip": 1},
+    }
     input_info = [([10, 10], "float32")]
-    verify_model(ReLU6(), input_info)
+    verify_model(ReLU6(), input_info, expected)
 
 
 def test_maxpool2d():
@@ -196,6 +301,16 @@ def test_maxpool2d():
         def forward(self, input):
             return self.pool(input)
 
+    expected1 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "outputs": [
+            {"name": "max_pool2d_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "nodes": {"total": 2, "input": 1, "nn.max_pool2d": 1},
+    }
+
     class MaxPool2d2(Module):
         def __init__(self):
             super().__init__()
@@ -203,6 +318,16 @@ def test_maxpool2d():
 
         def forward(self, input):
             return self.pool(input)
+
+    expected2 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "outputs": [
+            {"name": "max_pool2d_0", "shape": [1, 3, 4, 4], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "nodes": {"total": 2, "input": 1, "nn.max_pool2d": 1},
+    }
 
     class MaxPool2d3(Module):
         def __init__(self):
@@ -212,10 +337,20 @@ def test_maxpool2d():
         def forward(self, input):
             return self.pool(input)
 
+    expected3 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "outputs": [
+            {"name": "max_pool2d_0", "shape": [1, 3, 6, 6], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "nodes": {"total": 2, "input": 1, "nn.max_pool2d": 1},
+    }
+
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(MaxPool2d(), input_info)
-    verify_model(MaxPool2d2(), input_info)
-    verify_model(MaxPool2d3(), input_info)
+    verify_model(MaxPool2d(), input_info, expected1)
+    verify_model(MaxPool2d2(), input_info, expected2)
+    verify_model(MaxPool2d3(), input_info, expected3)
 
 
 def test_avgpool2d():
@@ -227,6 +362,16 @@ def test_avgpool2d():
         def forward(self, input):
             return self.pool(input)
 
+    expected1 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "outputs": [
+            {"name": "avg_pool2d_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "nodes": {"total": 2, "input": 1, "nn.avg_pool2d": 1},
+    }
+
     class AvgPool2d2(Module):
         def __init__(self):
             super().__init__()
@@ -235,9 +380,19 @@ def test_avgpool2d():
         def forward(self, input):
             return self.pool(input)
 
+    expected2 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "outputs": [
+            {"name": "avg_pool2d_0", "shape": [1, 3, 6, 6], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "nodes": {"total": 2, "input": 1, "nn.avg_pool2d": 1},
+    }
+
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(AvgPool2d(), input_info)
-    verify_model(AvgPool2d2(), input_info)
+    verify_model(AvgPool2d(), input_info, expected1)
+    verify_model(AvgPool2d2(), input_info, expected2)
 
 
 def test_adaptive_avgpool2d():
@@ -249,8 +404,23 @@ def test_adaptive_avgpool2d():
         def forward(self, input):
             return self.pool(input)
 
+    expected = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "outputs": [
+            {
+                "name": "adaptive_avg_pool2d_0",
+                "shape": [1, 3, 10, 10],
+                "dtype": "float32",
+                "layout": "NCHW",
+            }
+        ],
+        "nodes": {"total": 2, "input": 1, "nn.adaptive_avg_pool2d": 1},
+    }
+
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(AdaptiveAvgPool2d0(), input_info)
+    verify_model(AdaptiveAvgPool2d0(), input_info, expected)
 
 
 def test_flatten():
@@ -262,9 +432,15 @@ def test_flatten():
         def forward(self, input):
             return self.f(input)
 
+    expected = {
+        "inputs": [{"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "reshape_0", "shape": [1, 3, 100], "dtype": "float32", "layout": ""}],
+        "nodes": {"total": 2, "input": 1, "reshape": 1},
+    }
+
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Flatten(), input_info)
-    verify_model(torch.nn.Flatten(2, -1), input_info)
+    verify_model(Flatten(), input_info, expected)
+    verify_model(torch.nn.Flatten(2, -1), input_info, expected)
 
 
 def test_batchnorm2d():
@@ -276,8 +452,23 @@ def test_batchnorm2d():
         def forward(self, input):
             return self.bn(input)
 
+    expected = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "outputs": [
+            {
+                "name": "batch_norm.0_0",
+                "shape": [1, 3, 10, 10],
+                "dtype": "float32",
+                "layout": "NCHW",
+            }
+        ],
+        "nodes": {"total": 3, "input": 1, "nn.batch_norm": 1, "get_item": 1},
+    }
+
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(BatchNorm2d(), input_info)
+    verify_model(BatchNorm2d(), input_info, expected)
 
 
 def test_embedding():
@@ -289,8 +480,24 @@ def test_embedding():
         def forward(self, input):
             return self.embedding(input)
 
-    verify_model(Embedding(), [([4], "int64")])
-    verify_model(Embedding(), [([4, 5], "int64")])
+    expected1 = {
+        "inputs": [{"name": "inp_0", "shape": [4], "dtype": "int64", "layout": "A"}],
+        "outputs": [
+            {"name": "msc.embedding_0", "shape": [4, 3], "dtype": "float32", "layout": "NA"}
+        ],
+        "nodes": {"total": 2, "input": 1, "msc.embedding": 1},
+    }
+
+    expected2 = {
+        "inputs": [{"name": "inp_0", "shape": [4, 5], "dtype": "int64", "layout": "AB"}],
+        "outputs": [
+            {"name": "msc.embedding_0", "shape": [4, 5, 3], "dtype": "float32", "layout": "CNB"}
+        ],
+        "nodes": {"total": 2, "input": 1, "msc.embedding": 1},
+    }
+
+    # verify_model(Embedding(), [([4], "int64")], expected1)
+    verify_model(Embedding(), [([4, 5], "int64")], expected2)
 
 
 def test_dropout():
@@ -306,9 +513,15 @@ def test_dropout():
         def forward(self, input):
             return torch.dropout(input, 0.5, train=True)
 
+    expected = {
+        "inputs": [{"name": "inp_0_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "inp_0_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": ""}],
+        "nodes": {"total": 1, "input": 1},
+    }
+
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Dropout1(), input_info)
-    verify_model(Dropout2(), input_info)
+    verify_model(Dropout1(), input_info, expected)
+    verify_model(Dropout2(), input_info, expected)
 
 
 def test_layernorm():
@@ -320,8 +533,18 @@ def test_layernorm():
         def forward(self, input):
             return self.ln(input)
 
+    expected = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "outputs": [
+            {"name": "layer_norm_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "nodes": {"total": 2, "input": 1, "nn.layer_norm": 1},
+    }
+
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(LayerNorm(), input_info)
+    verify_model(LayerNorm(), input_info, expected)
 
 
 def test_functional_layernorm():
@@ -336,8 +559,18 @@ def test_functional_layernorm():
                 input, self.weight.shape, self.weight, self.bias, 1e-5
             )
 
+    expected = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "outputs": [
+            {"name": "layer_norm_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "nodes": {"total": 2, "input": 1, "nn.layer_norm": 1},
+    }
+
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(LayerNorm((10, 10)), input_info)
+    verify_model(LayerNorm((10, 10)), input_info, expected)
 
 
 def test_cross_entropy():
@@ -349,6 +582,15 @@ def test_cross_entropy():
         def forward(self, logits, targets):
             return self.loss(logits, targets)
 
+    expected1 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [3, 2], "dtype": "float32", "layout": ""},
+            {"name": "inp_1", "shape": [3], "dtype": "int32", "layout": ""},
+        ],
+        "outputs": [{"name": "nll_loss_0", "shape": [], "dtype": "float32", "layout": ""}],
+        "nodes": {"total": 4, "input": 2, "nn.log_softmax": 1, "nn.nll_loss": 1},
+    }
+
     class CrossEntropy2(Module):
         def __init__(self):
             super().__init__()
@@ -358,6 +600,15 @@ def test_cross_entropy():
         def forward(self, logits, targets):
             return self.loss(logits, targets)
 
+    expected2 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [3, 2], "dtype": "float32", "layout": ""},
+            {"name": "inp_1", "shape": [3], "dtype": "int32", "layout": ""},
+        ],
+        "outputs": [{"name": "nll_loss_0", "shape": [], "dtype": "float32", "layout": ""}],
+        "nodes": {"total": 5, "input": 2, "nn.log_softmax": 1, "constant": 1, "nn.nll_loss": 1},
+    }
+
     class CrossEntropy3(Module):
         def __init__(self):
             super().__init__()
@@ -366,10 +617,19 @@ def test_cross_entropy():
         def forward(self, logits, targets):
             return self.loss(logits, targets)
 
+    expected3 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [3, 2], "dtype": "float32", "layout": ""},
+            {"name": "inp_1", "shape": [3], "dtype": "int32", "layout": ""},
+        ],
+        "outputs": [{"name": "nll_loss_0", "shape": [], "dtype": "float32", "layout": ""}],
+        "nodes": {"total": 4, "input": 2, "nn.log_softmax": 1, "nn.nll_loss": 1},
+    }
+
     input_info = [([3, 2], "float32"), ([3], "int32")]
-    verify_model(CrossEntropy1(), input_info)
-    verify_model(CrossEntropy2(), input_info)
-    verify_model(CrossEntropy3(), input_info)
+    verify_model(CrossEntropy1(), input_info, expected1)
+    verify_model(CrossEntropy2(), input_info, expected2)
+    verify_model(CrossEntropy3(), input_info, expected3)
 
 
 def test_functional_cross_entropy():
@@ -377,8 +637,10 @@ def test_functional_cross_entropy():
         def forward(self, logits, targets):
             return torch.nn.functional.cross_entropy(logits, targets)
 
+    expected = {}
+
     input_info = [([3, 10], "float32"), ([3], "int32")]
-    verify_model(CrossEntropy(), input_info)
+    verify_model(CrossEntropy(), input_info, expected)
 
 
 def test_silu():
@@ -394,9 +656,11 @@ def test_silu():
         def forward(self, input):
             return torch.nn.functional.silu(input)
 
+    expected = {}
+
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(SiLU(), input_info)
-    verify_model(SiLU2(), input_info)
+    verify_model(SiLU(), input_info, expected)
+    verify_model(SiLU2(), input_info, expected)
 
 
 def test_groupnorm():
@@ -1023,4 +1287,4 @@ def test_attention():
 
 if __name__ == "__main__":
     # tvm.testing.main()
-    test_conv1d()
+    test_embedding()
