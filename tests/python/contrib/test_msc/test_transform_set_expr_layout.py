@@ -16,13 +16,8 @@
 # under the License.
 
 import tvm.testing
-from tvm.relay import testing
-from tvm.relay.expr_functor import ExprVisitor
-from tvm.relay.build_module import bind_params_by_name
-
 from tvm.relax.frontend.torch import from_fx
 from tvm.relax import PyExprVisitor
-
 from tvm.contrib.msc.core import _ffi_api
 from tvm.contrib.msc.core import transform as msc_transform
 

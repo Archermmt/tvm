@@ -18,6 +18,7 @@ import torch
 from torch import fx
 from torch.nn import Module
 
+import tvm.testing
 from tvm.relax.frontend.torch import from_fx
 from tvm.contrib.msc.core.ir import translate
 from tvm.contrib.msc.core import utils as msc_utils
@@ -28,7 +29,6 @@ def verify_model(torch_model, input_info, expected):
     with torch.no_grad():
         mod = from_fx(graph_model, input_info)
     graph, _ = translate.from_relax(mod)
-    print("graph " + str(graph))
     inspect = graph.inspect()
     assert msc_utils.dict_equal(inspect, expected), "Inspect {} mismatch with expected {}".format(
         inspect, expected
@@ -637,7 +637,14 @@ def test_functional_cross_entropy():
         def forward(self, logits, targets):
             return torch.nn.functional.cross_entropy(logits, targets)
 
-    expected = {}
+    expected = {
+        "inputs": [
+            {"name": "inp_0", "shape": [3, 10], "dtype": "float32", "layout": ""},
+            {"name": "inp_1", "shape": [3], "dtype": "int32", "layout": ""},
+        ],
+        "outputs": [{"name": "nll_loss_0", "shape": [], "dtype": "float32", "layout": ""}],
+        "nodes": {"total": 4, "input": 2, "nn.log_softmax": 1, "nn.nll_loss": 1},
+    }
 
     input_info = [([3, 10], "float32"), ([3], "int32")]
     verify_model(CrossEntropy(), input_info, expected)
@@ -656,7 +663,15 @@ def test_silu():
         def forward(self, input):
             return torch.nn.functional.silu(input)
 
-    expected = {}
+    expected = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "outputs": [
+            {"name": "silu_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "nodes": {"total": 2, "input": 1, "nn.silu": 1},
+    }
 
     input_info = [([1, 3, 10, 10], "float32")]
     verify_model(SiLU(), input_info, expected)
@@ -672,8 +687,18 @@ def test_groupnorm():
         def forward(self, input):
             return self.gn(input)
 
+    expected = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "outputs": [
+            {"name": "group_norm_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "nodes": {"total": 2, "input": 1, "nn.group_norm": 1},
+    }
+
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(GroupNorm(), input_info)
+    verify_model(GroupNorm(), input_info, expected)
 
 
 def test_softmax():
@@ -685,8 +710,18 @@ def test_softmax():
         def forward(self, input):
             return self.sm(input)
 
+    expected = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "outputs": [
+            {"name": "softmax_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "nodes": {"total": 2, "input": 1, "nn.softmax": 1},
+    }
+
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Softmax(), input_info)
+    verify_model(Softmax(), input_info, expected)
 
 
 def test_binary():
@@ -698,84 +733,237 @@ def test_binary():
         def forward(self, lhs, rhs):
             return lhs + rhs
 
+    expected_add1 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"},
+            {"name": "inp_1", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"},
+        ],
+        "outputs": [
+            {"name": "add_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "nodes": {"total": 3, "input": 2, "add": 1},
+    }
+
     class Add2(Module):
         def forward(self, lhs):
             return lhs + 1.0
 
-    verify_model(Add1(), input_info1)
-    verify_model(Add2(), input_info2)
+    expected_add2 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "outputs": [
+            {"name": "add_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "nodes": {"total": 3, "input": 1, "constant": 1, "add": 1},
+    }
+
+    verify_model(Add1(), input_info1, expected_add1)
+    verify_model(Add2(), input_info2, expected_add2)
 
     # Sub
     class Sub1(Module):
         def forward(self, lhs, rhs):
             return lhs - rhs
 
+    expected_sub1 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"},
+            {"name": "inp_1", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"},
+        ],
+        "outputs": [
+            {"name": "subtract_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "nodes": {"total": 3, "input": 2, "subtract": 1},
+    }
+
     class Sub2(Module):
         def forward(self, lhs):
             return lhs - 1.0
 
-    verify_model(Sub1(), input_info1)
-    verify_model(Sub2(), input_info2)
+    expected_sub2 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "outputs": [
+            {"name": "subtract_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "nodes": {"total": 3, "input": 1, "constant": 1, "subtract": 1},
+    }
+
+    verify_model(Sub1(), input_info1, expected_sub1)
+    verify_model(Sub2(), input_info2, expected_sub2)
 
     # Mul
     class Mul1(Module):
         def forward(self, lhs, rhs):
             return lhs * rhs
 
+    expected_mul1 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"},
+            {"name": "inp_1", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"},
+        ],
+        "outputs": [
+            {"name": "multiply_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "nodes": {"total": 3, "input": 2, "multiply": 1},
+    }
+
     class Mul2(Module):
         def forward(self, lhs):
             return lhs * 1.0
 
-    verify_model(Mul1(), input_info1)
-    verify_model(Mul2(), input_info2)
+    expected_mul2 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "outputs": [
+            {"name": "multiply_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "nodes": {"total": 3, "input": 1, "constant": 1, "multiply": 1},
+    }
+
+    verify_model(Mul1(), input_info1, expected_mul1)
+    verify_model(Mul2(), input_info2, expected_mul2)
 
     # True div
     class TrueDiv1(Module):
         def forward(self, lhs, rhs):
             return lhs / rhs
 
+    expected_div1 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"},
+            {"name": "inp_1", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"},
+        ],
+        "outputs": [
+            {"name": "divide_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "nodes": {"total": 3, "input": 2, "divide": 1},
+    }
+
     class TrueDiv2(Module):
         def forward(self, lhs):
             return lhs / 1.0
 
-    verify_model(TrueDiv1(), input_info1)
-    verify_model(TrueDiv2(), input_info2)
+    expected_div2 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "outputs": [
+            {"name": "divide_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "nodes": {"total": 3, "input": 1, "constant": 1, "divide": 1},
+    }
+
+    verify_model(TrueDiv1(), input_info1, expected_div1)
+    verify_model(TrueDiv2(), input_info2, expected_div2)
 
     # Floor div
     class FloorDiv1(Module):
         def forward(self, lhs, rhs):
             return lhs // rhs
 
+    expected_floordiv1 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"},
+            {"name": "inp_1", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"},
+        ],
+        "outputs": [
+            {
+                "name": "floor_divide_0",
+                "shape": [1, 3, 10, 10],
+                "dtype": "float32",
+                "layout": "ABCD",
+            }
+        ],
+        "nodes": {"total": 3, "input": 2, "floor_divide": 1},
+    }
+
     class FloorDiv2(Module):
         def forward(self, lhs):
             return lhs // 1.0
 
-    verify_model(FloorDiv1(), input_info1)
-    verify_model(FloorDiv2(), input_info2)
+    expected_floordiv2 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "outputs": [
+            {
+                "name": "floor_divide_0",
+                "shape": [1, 3, 10, 10],
+                "dtype": "float32",
+                "layout": "ABCD",
+            }
+        ],
+        "nodes": {"total": 3, "input": 1, "constant": 1, "floor_divide": 1},
+    }
+
+    verify_model(FloorDiv1(), input_info1, expected_floordiv1)
+    verify_model(FloorDiv2(), input_info2, expected_floordiv2)
 
     # Power
     class Power1(Module):
         def forward(self, lhs, rhs):
             return lhs**rhs
 
+    expected_power1 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"},
+            {"name": "inp_1", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"},
+        ],
+        "outputs": [
+            {"name": "power_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "nodes": {"total": 3, "input": 2, "power": 1},
+    }
+
     class Power2(Module):
         def forward(self, lhs):
             return lhs**1.0
 
-    verify_model(Power1(), input_info1)
-    verify_model(Power2(), input_info2)
+    expected_power2 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "outputs": [
+            {"name": "power_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "nodes": {"total": 3, "input": 1, "constant": 1, "power": 1},
+    }
+
+    verify_model(Power1(), input_info1, expected_power1)
+    verify_model(Power2(), input_info2, expected_power2)
 
     # LT
     class LT1(Module):
         def forward(self, lhs, rhs):
             return lhs < rhs
 
+    expected_lt1 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"},
+            {"name": "inp_1", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"},
+        ],
+        "outputs": [{"name": "less_0", "shape": [1, 3, 10, 10], "dtype": "bool", "layout": "ABCD"}],
+        "nodes": {"total": 3, "input": 2, "less": 1},
+    }
+
     class LT2(Module):
         def forward(self, lhs):
             return lhs < 1.0
 
-    verify_model(LT1(), input_info1)
-    verify_model(LT2(), input_info2)
+    expected_lt2 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "outputs": [{"name": "less_0", "shape": [1, 3, 10, 10], "dtype": "bool", "layout": "ABCD"}],
+        "nodes": {"total": 3, "input": 1, "constant": 1, "less": 1},
+    }
+
+    verify_model(LT1(), input_info1, expected_lt1)
+    verify_model(LT2(), input_info2, expected_lt2)
 
 
 def test_size():
@@ -783,8 +971,14 @@ def test_size():
         def forward(self, input):
             return input.size()
 
+    expected = {
+        "inputs": [{"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "shape_0", "shape": [4], "dtype": "int32", "layout": "O"}],
+        "nodes": {"total": 2, "input": 1, "shape": 1},
+    }
+
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Size(), input_info)
+    verify_model(Size(), input_info, expected)
 
 
 def test_squeeze():
@@ -792,13 +986,25 @@ def test_squeeze():
         def forward(self, input):
             return input.squeeze(1)
 
+    expected1 = {
+        "inputs": [{"name": "inp_0", "shape": [3, 1, 4, 1], "dtype": "float32", "layout": "ANBC"}],
+        "outputs": [{"name": "squeeze_0", "shape": [3, 4, 1], "dtype": "float32", "layout": "ABC"}],
+        "nodes": {"total": 2, "input": 1, "squeeze": 1},
+    }
+
     class Squeeze2(Module):
         def forward(self, input):
             return input.squeeze()
 
+    expected2 = {
+        "inputs": [{"name": "inp_0", "shape": [3, 1, 4, 1], "dtype": "float32", "layout": "ANBC"}],
+        "outputs": [{"name": "squeeze_0", "shape": [3, 4], "dtype": "float32", "layout": "AB"}],
+        "nodes": {"total": 2, "input": 1, "squeeze": 1},
+    }
+
     input_info = [([3, 1, 4, 1], "float32")]
-    verify_model(Squeeze1(), input_info)
-    verify_model(Squeeze2(), input_info)
+    verify_model(Squeeze1(), input_info, expected1)
+    verify_model(Squeeze2(), input_info, expected2)
 
 
 def test_unsqueeze():
@@ -806,13 +1012,43 @@ def test_unsqueeze():
         def forward(self, input):
             return input.unsqueeze(1)
 
+    expected1 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ACDE"}
+        ],
+        "outputs": [
+            {
+                "name": "expand_dims_0",
+                "shape": [1, 1, 3, 10, 10],
+                "dtype": "float32",
+                "layout": "ABCDE",
+            }
+        ],
+        "nodes": {"total": 2, "input": 1, "expand_dims": 1},
+    }
+
     class Unsqueeze2(Module):
         def forward(self, input):
             return input.unsqueeze(-1)
 
+    expected2 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCE"}
+        ],
+        "outputs": [
+            {
+                "name": "expand_dims_0",
+                "shape": [1, 3, 10, 10, 1],
+                "dtype": "float32",
+                "layout": "ABCDE",
+            }
+        ],
+        "nodes": {"total": 2, "input": 1, "expand_dims": 1},
+    }
+
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Unsqueeze1(), input_info)
-    verify_model(Unsqueeze2(), input_info)
+    verify_model(Unsqueeze1(), input_info, expected1)
+    verify_model(Unsqueeze2(), input_info, expected2)
 
 
 def test_getattr():
@@ -820,8 +1056,14 @@ def test_getattr():
         def forward(self, input):
             return input.shape
 
+    expected = {
+        "inputs": [{"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "shape_0", "shape": [4], "dtype": "int32", "layout": "O"}],
+        "nodes": {"total": 2, "input": 1, "shape": 1},
+    }
+
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(GetAttr1(), input_info)
+    verify_model(GetAttr1(), input_info, expected)
 
 
 def test_getitem():
@@ -829,12 +1071,30 @@ def test_getitem():
         def forward(self, x):
             return x[0, 1::2, :, :3]
 
+    expected1 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "outputs": [
+            {"name": "reshape_0", "shape": [1, 1, 10, 3], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "nodes": {"total": 3, "input": 1, "strided_slice": 1, "reshape": 1},
+    }
+
     class Slice2(Module):
         def forward(self, x):
             return x[:, None, None, :, None]
 
-    verify_model(Slice1(), [([1, 3, 10, 10], "float32")])
-    verify_model(Slice2(), [([8, 16], "float32")])
+    expected2 = {
+        "inputs": [{"name": "inp_0", "shape": [8, 16], "dtype": "float32", "layout": "AB"}],
+        "outputs": [
+            {"name": "reshape_0", "shape": [8, 1, 1, 16, 1], "dtype": "float32", "layout": "ANCHB"}
+        ],
+        "nodes": {"total": 3, "input": 1, "strided_slice": 1, "reshape": 1},
+    }
+
+    verify_model(Slice1(), [([1, 3, 10, 10], "float32")], expected1)
+    verify_model(Slice2(), [([8, 16], "float32")], expected2)
 
 
 def test_unary():
@@ -845,42 +1105,102 @@ def test_unary():
         def forward(self, input):
             return torch.sin(input)
 
-    verify_model(Sin(), input_info)
+    expected_sin = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "outputs": [
+            {"name": "sin_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "nodes": {"total": 2, "input": 1, "sin": 1},
+    }
+
+    verify_model(Sin(), input_info, expected_sin)
 
     # cos
     class Cos(Module):
         def forward(self, input):
             return torch.cos(input)
 
-    verify_model(Cos(), input_info)
+    expected_cos = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "outputs": [
+            {"name": "cos_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "nodes": {"total": 2, "input": 1, "cos": 1},
+    }
+
+    verify_model(Cos(), input_info, expected_cos)
 
     # exp
     class Exp(Module):
         def forward(self, input):
             return torch.exp(input)
 
-    verify_model(Exp(), input_info)
+    expected_exp = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "outputs": [
+            {"name": "exp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "nodes": {"total": 2, "input": 1, "exp": 1},
+    }
+
+    verify_model(Exp(), input_info, expected_exp)
 
     # sqrt
     class Sqrt(Module):
         def forward(self, input):
             return torch.sqrt(input)
 
-    verify_model(Sqrt(), input_info)
+    expected_sqrt = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "outputs": [
+            {"name": "sqrt_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "nodes": {"total": 2, "input": 1, "sqrt": 1},
+    }
+
+    verify_model(Sqrt(), input_info, expected_sqrt)
 
     # sigmoid
     class Sigmoid(Module):
         def forward(self, input):
             return torch.sigmoid(input)
 
-    verify_model(Sigmoid(), input_info)
+    expected_sigmoid = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "outputs": [
+            {"name": "sigmoid_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "nodes": {"total": 2, "input": 1, "sigmoid": 1},
+    }
+
+    verify_model(Sigmoid(), input_info, expected_sigmoid)
 
     # round
     class Round(Module):
         def forward(self, input):
             return torch.round(input)
 
-    verify_model(Round(), input_info)
+    expected_round = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "outputs": [
+            {"name": "round_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "nodes": {"total": 2, "input": 1, "round": 1},
+    }
+
+    verify_model(Round(), input_info, expected_round)
 
 
 def test_gelu():
@@ -888,8 +1208,18 @@ def test_gelu():
         def forward(self, input):
             return torch.nn.functional.gelu(input)
 
+    expected = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "outputs": [
+            {"name": "gelu_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "nodes": {"total": 2, "input": 1, "nn.gelu": 1},
+    }
+
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Gelu(), input_info)
+    verify_model(Gelu(), input_info, expected)
 
 
 def test_tanh():
@@ -897,8 +1227,18 @@ def test_tanh():
         def forward(self, input):
             return torch.tanh(input)
 
+    expected = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "outputs": [
+            {"name": "tanh_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "nodes": {"total": 2, "input": 1, "tanh": 1},
+    }
+
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Tanh(), input_info)
+    verify_model(Tanh(), input_info, expected)
 
 
 def test_clamp():
@@ -906,8 +1246,14 @@ def test_clamp():
         def forward(self, input):
             return torch.clamp(input, min=0.1, max=0.5)
 
+    expected = {
+        "inputs": [{"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "clip_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": ""}],
+        "nodes": {"total": 2, "input": 1, "clip": 1},
+    }
+
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Clamp(), input_info)
+    verify_model(Clamp(), input_info, expected)
 
 
 def test_interpolate():
@@ -915,8 +1261,18 @@ def test_interpolate():
         def forward(self, input):
             return torch.nn.functional.interpolate(input, (5, 5))
 
+    expected = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "outputs": [
+            {"name": "resize2d_0", "shape": [1, 3, 5, 5], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "nodes": {"total": 2, "input": 1, "image.resize2d": 1},
+    }
+
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Interpolate(), input_info)
+    verify_model(Interpolate(), input_info, expected)
 
 
 def test_addmm():
@@ -924,12 +1280,22 @@ def test_addmm():
         def forward(self, x1, x2, x3):
             return torch.addmm(x1, x2, x3)
 
+    expected = {
+        "inputs": [
+            {"name": "inp_0", "shape": [10, 10], "dtype": "float32", "layout": "NC"},
+            {"name": "inp_1", "shape": [10, 10], "dtype": "float32", "layout": "NC"},
+            {"name": "inp_2", "shape": [10, 10], "dtype": "float32", "layout": "IO"},
+        ],
+        "outputs": [{"name": "add_0", "shape": [10, 10], "dtype": "float32", "layout": "NC"}],
+        "nodes": {"total": 5, "input": 3, "matmul": 1, "add": 1},
+    }
+
     input_info = [
         ([10, 10], "float32"),
         ([10, 10], "float32"),
         ([10, 10], "float32"),
     ]
-    verify_model(Addmm(), input_info)
+    verify_model(Addmm(), input_info, expected)
 
 
 def test_split():
@@ -937,8 +1303,20 @@ def test_split():
         def forward(self, input):
             return torch.split(input, 1, dim=1)
 
+    expected = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "outputs": [
+            {"name": "split_0", "shape": [1, 1, 10, 10], "dtype": "float32", "layout": "ABCD"},
+            {"name": "split_1", "shape": [1, 1, 10, 10], "dtype": "float32", "layout": "ABCD"},
+            {"name": "split_2", "shape": [1, 1, 10, 10], "dtype": "float32", "layout": "ABCD"},
+        ],
+        "nodes": {"total": 2, "input": 1, "split": 1},
+    }
+
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Split(), input_info)
+    verify_model(Split(), input_info, expected)
 
 
 def test_cumsum():
@@ -946,8 +1324,14 @@ def test_cumsum():
         def forward(self, input):
             return torch.cumsum(input, dim=1, dtype=torch.int32)
 
+    expected = {
+        "inputs": [{"name": "inp_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "cumsum_0", "shape": [1, 2, 3, 4], "dtype": "int32", "layout": ""}],
+        "nodes": {"total": 2, "input": 1, "cumsum": 1},
+    }
+
     input_info = [([1, 2, 3, 4], "float32")]
-    verify_model(Cumsum(), input_info)
+    verify_model(Cumsum(), input_info, expected)
 
 
 def test_chunk():
@@ -955,8 +1339,20 @@ def test_chunk():
         def forward(self, input):
             return torch.chunk(input, 3, dim=1)
 
+    expected = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "outputs": [
+            {"name": "split_0", "shape": [1, 1, 10, 10], "dtype": "float32", "layout": "ABCD"},
+            {"name": "split_1", "shape": [1, 1, 10, 10], "dtype": "float32", "layout": "ABCD"},
+            {"name": "split_2", "shape": [1, 1, 10, 10], "dtype": "float32", "layout": "ABCD"},
+        ],
+        "nodes": {"total": 2, "input": 1, "split": 1},
+    }
+
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Chunk(), input_info)
+    verify_model(Chunk(), input_info, expected)
 
 
 def test_inplace_fill():
@@ -965,7 +1361,13 @@ def test_inplace_fill():
             input.fill_(1.5)
             return input
 
-    verify_model(InplaceFill(), [([10, 10], "float32")])
+    expected = {
+        "inputs": [{"name": "inp_0", "shape": [10, 10], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "full_0", "shape": [10, 10], "dtype": "float32", "layout": ""}],
+        "nodes": {"total": 3, "input": 1, "constant": 1, "full": 1},
+    }
+
+    verify_model(InplaceFill(), [([10, 10], "float32")], expected)
 
 
 def test_arange():
@@ -973,7 +1375,13 @@ def test_arange():
         def forward(self, input):
             return torch.arange(0, 20, dtype=torch.int32)
 
-    verify_model(Arange(), [([10, 10], "float32")])
+    expected = {
+        "inputs": [{"name": "inp_0", "shape": [10, 10], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "const_0", "shape": [20], "dtype": "int32", "layout": ""}],
+        "nodes": {"total": 2, "input": 1, "constant": 1},
+    }
+
+    verify_model(Arange(), [([10, 10], "float32")], expected)
 
 
 def test_empty():
@@ -981,7 +1389,13 @@ def test_empty():
         def forward(self, input):
             return torch.empty((10, 10), dtype=torch.float32)
 
-    verify_model(Empty(), [([10, 10], "float32")])
+    expected = {
+        "inputs": [{"name": "inp_0", "shape": [10, 10], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "const_0", "shape": [10, 10], "dtype": "float32", "layout": ""}],
+        "nodes": {"total": 2, "input": 1, "constant": 1},
+    }
+
+    verify_model(Empty(), [([10, 10], "float32")], expected)
 
 
 def test_tensor():
@@ -989,12 +1403,24 @@ def test_tensor():
         def forward(self, input):
             return torch.tensor(3, dtype=torch.float32)
 
+    expected1 = {
+        "inputs": [{"name": "inp_0", "shape": [10, 10], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "const_0", "shape": [], "dtype": "float32", "layout": ""}],
+        "nodes": {"total": 2, "input": 1, "constant": 1},
+    }
+
     class Empty2(Module):
         def forward(self, input):
             return torch.tensor(3)
 
-    verify_model(Empty1(), [([10, 10], "float32")])
-    verify_model(Empty2(), [([10, 10], "float32")])
+    expected2 = {
+        "inputs": [{"name": "inp_0", "shape": [10, 10], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "const_0", "shape": [], "dtype": "int64", "layout": ""}],
+        "nodes": {"total": 2, "input": 1, "constant": 1},
+    }
+
+    verify_model(Empty1(), [([10, 10], "float32")], expected1)
+    verify_model(Empty2(), [([10, 10], "float32")], expected2)
 
 
 def test_tril():
@@ -1007,9 +1433,15 @@ def test_tril():
             input.tril_(1)
             return input
 
+    expected = {
+        "inputs": [{"name": "inp_0", "shape": [10, 10], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "tril_0", "shape": [10, 10], "dtype": "float32", "layout": ""}],
+        "nodes": {"total": 2, "input": 1, "tril": 1},
+    }
+
     input_info = [([10, 10], "float32")]
-    verify_model(Tril(), input_info)
-    verify_model(InplaceTril(), input_info)
+    verify_model(Tril(), input_info, expected)
+    verify_model(InplaceTril(), input_info, expected)
 
 
 def test_triu():
@@ -1022,9 +1454,15 @@ def test_triu():
             input.triu_(1)
             return input
 
+    expected = {
+        "inputs": [{"name": "inp_0", "shape": [10, 10], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "triu_0", "shape": [10, 10], "dtype": "float32", "layout": ""}],
+        "nodes": {"total": 2, "input": 1, "triu": 1},
+    }
+
     input_info = [([10, 10], "float32")]
-    verify_model(Triu(), input_info)
-    verify_model(InplaceTriu(), input_info)
+    verify_model(Triu(), input_info, expected)
+    verify_model(InplaceTriu(), input_info, expected)
 
 
 def test_new_ones():
@@ -1032,8 +1470,14 @@ def test_new_ones():
         def forward(self, x):
             return x.new_ones(1, 2, 3)
 
+    expected = {
+        "inputs": [{"name": "inp_0", "shape": [1, 2, 3], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "full_0", "shape": [1, 2, 3], "dtype": "float32", "layout": ""}],
+        "nodes": {"total": 3, "input": 1, "constant": 1, "full": 1},
+    }
+
     input_info = [([1, 2, 3], "float32")]
-    verify_model(NewOnes(), input_info)
+    verify_model(NewOnes(), input_info, expected)
 
 
 def test_expand():
@@ -1041,8 +1485,16 @@ def test_expand():
         def forward(self, x):
             return x.expand(4, 2, 3, 4)
 
+    expected = {
+        "inputs": [{"name": "inp_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": ""}],
+        "outputs": [
+            {"name": "broadcast_to_0", "shape": [4, 2, 3, 4], "dtype": "float32", "layout": ""}
+        ],
+        "nodes": {"total": 2, "input": 1, "broadcast_to": 1},
+    }
+
     input_info = [([1, 2, 3, 4], "float32")]
-    verify_model(Expand(), input_info)
+    verify_model(Expand(), input_info, expected)
 
 
 def test_reduce():
@@ -1051,8 +1503,14 @@ def test_reduce():
         def forward(self, x):
             return torch.sum(x, (2, 1))
 
+    expected = {
+        "inputs": [{"name": "inp_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": "ANCB"}],
+        "outputs": [{"name": "sum_0", "shape": [1, 4], "dtype": "float32", "layout": "AB"}],
+        "nodes": {"total": 2, "input": 1, "sum": 1},
+    }
+
     input_info = [([1, 2, 3, 4], "float32")]
-    verify_model(Sum(), input_info)
+    verify_model(Sum(), input_info, expected)
 
 
 def test_datatype():
@@ -1063,33 +1521,73 @@ def test_datatype():
         def forward(self, x):
             return x.float()
 
-    verify_model(ToFloat(), input_info)
+    expected1 = {
+        "inputs": [{"name": "inp_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": "ABCD"}],
+        "outputs": [
+            {"name": "astype_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "nodes": {"total": 2, "input": 1, "astype": 1},
+    }
+
+    verify_model(ToFloat(), input_info, expected1)
 
     # half
     class ToHalf(Module):
         def forward(self, x):
             return x.half()
 
-    verify_model(ToHalf(), input_info)
+    expected2 = {
+        "inputs": [{"name": "inp_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": "ABCD"}],
+        "outputs": [
+            {"name": "astype_0", "shape": [1, 2, 3, 4], "dtype": "float16", "layout": "ABCD"}
+        ],
+        "nodes": {"total": 2, "input": 1, "astype": 1},
+    }
+
+    verify_model(ToHalf(), input_info, expected2)
 
     # type
     class Type(Module):
         def forward(self, x):
             return x.type(torch.float32)
 
+    expected3 = {
+        "inputs": [{"name": "inp_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": "ABCD"}],
+        "outputs": [
+            {"name": "astype_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "nodes": {"total": 2, "input": 1, "astype": 1},
+    }
+
     # type
     class TypeFromAttr(Module):
         def forward(self, x):
             return x.type(x.getattr("dtype"))
+
+    expected4 = {
+        "inputs": [{"name": "inp_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": "ABCD"}],
+        "outputs": [
+            {"name": "astype_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "nodes": {"total": 2, "input": 1, "astype": 1},
+    }
 
     # astype
     class AsType(Module):
         def forward(self, x):
             return x.astype(torch.float32)
 
-    verify_model(Type(), input_info)
-    verify_model(TypeFromAttr(), input_info)
-    verify_model(AsType(), input_info)
+    expected5 = {
+        "inputs": [{"name": "inp_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": "ABCD"}],
+        "outputs": [
+            {"name": "astype_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "nodes": {"total": 2, "input": 1, "astype": 1},
+    }
+
+    verify_model(Type(), input_info, expected3)
+    verify_model(TypeFromAttr(), input_info, expected4)
+    verify_model(AsType(), input_info, expected5)
 
 
 def test_permute():
@@ -1097,8 +1595,16 @@ def test_permute():
         def forward(self, x):
             return x.permute(0, 3, 2, 1)
 
+    expected = {
+        "inputs": [{"name": "inp_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": "ADCB"}],
+        "outputs": [
+            {"name": "permute_dims_0", "shape": [1, 4, 3, 2], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "nodes": {"total": 2, "input": 1, "permute_dims": 1},
+    }
+
     input_info = [([1, 2, 3, 4], "float32")]
-    verify_model(Permute(), input_info)
+    verify_model(Permute(), input_info, expected)
 
 
 def test_reshape():
@@ -1106,8 +1612,14 @@ def test_reshape():
         def forward(self, x):
             return x.reshape(2, 12)
 
+    expected = {
+        "inputs": [{"name": "inp_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "reshape_0", "shape": [2, 12], "dtype": "float32", "layout": ""}],
+        "nodes": {"total": 2, "input": 1, "reshape": 1},
+    }
+
     input_info = [([1, 2, 3, 4], "float32")]
-    verify_model(Reshape(), input_info)
+    verify_model(Reshape(), input_info, expected)
 
 
 def test_transpose():
@@ -1115,8 +1627,16 @@ def test_transpose():
         def forward(self, x):
             return x.transpose(1, 3)
 
+    expected = {
+        "inputs": [{"name": "inp_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": "ADCB"}],
+        "outputs": [
+            {"name": "permute_dims_0", "shape": [1, 4, 3, 2], "dtype": "float32", "layout": "ABCD"}
+        ],
+        "nodes": {"total": 2, "input": 1, "permute_dims": 1},
+    }
+
     input_info = [([1, 2, 3, 4], "float32")]
-    verify_model(Transpose(), input_info)
+    verify_model(Transpose(), input_info, expected)
 
 
 def test_view():
@@ -1124,8 +1644,14 @@ def test_view():
         def forward(self, x):
             return x.view(2, 12)
 
+    expected = {
+        "inputs": [{"name": "inp_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "reshape_0", "shape": [2, 12], "dtype": "float32", "layout": ""}],
+        "nodes": {"total": 2, "input": 1, "reshape": 1},
+    }
+
     input_info = [([1, 2, 3, 4], "float32")]
-    verify_model(View(), input_info)
+    verify_model(View(), input_info, expected)
 
 
 def test_keep_params():
@@ -1137,7 +1663,22 @@ def test_keep_params():
         def forward(self, input):
             return self.conv(input)
 
-    verify_model(Conv2D1(), [([1, 3, 10, 10], "float32")])
+    expected = {
+        "inputs": [
+            {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "outputs": [
+            {
+                "name": "msc.conv2d_bias_0",
+                "shape": [1, 6, 4, 4],
+                "dtype": "float32",
+                "layout": "NCHW",
+            }
+        ],
+        "nodes": {"total": 2, "input": 1, "msc.conv2d_bias": 1},
+    }
+
+    verify_model(Conv2D1(), [([1, 3, 10, 10], "float32")], expected)
 
 
 def test_unwrap_unit_return_tuple():
@@ -1148,7 +1689,13 @@ def test_unwrap_unit_return_tuple():
         def forward(self, x):
             return (x,)
 
-    verify_model(Identity(), [([256, 256], "float32")])
+    expected = {
+        "inputs": [{"name": "inp_0", "shape": [256, 256], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "tuple_0", "shape": [256, 256], "dtype": "float32", "layout": ""}],
+        "nodes": {"total": 2, "input": 1, "tuple": 1},
+    }
+
+    verify_model(Identity(), [([256, 256], "float32")], expected)
 
 
 def test_no_bind_return_tuple():
@@ -1159,8 +1706,20 @@ def test_no_bind_return_tuple():
         def forward(self, x, y):
             return (x, y)
 
+    expected = {
+        "inputs": [
+            {"name": "inp_0", "shape": [256, 256], "dtype": "float32", "layout": ""},
+            {"name": "inp_1", "shape": [256, 256], "dtype": "float32", "layout": ""},
+        ],
+        "outputs": [
+            {"name": "tuple_0", "shape": [256, 256], "dtype": "float32", "layout": ""},
+            {"name": "tuple_1", "shape": [256, 256], "dtype": "float32", "layout": ""},
+        ],
+        "nodes": {"total": 3, "input": 2, "tuple": 1},
+    }
+
     input_info = [([256, 256], "float32"), ([256, 256], "float32")]
-    verify_model(Identity(), input_info)
+    verify_model(Identity(), input_info, expected)
 
 
 def test_argmax():
@@ -1171,6 +1730,12 @@ def test_argmax():
         def forward(self, input):
             return torch.argmax(input, dim=-1)
 
+    expected1 = {
+        "inputs": [{"name": "inp_0", "shape": [256, 256], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "argmax_0", "shape": [256], "dtype": "int64", "layout": ""}],
+        "nodes": {"total": 2, "input": 1, "argmax": 1},
+    }
+
     class Argmax2(Module):
         def __init__(self) -> None:
             super().__init__()
@@ -1178,8 +1743,14 @@ def test_argmax():
         def forward(self, input):
             return torch.argmax(input, dim=-1, keepdim=True)
 
-    verify_model(Argmax1(), [([256, 256], "float32")])
-    verify_model(Argmax2(), [([256, 256], "float32")])
+    expected2 = {
+        "inputs": [{"name": "inp_0", "shape": [256, 256], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "argmax_0", "shape": [256, 1], "dtype": "int64", "layout": ""}],
+        "nodes": {"total": 2, "input": 1, "argmax": 1},
+    }
+
+    verify_model(Argmax1(), [([256, 256], "float32")], expected1)
+    verify_model(Argmax2(), [([256, 256], "float32")], expected2)
 
 
 def test_argmin():
@@ -1190,6 +1761,12 @@ def test_argmin():
         def forward(self, input):
             return torch.argmin(input)
 
+    expected1 = {
+        "inputs": [{"name": "inp_0", "shape": [256, 256], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "argmin_0", "shape": [], "dtype": "int64", "layout": ""}],
+        "nodes": {"total": 2, "input": 1, "argmin": 1},
+    }
+
     class Argmin2(Module):
         def __init__(self) -> None:
             super().__init__()
@@ -1197,8 +1774,14 @@ def test_argmin():
         def forward(self, input):
             return torch.argmin(input, keepdim=True)
 
-    verify_model(Argmin1(), [([256, 256], "float32")])
-    verify_model(Argmin2(), [([256, 256], "float32")])
+    expected2 = {
+        "inputs": [{"name": "inp_0", "shape": [256, 256], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "argmin_0", "shape": [1, 1], "dtype": "int64", "layout": ""}],
+        "nodes": {"total": 2, "input": 1, "argmin": 1},
+    }
+
+    verify_model(Argmin1(), [([256, 256], "float32")], expected1)
+    verify_model(Argmin2(), [([256, 256], "float32")], expected2)
 
 
 def test_to():
@@ -1206,12 +1789,24 @@ def test_to():
         def forward(self, input):
             return input.to(torch.float16)
 
+    expected1 = {
+        "inputs": [{"name": "inp_0", "shape": [256, 256], "dtype": "float32", "layout": "AB"}],
+        "outputs": [{"name": "astype_0", "shape": [256, 256], "dtype": "float16", "layout": "AB"}],
+        "nodes": {"total": 2, "input": 1, "astype": 1},
+    }
+
     class To2(Module):
         def forward(self, input):
             return input.to("cpu")
 
-    verify_model(To1(), [([256, 256], "float32")])
-    verify_model(To2(), [([256, 256], "float32")])
+    expected2 = {
+        "inputs": [{"name": "inp_0_0", "shape": [256, 256], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "inp_0_0", "shape": [256, 256], "dtype": "float32", "layout": ""}],
+        "nodes": {"total": 1, "input": 1},
+    }
+
+    verify_model(To1(), [([256, 256], "float32")], expected1)
+    verify_model(To2(), [([256, 256], "float32")], expected2)
 
 
 def test_mean():
@@ -1219,12 +1814,24 @@ def test_mean():
         def forward(self, input):
             return input.mean(-1)
 
+    expected1 = {
+        "inputs": [{"name": "inp_0", "shape": [256, 256], "dtype": "float32", "layout": "AN"}],
+        "outputs": [{"name": "mean_0", "shape": [256], "dtype": "float32", "layout": "A"}],
+        "nodes": {"total": 2, "input": 1, "mean": 1},
+    }
+
     class MeanKeepDim(Module):
         def forward(self, input):
             return input.mean(-1, keepdim=True)
 
-    verify_model(Mean(), [([256, 256], "float32")])
-    verify_model(MeanKeepDim(), [([256, 256], "float32")])
+    expected2 = {
+        "inputs": [{"name": "inp_0", "shape": [256, 256], "dtype": "float32", "layout": "AB"}],
+        "outputs": [{"name": "mean_0", "shape": [256, 1], "dtype": "float32", "layout": "AB"}],
+        "nodes": {"total": 2, "input": 1, "mean": 1},
+    }
+
+    verify_model(Mean(), [([256, 256], "float32")], expected1)
+    verify_model(MeanKeepDim(), [([256, 256], "float32")], expected2)
 
 
 def test_rsqrt():
@@ -1232,7 +1839,13 @@ def test_rsqrt():
         def forward(self, input):
             return torch.rsqrt(input)
 
-    verify_model(Rsqrt(), [([256, 256], "float32")])
+    expected = {
+        "inputs": [{"name": "inp_0", "shape": [256, 256], "dtype": "float32", "layout": "AB"}],
+        "outputs": [{"name": "rsqrt_0", "shape": [256, 256], "dtype": "float32", "layout": "AB"}],
+        "nodes": {"total": 2, "input": 1, "rsqrt": 1},
+    }
+
+    verify_model(Rsqrt(), [([256, 256], "float32")], expected)
 
 
 def test_neg():
@@ -1240,7 +1853,15 @@ def test_neg():
         def forward(self, input):
             return -input
 
-    verify_model(Neg(), [([256, 256], "float32")])
+    expected = {
+        "inputs": [{"name": "inp_0", "shape": [256, 256], "dtype": "float32", "layout": "AB"}],
+        "outputs": [
+            {"name": "negative_0", "shape": [256, 256], "dtype": "float32", "layout": "AB"}
+        ],
+        "nodes": {"total": 2, "input": 1, "negative": 1},
+    }
+
+    verify_model(Neg(), [([256, 256], "float32")], expected)
 
 
 def test_max():
@@ -1248,7 +1869,16 @@ def test_max():
         def forward(self, x, y):
             return torch.max(x, y)
 
-    verify_model(Max(), [([256, 256], "float32"), ([256, 256], "float32")])
+    expected = {
+        "inputs": [
+            {"name": "inp_0", "shape": [256, 256], "dtype": "float32", "layout": "AB"},
+            {"name": "inp_1", "shape": [256, 256], "dtype": "float32", "layout": "AB"},
+        ],
+        "outputs": [{"name": "maximum_0", "shape": [256, 256], "dtype": "float32", "layout": "AB"}],
+        "nodes": {"total": 3, "input": 2, "maximum": 1},
+    }
+
+    verify_model(Max(), [([256, 256], "float32"), ([256, 256], "float32")], expected)
 
 
 def test_attention():
@@ -1262,17 +1892,52 @@ def test_attention():
         def forward(self, q, k, v):
             return F.scaled_dot_product_attention(q, k, v, is_causal=True)
 
+    expected1 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [32, 8, 128, 64], "dtype": "float32", "layout": "ACBD"},
+            {"name": "inp_1", "shape": [32, 8, 128, 64], "dtype": "float32", "layout": "ACBD"},
+            {"name": "inp_2", "shape": [32, 8, 128, 64], "dtype": "float32", "layout": "ACBD"},
+        ],
+        "outputs": [
+            {
+                "name": "msc.attention_0",
+                "shape": [32, 128, 8, 64],
+                "dtype": "float32",
+                "layout": "ABCD",
+            }
+        ],
+        "nodes": {"total": 4, "input": 3, "msc.attention": 1},
+    }
+
     input_info = [
         ([32, 8, 128, 64], "float32"),
         ([32, 8, 128, 64], "float32"),
         ([32, 8, 128, 64], "float32"),
     ]
-    verify_model(Attention1(), input_info)
-    verify_model(Attention2(), input_info)
+    verify_model(Attention1(), input_info, expected1)
+    verify_model(Attention2(), input_info, expected1)
 
     class Attention2(Module):
         def forward(self, q, k, v, mask):
             return F.scaled_dot_product_attention(q, k, v, mask)
+
+    expected2 = {
+        "inputs": [
+            {"name": "inp_0", "shape": [32, 8, 128, 64], "dtype": "float32", "layout": "ACBD"},
+            {"name": "inp_1", "shape": [32, 8, 128, 64], "dtype": "float32", "layout": "ACBD"},
+            {"name": "inp_2", "shape": [32, 8, 128, 64], "dtype": "float32", "layout": "ACBD"},
+            {"name": "inp_3", "shape": [32, 8, 128, 128], "dtype": "float32", "layout": "ABCD"},
+        ],
+        "outputs": [
+            {
+                "name": "msc.attention_0",
+                "shape": [32, 128, 8, 64],
+                "dtype": "float32",
+                "layout": "ABCD",
+            }
+        ],
+        "nodes": {"total": 5, "input": 4, "msc.attention": 1},
+    }
 
     verify_model(
         Attention2(),
@@ -1282,9 +1947,9 @@ def test_attention():
             ([32, 8, 128, 64], "float32"),
             ([32, 8, 128, 128], "float32"),
         ],
+        expected2,
     )
 
 
 if __name__ == "__main__":
-    # tvm.testing.main()
-    test_embedding()
+    tvm.testing.main()
