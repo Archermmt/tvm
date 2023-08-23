@@ -179,6 +179,147 @@ def matmul(a: Tensor, b: Tensor, out_dtype: Optional[str] = None, name: str = "m
     return _wrap_nested(_op.matmul(a._expr, b._expr, out_dtype=out_dtype), name)
 
 
+def conv1d(
+    x: Tensor,
+    weight: Tensor,
+    bias: Optional[Tensor] = None,
+    stride: Optional[Union[int, Tuple]] = 1,
+    padding: Optional[Union[int, Tuple, str]] = 0,
+    dilation: Optional[Union[int, Tuple]] = 1,
+    groups: Optional[int] = 1,
+    name: str = "conv1d",
+) -> Tensor:
+    r"""1D convolution.
+
+    This operator takes the weight as the 1D convolution kernel
+    and convolves it with data to produce an output.
+
+
+    In the default case, where the data_layout is `NCW`
+    and kernel_layout is `OIW`, conv1d takes in
+    a data Tensor with shape `(batch_size, in_channels, width)`,
+    and a weight Tensor with shape `(channels, in_channels, kernel_w)`,
+    where `kernel_w` is the length of the `W` kernel dimension,
+    to produce an output Tensor with the following rule:
+
+    .. math::
+
+        \mbox{out}[b, c, x] = \sum_{dx, k}
+           \mbox{data}[b, k, \mbox{strides} * x + dx] *
+           \mbox{weight}[c, k, dx]
+
+    Padding and dilation are applied to data and weight respectively before the computation.
+    This operator accepts data layout specification.
+    Semantically, the operator will convert the layout to the canonical layout
+    (`NCW` for data and `OIW` for weight), perform the computation,
+    then convert to the out_layout.
+
+    Parameters
+    ----------
+    x : Tensor
+        The input data to the operator.
+
+    weight : Tensor
+        The weight expressions.
+
+    bias : Optional[Tensor]
+        Optional bias tensor of shape [O].
+
+    strides : Optional[Union[int, Tuple]]
+        The strides of convolution. It is required to have length 1.
+
+    padding : Optional[Union[int, Tuple, str]]
+        The padding of convolution on both sides of inputs before convolution.
+        It is required to have length either 1 or 2.
+
+    dilation : Optional[Union[int, Tuple]]
+        Specifies the dilation rate to be used for dilated convolution.
+        It is required to have length 1.
+
+    groups : Optional[int]
+        Number of groups to split the input into for grouped convolution.
+        The number of input and output channels should be divisible by the number of groups.
+
+    name : str
+        Name hint.
+
+    Returns
+    -------
+    result : Tensor
+        The computed result.
+    """
+    conv_out = _op.nn.conv1d(
+        data=x._expr,
+        weight=weight._expr,
+        strides=stride,
+        padding=padding,
+        dilation=dilation,
+        groups=groups,
+    )
+    if bias is not None:
+        conv_out = _op.add(conv_out, _op.reshape(bias._expr, [1, -1, 1]))
+
+    return _wrap_nested(conv_out, name)
+
+
+def conv2d(
+    x: Tensor,
+    weight: Tensor,
+    bias: Optional[Tensor] = None,
+    stride: Optional[Union[int, Tuple]] = 1,
+    padding: Optional[Union[int, Tuple, str]] = 0,
+    dilation: Optional[Union[int, Tuple]] = 1,
+    groups: Optional[int] = 1,
+    name: str = "conv2d",
+) -> Tensor:
+    """Applies a 2D convolution over an input image composed of sevaral input planes
+
+    Parameters
+    ----------
+    x : Tensor
+        Input tensor of shape [B, N, H, W]
+
+    weight : Tensor
+        Filters of shape [O, N/groups, kH, kW]
+
+    bias : Optional[Tensor]
+        Optional bias tensor of shape [O].
+
+    stride : Optional[Union[int, Tuple]]
+        The stride of the convolving kernel. Can be a single number
+        or tuple of (sH, sW).
+
+    padding : Optional[[Union[int, Tuple]]]
+        Implicit paddings on both sides of the input.
+
+    dilation : Optional[Union[int, Tuple]]
+        The spacing between kernel elements. Can be a single number of tuple (dH, dW).
+
+    groups : Optional[int]
+        Split input into a number of groups.
+
+    name : str
+        Name hint.
+
+    Returns
+    -------
+    result : Tensor
+        The computed result with shape [B, O, oH, oW].
+    """
+    conv_out = _op.nn.conv2d(
+        data=x._expr,
+        weight=weight._expr,
+        strides=stride,
+        padding=padding,
+        dilation=dilation,
+        groups=groups,
+    )
+    if bias is not None:
+        conv_out = _op.add(conv_out, _op.reshape(bias._expr, [1, -1, 1, 1]))
+
+    return _wrap_nested(conv_out, name)
+
+
 def maximum(x1: Tensor, x2: Tensor, name: str = "maximum"):
     """Element-wise maximum
 
@@ -455,6 +596,34 @@ def silu(x: Tensor, name: str = "silu") -> Tensor:
     return _wrap_nested(_op.nn.silu(x._expr), name)
 
 
+def gelu(x: Tensor, name: str = "gelu") -> Tensor:
+    r"""Applies the Gaussian Error Linear Units function
+
+    .. math::
+        \text{GeLU}(x) = 0.5 * x * (1 + \text{erf}(x * 0.5**0.5))
+
+    where :math:`erf` is the Gauss Error function.
+
+    Parameters
+    ----------
+    x : Tensor
+        The input data
+
+    naem : str
+        Name hint.
+
+    Returns
+    -------
+    result : Tensor
+        The computed result.
+
+    Note
+    ----
+    The input tensor is required to have float dtype
+    """
+    return _wrap_nested(_op.nn.gelu(x._expr), name)
+
+
 def softmax(x: Tensor, axis: int = -1, name: str = "softmax") -> Tensor:
     r"""Computes softmax.
 
@@ -483,6 +652,61 @@ def softmax(x: Tensor, axis: int = -1, name: str = "softmax") -> Tensor:
     The input tensor is required to have float dtype
     """
     return _wrap_nested(_op.nn.softmax(x._expr, axis), name)
+
+
+def layer_norm(
+    x: Tensor,
+    weight: Tensor,
+    bias: Tensor,
+    axes: Union[int, List[int]],
+    epsilon: float = 1e-5,
+    name: str = "layer_norm",
+) -> Tensor:
+    r"""
+    Layer normalization (Lei Ba and et al., 2016).
+    Applies layer normalization to the n-dimensional input array.
+    This operator takes an n-dimensional input array and normalizes
+    the input using the given axis:
+
+    .. math::
+
+        out = \frac{data - mean(data, axis)}{\sqrt{var(data, axis)+\epsilon}}
+            * gamma + beta
+
+    Unlike batch normalization, the mean and var are computed along the channel dimension.
+
+    Assume the input has size k on axis 1, then both gamma and beta have shape (k,).
+
+    .. note::
+
+        This operator can be optimized away for inference.
+
+    Parameters
+    ----------
+    data : Tensor
+        Input to which layer_norm will be applied.
+
+    gamma : Tensor
+        The gamma scale factor.
+
+    beta : Tensor
+        The beta offset factor.
+
+    axes : Union[int, List[int]]
+        The axes that along which the normalization is applied.
+
+    epsilon : float
+        Small float added to variance to avoid dividing by zero.
+
+    name : str
+        Name hint.
+
+    Returns
+    -------
+    result : Tensor
+        The computed result.
+    """
+    return _wrap_nested(_op.nn.layer_norm(x._expr, weight._expr, bias._expr, axes, epsilon), name)
 
 
 def rms_norm(
@@ -525,6 +749,59 @@ def rms_norm(
         The computed result.
     """
     return _wrap_nested(_op.nn.rms_norm(x._expr, weight._expr, axes, epsilon), name)
+
+
+def group_norm(
+    x: Tensor,
+    num_groups: int,
+    weight: Optional[Tensor],
+    bias: Optional[Tensor],
+    eps: float = 1e-5,
+    name: str = "group_norm",
+) -> Tensor:
+    r"""
+    Applies Group Normalization over a mini-batch of inputs as described in
+    the paper `Group Normalization <https://arxiv.org/abs/1803.08494>`__
+
+    .. math::
+        y = \frac{x - \mathrm{E}[x]}{ \sqrt{\mathrm{Var}[x] + \epsilon}} * \gamma + \beta
+
+    Parameters
+    ----------
+    x : Tensor
+        Input to which rms_norm will be applied.
+
+    num_groups : int
+        Number of groups to separate the channels into.
+
+    weight : Tensor
+        The gamma scale factor.
+
+    bias : Tensor
+        The beta offset factor.
+
+    epsilon : float
+        Small float added to square mean to avoid dividing by zero.
+
+    name : str
+        Name hint.
+
+    Returns
+    -------
+    result : Tensor
+        The computed result.
+    """
+    if weight is not None:
+        weight = weight._expr
+    if bias is not None:
+        bias = bias._expr
+    dim = len(x._expr.struct_info.shape)
+    return _wrap_nested(
+        _op.nn.group_norm(
+            x._expr, weight, bias, num_groups, channel_axis=1, axes=list(range(2, dim)), epsilon=eps
+        ),
+        name,
+    )
 
 
 def triu(x: Tensor, diagonal: int = 0, name: str = "triu") -> Tensor:
