@@ -21,6 +21,7 @@ from typing import Dict, Optional
 import tvm
 from tvm.relax.transform import BindParams
 from tvm.contrib.msc.core.ir import MSCGraph
+from tvm.contrib.msc.core.codegen import CodeGen
 from tvm.contrib.msc.core import utils as msc_utils
 from tvm.contrib.msc.framework.tvm import _ffi_api
 
@@ -31,7 +32,7 @@ def to_relax(
     codegen_config: Optional[Dict[str, str]] = None,
     print_config: Optional[Dict[str, str]] = None,
     build_folder: msc_utils.MSCDirectory = None,
-):
+) -> tvm.IRModule:
     """Change MSCGraph to IRModule.
 
     Parameters
@@ -53,22 +54,17 @@ def to_relax(
         The IRModule of relax.
     """
 
-    sources = _ffi_api.GetRelaxSources(
-        graph, msc_utils.dump_dict(codegen_config), msc_utils.dump_dict(print_config)
-    )
-    build_folder = build_folder or msc_utils.msc_dir(keep_history=False, cleanup=True)
-    with build_folder as d:
-        for name, source in sources.items():
-            d.add_file(name, source)
-        inputs = [
-            tvm.relax.Var(i.alias, tvm.relax.TensorStructInfo(i.get_shape(), i.dtype_name))
-            for i in graph.get_inputs()
-        ]
-        builder = msc_utils.load_callable(graph.name + ".py:" + graph.name)
-        mod = builder(*inputs)
-        # load weights
+    inputs = [
+        tvm.relax.Var(i.alias, tvm.relax.TensorStructInfo(i.get_shape(), i.dtype_name))
+        for i in graph.get_inputs()
+    ]
+
+    def _bind_weights(mod: tvm.IRModule, folder: msc_utils.MSCDirectory) -> tvm.IRModule:
         if weights:
             mod = BindParams("main", weights)(mod)
-            with open(d.relpath(graph.name + "_params.bin"), "wb") as f_params:
+            with open(folder.relpath(graph.name + "_params.bin"), "wb") as f_params:
                 f_params.write(tvm.runtime.save_param_dict(weights))
-    return mod
+        return mod
+
+    codegen = CodeGen(graph, _ffi_api.GetRelaxSources, codegen_config, print_config, build_folder)
+    return codegen.load(inputs, _bind_weights)

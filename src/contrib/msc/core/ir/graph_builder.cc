@@ -87,7 +87,14 @@ const MSCGraph RelaxGraphBuilder::Build(const relax::Function& func) {
     }
   } else {
     for (size_t i = 0; i < output_names.size(); i++) {
-      graph->FindTensor(output_names[i])->alias = StringUtils::Replace(output_names[i], ":", "_");
+      const auto& output = graph->FindTensor(output_names[i]);
+      if (output->alias.size() > 0) {
+        continue;
+      }
+      const auto& producer = graph->FindProducer(output_names[i]);
+      output->alias = producer->outputs.size() == 1
+                          ? producer->name
+                          : StringUtils::Replace(output_names[i], ":", "_");
     }
   }
   return graph;
@@ -141,7 +148,9 @@ const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>
   } else if (const auto* const_node = expr.as<relax::ConstantNode>()) {
     if (const_node->is_scalar()) {
       const float val = ExprUtils::GetScalar<float>(Downcast<relax::Constant>(expr));
-      attrs.Set("scalar", std::to_string(val));
+      std::stringstream stream;
+      stream << std::fixed << std::setprecision(config_.float_precision) << val;
+      attrs.Set("scalar", stream.str());
     }
   } else if (const auto* shape_node = expr.as<relax::ShapeExprNode>()) {
     attrs.Set("shape", StringUtils::ToString(shape_node->values));
@@ -395,7 +404,14 @@ MSCGraph RelayGraphBuilder::Build(const relay::Function& func) {
     }
   } else {
     for (size_t i = 0; i < output_names.size(); i++) {
-      graph->FindTensor(output_names[i])->alias = StringUtils::Replace(output_names[i], ":", "_");
+      const auto& output = graph->FindTensor(output_names[i]);
+      if (output->alias.size() > 0) {
+        continue;
+      }
+      const auto& producer = graph->FindProducer(output_names[i]);
+      output->alias = producer->outputs.size() == 1
+                          ? producer->name
+                          : StringUtils::Replace(output_names[i], ":", "_");
     }
   }
   return graph;
@@ -438,7 +454,9 @@ MSCJoint RelayGraphBuilder::AddNode(const Expr& expr, const String& name) {
   } else if (const auto* const_node = expr.as<relay::ConstantNode>()) {
     if (const_node->is_scalar()) {
       const float val = ExprUtils::GetScalar<float>(Downcast<relay::Constant>(expr));
-      attrs.Set("scalar", std::to_string(val));
+      std::stringstream stream;
+      stream << std::fixed << std::setprecision(config_.float_precision) << val;
+      attrs.Set("scalar", stream.str());
     }
   } else if (const auto* get_node = expr.as<relay::TupleGetItemNode>()) {
     attrs.Set("index", std::to_string(get_node->index));

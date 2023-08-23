@@ -47,7 +47,7 @@ def test_conv1d():
     expected1 = {
         "inputs": [{"name": "inp_0", "shape": [1, 3, 10], "dtype": "float32", "layout": "NCW"}],
         "outputs": [
-            {"name": "msc.conv1d_bias_0", "shape": [1, 6, 4], "dtype": "float32", "layout": "NCW"}
+            {"name": "msc.conv1d_bias", "shape": [1, 6, 4], "dtype": "float32", "layout": "NCW"}
         ],
         "nodes": {"total": 2, "input": 1, "msc.conv1d_bias": 1},
     }
@@ -62,7 +62,7 @@ def test_conv1d():
 
     expected2 = {
         "inputs": [{"name": "inp_0", "shape": [1, 3, 10], "dtype": "float32", "layout": "NCW"}],
-        "outputs": [{"name": "conv1d_0", "shape": [1, 6, 4], "dtype": "float32", "layout": "NCW"}],
+        "outputs": [{"name": "conv1d", "shape": [1, 6, 4], "dtype": "float32", "layout": "NCW"}],
         "nodes": {"total": 2, "input": 1, "nn.conv1d": 1},
     }
 
@@ -86,7 +86,7 @@ def test_conv2d():
         ],
         "outputs": [
             {
-                "name": "msc.conv2d_bias_0",
+                "name": "msc.conv2d_bias",
                 "shape": [1, 6, 4, 4],
                 "dtype": "float32",
                 "layout": "NCHW",
@@ -108,7 +108,7 @@ def test_conv2d():
             {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
         ],
         "outputs": [
-            {"name": "conv2d_0", "shape": [1, 6, 4, 4], "dtype": "float32", "layout": "NCHW"}
+            {"name": "conv2d", "shape": [1, 6, 4, 4], "dtype": "float32", "layout": "NCHW"}
         ],
         "nodes": {"total": 2, "input": 1, "nn.conv2d": 1},
     }
@@ -132,7 +132,7 @@ def test_linear():
         ],
         "outputs": [
             {
-                "name": "msc.linear_bias_0",
+                "name": "msc.linear_bias",
                 "shape": [1, 3, 10, 7],
                 "dtype": "float32",
                 "layout": "NCHW",
@@ -154,7 +154,7 @@ def test_linear():
             {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
         ],
         "outputs": [
-            {"name": "msc.linear_0", "shape": [1, 3, 10, 7], "dtype": "float32", "layout": "NCHW"}
+            {"name": "msc.linear", "shape": [1, 3, 10, 7], "dtype": "float32", "layout": "NCHW"}
         ],
         "nodes": {"total": 2, "input": 1, "msc.linear": 1},
     }
@@ -171,7 +171,7 @@ def test_linear():
             {"name": "inp_0", "shape": [10, 10], "dtype": "float32", "layout": "NC"},
             {"name": "inp_1", "shape": [10, 10], "dtype": "float32", "layout": "IO"},
         ],
-        "outputs": [{"name": "matmul_0", "shape": [10, 10], "dtype": "float32", "layout": "NC"}],
+        "outputs": [{"name": "matmul", "shape": [10, 10], "dtype": "float32", "layout": "NC"}],
         "nodes": {"total": 3, "input": 2, "matmul": 1},
     }
 
@@ -195,7 +195,7 @@ def test_bmm():
             {"name": "inp_1", "shape": [4, 256, 512], "dtype": "float32", "layout": "NIO"},
         ],
         "outputs": [
-            {"name": "matmul_0", "shape": [4, 128, 512], "dtype": "float32", "layout": "NCD"}
+            {"name": "matmul", "shape": [4, 128, 512], "dtype": "float32", "layout": "NCD"}
         ],
         "nodes": {"total": 3, "input": 2, "matmul": 1},
     }
@@ -218,7 +218,7 @@ def test_baddbmm():
             {"name": "inp_1", "shape": [4, 128, 256], "dtype": "float32", "layout": "NCD"},
             {"name": "inp_2", "shape": [4, 256, 512], "dtype": "float32", "layout": "NIO"},
         ],
-        "outputs": [{"name": "add_0", "shape": [4, 128, 512], "dtype": "float32", "layout": "NCD"}],
+        "outputs": [{"name": "add", "shape": [4, 128, 512], "dtype": "float32", "layout": "NCD"}],
         "nodes": {"total": 5, "input": 3, "matmul": 1, "add": 1},
     }
 
@@ -236,7 +236,7 @@ def test_baddbmm():
             {"name": "inp_2", "shape": [4, 256, 512], "dtype": "float32", "layout": "NIO"},
         ],
         "outputs": [
-            {"name": "multiply_0", "shape": [4, 128, 512], "dtype": "float32", "layout": "NCD"}
+            {"name": "multiply", "shape": [4, 128, 512], "dtype": "float32", "layout": "NCD"}
         ],
         "nodes": {"total": 6, "input": 3, "matmul": 1, "constant": 1, "multiply": 1},
     }
@@ -265,7 +265,7 @@ def test_relu():
 
     expected = {
         "inputs": [{"name": "inp_0", "shape": [10, 10], "dtype": "float32", "layout": "AB"}],
-        "outputs": [{"name": "relu_0", "shape": [10, 10], "dtype": "float32", "layout": "AB"}],
+        "outputs": [{"name": "relu", "shape": [10, 10], "dtype": "float32", "layout": "AB"}],
         "nodes": {"total": 2, "input": 1, "nn.relu": 1},
     }
 
@@ -285,7 +285,7 @@ def test_relu6():
 
     expected = {
         "inputs": [{"name": "inp_0", "shape": [10, 10], "dtype": "float32", "layout": ""}],
-        "outputs": [{"name": "clip_0", "shape": [10, 10], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "clip", "shape": [10, 10], "dtype": "float32", "layout": ""}],
         "nodes": {"total": 2, "input": 1, "clip": 1},
     }
     input_info = [([10, 10], "float32")]
@@ -306,7 +306,7 @@ def test_maxpool2d():
             {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
         ],
         "outputs": [
-            {"name": "max_pool2d_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
+            {"name": "max_pool2d", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
         ],
         "nodes": {"total": 2, "input": 1, "nn.max_pool2d": 1},
     }
@@ -324,7 +324,7 @@ def test_maxpool2d():
             {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
         ],
         "outputs": [
-            {"name": "max_pool2d_0", "shape": [1, 3, 4, 4], "dtype": "float32", "layout": "NCHW"}
+            {"name": "max_pool2d", "shape": [1, 3, 4, 4], "dtype": "float32", "layout": "NCHW"}
         ],
         "nodes": {"total": 2, "input": 1, "nn.max_pool2d": 1},
     }
@@ -342,7 +342,7 @@ def test_maxpool2d():
             {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
         ],
         "outputs": [
-            {"name": "max_pool2d_0", "shape": [1, 3, 6, 6], "dtype": "float32", "layout": "NCHW"}
+            {"name": "max_pool2d", "shape": [1, 3, 6, 6], "dtype": "float32", "layout": "NCHW"}
         ],
         "nodes": {"total": 2, "input": 1, "nn.max_pool2d": 1},
     }
@@ -367,7 +367,7 @@ def test_avgpool2d():
             {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
         ],
         "outputs": [
-            {"name": "avg_pool2d_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
+            {"name": "avg_pool2d", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
         ],
         "nodes": {"total": 2, "input": 1, "nn.avg_pool2d": 1},
     }
@@ -385,7 +385,7 @@ def test_avgpool2d():
             {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
         ],
         "outputs": [
-            {"name": "avg_pool2d_0", "shape": [1, 3, 6, 6], "dtype": "float32", "layout": "NCHW"}
+            {"name": "avg_pool2d", "shape": [1, 3, 6, 6], "dtype": "float32", "layout": "NCHW"}
         ],
         "nodes": {"total": 2, "input": 1, "nn.avg_pool2d": 1},
     }
@@ -410,7 +410,7 @@ def test_adaptive_avgpool2d():
         ],
         "outputs": [
             {
-                "name": "adaptive_avg_pool2d_0",
+                "name": "adaptive_avg_pool2d",
                 "shape": [1, 3, 10, 10],
                 "dtype": "float32",
                 "layout": "NCHW",
@@ -434,7 +434,7 @@ def test_flatten():
 
     expected = {
         "inputs": [{"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": ""}],
-        "outputs": [{"name": "reshape_0", "shape": [1, 3, 100], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "reshape", "shape": [1, 3, 100], "dtype": "float32", "layout": ""}],
         "nodes": {"total": 2, "input": 1, "reshape": 1},
     }
 
@@ -458,7 +458,7 @@ def test_batchnorm2d():
         ],
         "outputs": [
             {
-                "name": "batch_norm.0_0",
+                "name": "batch_norm.0",
                 "shape": [1, 3, 10, 10],
                 "dtype": "float32",
                 "layout": "NCHW",
@@ -482,21 +482,19 @@ def test_embedding():
 
     expected1 = {
         "inputs": [{"name": "inp_0", "shape": [4], "dtype": "int64", "layout": "A"}],
-        "outputs": [
-            {"name": "msc.embedding_0", "shape": [4, 3], "dtype": "float32", "layout": "NA"}
-        ],
+        "outputs": [{"name": "msc.embedding", "shape": [4, 3], "dtype": "float32", "layout": "NA"}],
         "nodes": {"total": 2, "input": 1, "msc.embedding": 1},
     }
 
     expected2 = {
         "inputs": [{"name": "inp_0", "shape": [4, 5], "dtype": "int64", "layout": "AB"}],
         "outputs": [
-            {"name": "msc.embedding_0", "shape": [4, 5, 3], "dtype": "float32", "layout": "CNB"}
+            {"name": "msc.embedding", "shape": [4, 5, 3], "dtype": "float32", "layout": "CNB"}
         ],
         "nodes": {"total": 2, "input": 1, "msc.embedding": 1},
     }
 
-    # verify_model(Embedding(), [([4], "int64")], expected1)
+    verify_model(Embedding(), [([4], "int64")], expected1)
     verify_model(Embedding(), [([4, 5], "int64")], expected2)
 
 
@@ -514,8 +512,8 @@ def test_dropout():
             return torch.dropout(input, 0.5, train=True)
 
     expected = {
-        "inputs": [{"name": "inp_0_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": ""}],
-        "outputs": [{"name": "inp_0_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": ""}],
+        "inputs": [{"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": ""}],
         "nodes": {"total": 1, "input": 1},
     }
 
@@ -538,7 +536,7 @@ def test_layernorm():
             {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
         ],
         "outputs": [
-            {"name": "layer_norm_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
+            {"name": "layer_norm", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
         ],
         "nodes": {"total": 2, "input": 1, "nn.layer_norm": 1},
     }
@@ -564,7 +562,7 @@ def test_functional_layernorm():
             {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
         ],
         "outputs": [
-            {"name": "layer_norm_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
+            {"name": "layer_norm", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
         ],
         "nodes": {"total": 2, "input": 1, "nn.layer_norm": 1},
     }
@@ -587,7 +585,7 @@ def test_cross_entropy():
             {"name": "inp_0", "shape": [3, 2], "dtype": "float32", "layout": ""},
             {"name": "inp_1", "shape": [3], "dtype": "int32", "layout": ""},
         ],
-        "outputs": [{"name": "nll_loss_0", "shape": [], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "nll_loss", "shape": [], "dtype": "float32", "layout": ""}],
         "nodes": {"total": 4, "input": 2, "nn.log_softmax": 1, "nn.nll_loss": 1},
     }
 
@@ -605,7 +603,7 @@ def test_cross_entropy():
             {"name": "inp_0", "shape": [3, 2], "dtype": "float32", "layout": ""},
             {"name": "inp_1", "shape": [3], "dtype": "int32", "layout": ""},
         ],
-        "outputs": [{"name": "nll_loss_0", "shape": [], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "nll_loss", "shape": [], "dtype": "float32", "layout": ""}],
         "nodes": {"total": 5, "input": 2, "nn.log_softmax": 1, "constant": 1, "nn.nll_loss": 1},
     }
 
@@ -622,7 +620,7 @@ def test_cross_entropy():
             {"name": "inp_0", "shape": [3, 2], "dtype": "float32", "layout": ""},
             {"name": "inp_1", "shape": [3], "dtype": "int32", "layout": ""},
         ],
-        "outputs": [{"name": "nll_loss_0", "shape": [], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "nll_loss", "shape": [], "dtype": "float32", "layout": ""}],
         "nodes": {"total": 4, "input": 2, "nn.log_softmax": 1, "nn.nll_loss": 1},
     }
 
@@ -642,7 +640,7 @@ def test_functional_cross_entropy():
             {"name": "inp_0", "shape": [3, 10], "dtype": "float32", "layout": ""},
             {"name": "inp_1", "shape": [3], "dtype": "int32", "layout": ""},
         ],
-        "outputs": [{"name": "nll_loss_0", "shape": [], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "nll_loss", "shape": [], "dtype": "float32", "layout": ""}],
         "nodes": {"total": 4, "input": 2, "nn.log_softmax": 1, "nn.nll_loss": 1},
     }
 
@@ -668,7 +666,7 @@ def test_silu():
             {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
         "outputs": [
-            {"name": "silu_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+            {"name": "silu", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
         "nodes": {"total": 2, "input": 1, "nn.silu": 1},
     }
@@ -692,7 +690,7 @@ def test_groupnorm():
             {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
         ],
         "outputs": [
-            {"name": "group_norm_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
+            {"name": "group_norm", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "NCHW"}
         ],
         "nodes": {"total": 2, "input": 1, "nn.group_norm": 1},
     }
@@ -715,7 +713,7 @@ def test_softmax():
             {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
         "outputs": [
-            {"name": "softmax_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+            {"name": "softmax", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
         "nodes": {"total": 2, "input": 1, "nn.softmax": 1},
     }
@@ -738,9 +736,7 @@ def test_binary():
             {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"},
             {"name": "inp_1", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"},
         ],
-        "outputs": [
-            {"name": "add_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
-        ],
+        "outputs": [{"name": "add", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}],
         "nodes": {"total": 3, "input": 2, "add": 1},
     }
 
@@ -752,9 +748,7 @@ def test_binary():
         "inputs": [
             {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
-        "outputs": [
-            {"name": "add_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
-        ],
+        "outputs": [{"name": "add", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}],
         "nodes": {"total": 3, "input": 1, "constant": 1, "add": 1},
     }
 
@@ -772,7 +766,7 @@ def test_binary():
             {"name": "inp_1", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"},
         ],
         "outputs": [
-            {"name": "subtract_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+            {"name": "subtract", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
         "nodes": {"total": 3, "input": 2, "subtract": 1},
     }
@@ -786,7 +780,7 @@ def test_binary():
             {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
         "outputs": [
-            {"name": "subtract_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+            {"name": "subtract", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
         "nodes": {"total": 3, "input": 1, "constant": 1, "subtract": 1},
     }
@@ -805,7 +799,7 @@ def test_binary():
             {"name": "inp_1", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"},
         ],
         "outputs": [
-            {"name": "multiply_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+            {"name": "multiply", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
         "nodes": {"total": 3, "input": 2, "multiply": 1},
     }
@@ -819,7 +813,7 @@ def test_binary():
             {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
         "outputs": [
-            {"name": "multiply_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+            {"name": "multiply", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
         "nodes": {"total": 3, "input": 1, "constant": 1, "multiply": 1},
     }
@@ -838,7 +832,7 @@ def test_binary():
             {"name": "inp_1", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"},
         ],
         "outputs": [
-            {"name": "divide_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+            {"name": "divide", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
         "nodes": {"total": 3, "input": 2, "divide": 1},
     }
@@ -852,7 +846,7 @@ def test_binary():
             {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
         "outputs": [
-            {"name": "divide_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+            {"name": "divide", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
         "nodes": {"total": 3, "input": 1, "constant": 1, "divide": 1},
     }
@@ -872,7 +866,7 @@ def test_binary():
         ],
         "outputs": [
             {
-                "name": "floor_divide_0",
+                "name": "floor_divide",
                 "shape": [1, 3, 10, 10],
                 "dtype": "float32",
                 "layout": "ABCD",
@@ -891,7 +885,7 @@ def test_binary():
         ],
         "outputs": [
             {
-                "name": "floor_divide_0",
+                "name": "floor_divide",
                 "shape": [1, 3, 10, 10],
                 "dtype": "float32",
                 "layout": "ABCD",
@@ -914,7 +908,7 @@ def test_binary():
             {"name": "inp_1", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"},
         ],
         "outputs": [
-            {"name": "power_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+            {"name": "power", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
         "nodes": {"total": 3, "input": 2, "power": 1},
     }
@@ -928,7 +922,7 @@ def test_binary():
             {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
         "outputs": [
-            {"name": "power_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+            {"name": "power", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
         "nodes": {"total": 3, "input": 1, "constant": 1, "power": 1},
     }
@@ -946,7 +940,7 @@ def test_binary():
             {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"},
             {"name": "inp_1", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"},
         ],
-        "outputs": [{"name": "less_0", "shape": [1, 3, 10, 10], "dtype": "bool", "layout": "ABCD"}],
+        "outputs": [{"name": "less", "shape": [1, 3, 10, 10], "dtype": "bool", "layout": "ABCD"}],
         "nodes": {"total": 3, "input": 2, "less": 1},
     }
 
@@ -958,7 +952,7 @@ def test_binary():
         "inputs": [
             {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
-        "outputs": [{"name": "less_0", "shape": [1, 3, 10, 10], "dtype": "bool", "layout": "ABCD"}],
+        "outputs": [{"name": "less", "shape": [1, 3, 10, 10], "dtype": "bool", "layout": "ABCD"}],
         "nodes": {"total": 3, "input": 1, "constant": 1, "less": 1},
     }
 
@@ -973,7 +967,7 @@ def test_size():
 
     expected = {
         "inputs": [{"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": ""}],
-        "outputs": [{"name": "shape_0", "shape": [4], "dtype": "int32", "layout": "O"}],
+        "outputs": [{"name": "shape", "shape": [4], "dtype": "int32", "layout": "O"}],
         "nodes": {"total": 2, "input": 1, "shape": 1},
     }
 
@@ -988,7 +982,7 @@ def test_squeeze():
 
     expected1 = {
         "inputs": [{"name": "inp_0", "shape": [3, 1, 4, 1], "dtype": "float32", "layout": "ANBC"}],
-        "outputs": [{"name": "squeeze_0", "shape": [3, 4, 1], "dtype": "float32", "layout": "ABC"}],
+        "outputs": [{"name": "squeeze", "shape": [3, 4, 1], "dtype": "float32", "layout": "ABC"}],
         "nodes": {"total": 2, "input": 1, "squeeze": 1},
     }
 
@@ -998,7 +992,7 @@ def test_squeeze():
 
     expected2 = {
         "inputs": [{"name": "inp_0", "shape": [3, 1, 4, 1], "dtype": "float32", "layout": "ANBC"}],
-        "outputs": [{"name": "squeeze_0", "shape": [3, 4], "dtype": "float32", "layout": "AB"}],
+        "outputs": [{"name": "squeeze", "shape": [3, 4], "dtype": "float32", "layout": "AB"}],
         "nodes": {"total": 2, "input": 1, "squeeze": 1},
     }
 
@@ -1018,7 +1012,7 @@ def test_unsqueeze():
         ],
         "outputs": [
             {
-                "name": "expand_dims_0",
+                "name": "expand_dims",
                 "shape": [1, 1, 3, 10, 10],
                 "dtype": "float32",
                 "layout": "ABCDE",
@@ -1037,7 +1031,7 @@ def test_unsqueeze():
         ],
         "outputs": [
             {
-                "name": "expand_dims_0",
+                "name": "expand_dims",
                 "shape": [1, 3, 10, 10, 1],
                 "dtype": "float32",
                 "layout": "ABCDE",
@@ -1058,7 +1052,7 @@ def test_getattr():
 
     expected = {
         "inputs": [{"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": ""}],
-        "outputs": [{"name": "shape_0", "shape": [4], "dtype": "int32", "layout": "O"}],
+        "outputs": [{"name": "shape", "shape": [4], "dtype": "int32", "layout": "O"}],
         "nodes": {"total": 2, "input": 1, "shape": 1},
     }
 
@@ -1076,7 +1070,7 @@ def test_getitem():
             {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
         "outputs": [
-            {"name": "reshape_0", "shape": [1, 1, 10, 3], "dtype": "float32", "layout": "ABCD"}
+            {"name": "reshape", "shape": [1, 1, 10, 3], "dtype": "float32", "layout": "ABCD"}
         ],
         "nodes": {"total": 3, "input": 1, "strided_slice": 1, "reshape": 1},
     }
@@ -1088,7 +1082,7 @@ def test_getitem():
     expected2 = {
         "inputs": [{"name": "inp_0", "shape": [8, 16], "dtype": "float32", "layout": "AB"}],
         "outputs": [
-            {"name": "reshape_0", "shape": [8, 1, 1, 16, 1], "dtype": "float32", "layout": "ANCHB"}
+            {"name": "reshape", "shape": [8, 1, 1, 16, 1], "dtype": "float32", "layout": "ANCHB"}
         ],
         "nodes": {"total": 3, "input": 1, "strided_slice": 1, "reshape": 1},
     }
@@ -1109,9 +1103,7 @@ def test_unary():
         "inputs": [
             {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
-        "outputs": [
-            {"name": "sin_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
-        ],
+        "outputs": [{"name": "sin", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}],
         "nodes": {"total": 2, "input": 1, "sin": 1},
     }
 
@@ -1126,9 +1118,7 @@ def test_unary():
         "inputs": [
             {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
-        "outputs": [
-            {"name": "cos_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
-        ],
+        "outputs": [{"name": "cos", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}],
         "nodes": {"total": 2, "input": 1, "cos": 1},
     }
 
@@ -1143,9 +1133,7 @@ def test_unary():
         "inputs": [
             {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
-        "outputs": [
-            {"name": "exp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
-        ],
+        "outputs": [{"name": "exp", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}],
         "nodes": {"total": 2, "input": 1, "exp": 1},
     }
 
@@ -1161,7 +1149,7 @@ def test_unary():
             {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
         "outputs": [
-            {"name": "sqrt_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+            {"name": "sqrt", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
         "nodes": {"total": 2, "input": 1, "sqrt": 1},
     }
@@ -1178,7 +1166,7 @@ def test_unary():
             {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
         "outputs": [
-            {"name": "sigmoid_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+            {"name": "sigmoid", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
         "nodes": {"total": 2, "input": 1, "sigmoid": 1},
     }
@@ -1195,7 +1183,7 @@ def test_unary():
             {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
         "outputs": [
-            {"name": "round_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+            {"name": "round", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
         "nodes": {"total": 2, "input": 1, "round": 1},
     }
@@ -1213,7 +1201,7 @@ def test_gelu():
             {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
         "outputs": [
-            {"name": "gelu_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+            {"name": "gelu", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
         "nodes": {"total": 2, "input": 1, "nn.gelu": 1},
     }
@@ -1232,7 +1220,7 @@ def test_tanh():
             {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
         "outputs": [
-            {"name": "tanh_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
+            {"name": "tanh", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
         "nodes": {"total": 2, "input": 1, "tanh": 1},
     }
@@ -1248,7 +1236,7 @@ def test_clamp():
 
     expected = {
         "inputs": [{"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": ""}],
-        "outputs": [{"name": "clip_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "clip", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": ""}],
         "nodes": {"total": 2, "input": 1, "clip": 1},
     }
 
@@ -1266,7 +1254,7 @@ def test_interpolate():
             {"name": "inp_0", "shape": [1, 3, 10, 10], "dtype": "float32", "layout": "ABCD"}
         ],
         "outputs": [
-            {"name": "resize2d_0", "shape": [1, 3, 5, 5], "dtype": "float32", "layout": "ABCD"}
+            {"name": "resize2d", "shape": [1, 3, 5, 5], "dtype": "float32", "layout": "ABCD"}
         ],
         "nodes": {"total": 2, "input": 1, "image.resize2d": 1},
     }
@@ -1286,7 +1274,7 @@ def test_addmm():
             {"name": "inp_1", "shape": [10, 10], "dtype": "float32", "layout": "NC"},
             {"name": "inp_2", "shape": [10, 10], "dtype": "float32", "layout": "IO"},
         ],
-        "outputs": [{"name": "add_0", "shape": [10, 10], "dtype": "float32", "layout": "NC"}],
+        "outputs": [{"name": "add", "shape": [10, 10], "dtype": "float32", "layout": "NC"}],
         "nodes": {"total": 5, "input": 3, "matmul": 1, "add": 1},
     }
 
@@ -1326,7 +1314,7 @@ def test_cumsum():
 
     expected = {
         "inputs": [{"name": "inp_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": ""}],
-        "outputs": [{"name": "cumsum_0", "shape": [1, 2, 3, 4], "dtype": "int32", "layout": ""}],
+        "outputs": [{"name": "cumsum", "shape": [1, 2, 3, 4], "dtype": "int32", "layout": ""}],
         "nodes": {"total": 2, "input": 1, "cumsum": 1},
     }
 
@@ -1363,7 +1351,7 @@ def test_inplace_fill():
 
     expected = {
         "inputs": [{"name": "inp_0", "shape": [10, 10], "dtype": "float32", "layout": ""}],
-        "outputs": [{"name": "full_0", "shape": [10, 10], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "full", "shape": [10, 10], "dtype": "float32", "layout": ""}],
         "nodes": {"total": 3, "input": 1, "constant": 1, "full": 1},
     }
 
@@ -1377,7 +1365,7 @@ def test_arange():
 
     expected = {
         "inputs": [{"name": "inp_0", "shape": [10, 10], "dtype": "float32", "layout": ""}],
-        "outputs": [{"name": "const_0", "shape": [20], "dtype": "int32", "layout": ""}],
+        "outputs": [{"name": "const", "shape": [20], "dtype": "int32", "layout": ""}],
         "nodes": {"total": 2, "input": 1, "constant": 1},
     }
 
@@ -1391,7 +1379,7 @@ def test_empty():
 
     expected = {
         "inputs": [{"name": "inp_0", "shape": [10, 10], "dtype": "float32", "layout": ""}],
-        "outputs": [{"name": "const_0", "shape": [10, 10], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "const", "shape": [10, 10], "dtype": "float32", "layout": ""}],
         "nodes": {"total": 2, "input": 1, "constant": 1},
     }
 
@@ -1405,7 +1393,7 @@ def test_tensor():
 
     expected1 = {
         "inputs": [{"name": "inp_0", "shape": [10, 10], "dtype": "float32", "layout": ""}],
-        "outputs": [{"name": "const_0", "shape": [], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "const", "shape": [], "dtype": "float32", "layout": ""}],
         "nodes": {"total": 2, "input": 1, "constant": 1},
     }
 
@@ -1415,7 +1403,7 @@ def test_tensor():
 
     expected2 = {
         "inputs": [{"name": "inp_0", "shape": [10, 10], "dtype": "float32", "layout": ""}],
-        "outputs": [{"name": "const_0", "shape": [], "dtype": "int64", "layout": ""}],
+        "outputs": [{"name": "const", "shape": [], "dtype": "int64", "layout": ""}],
         "nodes": {"total": 2, "input": 1, "constant": 1},
     }
 
@@ -1435,7 +1423,7 @@ def test_tril():
 
     expected = {
         "inputs": [{"name": "inp_0", "shape": [10, 10], "dtype": "float32", "layout": ""}],
-        "outputs": [{"name": "tril_0", "shape": [10, 10], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "tril", "shape": [10, 10], "dtype": "float32", "layout": ""}],
         "nodes": {"total": 2, "input": 1, "tril": 1},
     }
 
@@ -1456,7 +1444,7 @@ def test_triu():
 
     expected = {
         "inputs": [{"name": "inp_0", "shape": [10, 10], "dtype": "float32", "layout": ""}],
-        "outputs": [{"name": "triu_0", "shape": [10, 10], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "triu", "shape": [10, 10], "dtype": "float32", "layout": ""}],
         "nodes": {"total": 2, "input": 1, "triu": 1},
     }
 
@@ -1472,7 +1460,7 @@ def test_new_ones():
 
     expected = {
         "inputs": [{"name": "inp_0", "shape": [1, 2, 3], "dtype": "float32", "layout": ""}],
-        "outputs": [{"name": "full_0", "shape": [1, 2, 3], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "full", "shape": [1, 2, 3], "dtype": "float32", "layout": ""}],
         "nodes": {"total": 3, "input": 1, "constant": 1, "full": 1},
     }
 
@@ -1488,7 +1476,7 @@ def test_expand():
     expected = {
         "inputs": [{"name": "inp_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": ""}],
         "outputs": [
-            {"name": "broadcast_to_0", "shape": [4, 2, 3, 4], "dtype": "float32", "layout": ""}
+            {"name": "broadcast_to", "shape": [4, 2, 3, 4], "dtype": "float32", "layout": ""}
         ],
         "nodes": {"total": 2, "input": 1, "broadcast_to": 1},
     }
@@ -1505,7 +1493,7 @@ def test_reduce():
 
     expected = {
         "inputs": [{"name": "inp_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": "ANCB"}],
-        "outputs": [{"name": "sum_0", "shape": [1, 4], "dtype": "float32", "layout": "AB"}],
+        "outputs": [{"name": "sum", "shape": [1, 4], "dtype": "float32", "layout": "AB"}],
         "nodes": {"total": 2, "input": 1, "sum": 1},
     }
 
@@ -1524,7 +1512,7 @@ def test_datatype():
     expected1 = {
         "inputs": [{"name": "inp_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": "ABCD"}],
         "outputs": [
-            {"name": "astype_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": "ABCD"}
+            {"name": "astype", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": "ABCD"}
         ],
         "nodes": {"total": 2, "input": 1, "astype": 1},
     }
@@ -1539,7 +1527,7 @@ def test_datatype():
     expected2 = {
         "inputs": [{"name": "inp_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": "ABCD"}],
         "outputs": [
-            {"name": "astype_0", "shape": [1, 2, 3, 4], "dtype": "float16", "layout": "ABCD"}
+            {"name": "astype", "shape": [1, 2, 3, 4], "dtype": "float16", "layout": "ABCD"}
         ],
         "nodes": {"total": 2, "input": 1, "astype": 1},
     }
@@ -1554,7 +1542,7 @@ def test_datatype():
     expected3 = {
         "inputs": [{"name": "inp_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": "ABCD"}],
         "outputs": [
-            {"name": "astype_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": "ABCD"}
+            {"name": "astype", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": "ABCD"}
         ],
         "nodes": {"total": 2, "input": 1, "astype": 1},
     }
@@ -1567,7 +1555,7 @@ def test_datatype():
     expected4 = {
         "inputs": [{"name": "inp_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": "ABCD"}],
         "outputs": [
-            {"name": "astype_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": "ABCD"}
+            {"name": "astype", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": "ABCD"}
         ],
         "nodes": {"total": 2, "input": 1, "astype": 1},
     }
@@ -1580,7 +1568,7 @@ def test_datatype():
     expected5 = {
         "inputs": [{"name": "inp_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": "ABCD"}],
         "outputs": [
-            {"name": "astype_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": "ABCD"}
+            {"name": "astype", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": "ABCD"}
         ],
         "nodes": {"total": 2, "input": 1, "astype": 1},
     }
@@ -1598,7 +1586,7 @@ def test_permute():
     expected = {
         "inputs": [{"name": "inp_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": "ADCB"}],
         "outputs": [
-            {"name": "permute_dims_0", "shape": [1, 4, 3, 2], "dtype": "float32", "layout": "ABCD"}
+            {"name": "permute_dims", "shape": [1, 4, 3, 2], "dtype": "float32", "layout": "ABCD"}
         ],
         "nodes": {"total": 2, "input": 1, "permute_dims": 1},
     }
@@ -1614,7 +1602,7 @@ def test_reshape():
 
     expected = {
         "inputs": [{"name": "inp_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": ""}],
-        "outputs": [{"name": "reshape_0", "shape": [2, 12], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "reshape", "shape": [2, 12], "dtype": "float32", "layout": ""}],
         "nodes": {"total": 2, "input": 1, "reshape": 1},
     }
 
@@ -1630,7 +1618,7 @@ def test_transpose():
     expected = {
         "inputs": [{"name": "inp_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": "ADCB"}],
         "outputs": [
-            {"name": "permute_dims_0", "shape": [1, 4, 3, 2], "dtype": "float32", "layout": "ABCD"}
+            {"name": "permute_dims", "shape": [1, 4, 3, 2], "dtype": "float32", "layout": "ABCD"}
         ],
         "nodes": {"total": 2, "input": 1, "permute_dims": 1},
     }
@@ -1646,7 +1634,7 @@ def test_view():
 
     expected = {
         "inputs": [{"name": "inp_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": ""}],
-        "outputs": [{"name": "reshape_0", "shape": [2, 12], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "reshape", "shape": [2, 12], "dtype": "float32", "layout": ""}],
         "nodes": {"total": 2, "input": 1, "reshape": 1},
     }
 
@@ -1669,7 +1657,7 @@ def test_keep_params():
         ],
         "outputs": [
             {
-                "name": "msc.conv2d_bias_0",
+                "name": "msc.conv2d_bias",
                 "shape": [1, 6, 4, 4],
                 "dtype": "float32",
                 "layout": "NCHW",
@@ -1691,7 +1679,7 @@ def test_unwrap_unit_return_tuple():
 
     expected = {
         "inputs": [{"name": "inp_0", "shape": [256, 256], "dtype": "float32", "layout": ""}],
-        "outputs": [{"name": "tuple_0", "shape": [256, 256], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "tuple", "shape": [256, 256], "dtype": "float32", "layout": ""}],
         "nodes": {"total": 2, "input": 1, "tuple": 1},
     }
 
@@ -1732,7 +1720,7 @@ def test_argmax():
 
     expected1 = {
         "inputs": [{"name": "inp_0", "shape": [256, 256], "dtype": "float32", "layout": ""}],
-        "outputs": [{"name": "argmax_0", "shape": [256], "dtype": "int64", "layout": ""}],
+        "outputs": [{"name": "argmax", "shape": [256], "dtype": "int64", "layout": ""}],
         "nodes": {"total": 2, "input": 1, "argmax": 1},
     }
 
@@ -1745,7 +1733,7 @@ def test_argmax():
 
     expected2 = {
         "inputs": [{"name": "inp_0", "shape": [256, 256], "dtype": "float32", "layout": ""}],
-        "outputs": [{"name": "argmax_0", "shape": [256, 1], "dtype": "int64", "layout": ""}],
+        "outputs": [{"name": "argmax", "shape": [256, 1], "dtype": "int64", "layout": ""}],
         "nodes": {"total": 2, "input": 1, "argmax": 1},
     }
 
@@ -1763,7 +1751,7 @@ def test_argmin():
 
     expected1 = {
         "inputs": [{"name": "inp_0", "shape": [256, 256], "dtype": "float32", "layout": ""}],
-        "outputs": [{"name": "argmin_0", "shape": [], "dtype": "int64", "layout": ""}],
+        "outputs": [{"name": "argmin", "shape": [], "dtype": "int64", "layout": ""}],
         "nodes": {"total": 2, "input": 1, "argmin": 1},
     }
 
@@ -1776,7 +1764,7 @@ def test_argmin():
 
     expected2 = {
         "inputs": [{"name": "inp_0", "shape": [256, 256], "dtype": "float32", "layout": ""}],
-        "outputs": [{"name": "argmin_0", "shape": [1, 1], "dtype": "int64", "layout": ""}],
+        "outputs": [{"name": "argmin", "shape": [1, 1], "dtype": "int64", "layout": ""}],
         "nodes": {"total": 2, "input": 1, "argmin": 1},
     }
 
@@ -1791,7 +1779,7 @@ def test_to():
 
     expected1 = {
         "inputs": [{"name": "inp_0", "shape": [256, 256], "dtype": "float32", "layout": "AB"}],
-        "outputs": [{"name": "astype_0", "shape": [256, 256], "dtype": "float16", "layout": "AB"}],
+        "outputs": [{"name": "astype", "shape": [256, 256], "dtype": "float16", "layout": "AB"}],
         "nodes": {"total": 2, "input": 1, "astype": 1},
     }
 
@@ -1800,8 +1788,8 @@ def test_to():
             return input.to("cpu")
 
     expected2 = {
-        "inputs": [{"name": "inp_0_0", "shape": [256, 256], "dtype": "float32", "layout": ""}],
-        "outputs": [{"name": "inp_0_0", "shape": [256, 256], "dtype": "float32", "layout": ""}],
+        "inputs": [{"name": "inp_0", "shape": [256, 256], "dtype": "float32", "layout": ""}],
+        "outputs": [{"name": "inp_0", "shape": [256, 256], "dtype": "float32", "layout": ""}],
         "nodes": {"total": 1, "input": 1},
     }
 
@@ -1816,7 +1804,7 @@ def test_mean():
 
     expected1 = {
         "inputs": [{"name": "inp_0", "shape": [256, 256], "dtype": "float32", "layout": "AN"}],
-        "outputs": [{"name": "mean_0", "shape": [256], "dtype": "float32", "layout": "A"}],
+        "outputs": [{"name": "mean", "shape": [256], "dtype": "float32", "layout": "A"}],
         "nodes": {"total": 2, "input": 1, "mean": 1},
     }
 
@@ -1826,7 +1814,7 @@ def test_mean():
 
     expected2 = {
         "inputs": [{"name": "inp_0", "shape": [256, 256], "dtype": "float32", "layout": "AB"}],
-        "outputs": [{"name": "mean_0", "shape": [256, 1], "dtype": "float32", "layout": "AB"}],
+        "outputs": [{"name": "mean", "shape": [256, 1], "dtype": "float32", "layout": "AB"}],
         "nodes": {"total": 2, "input": 1, "mean": 1},
     }
 
@@ -1841,7 +1829,7 @@ def test_rsqrt():
 
     expected = {
         "inputs": [{"name": "inp_0", "shape": [256, 256], "dtype": "float32", "layout": "AB"}],
-        "outputs": [{"name": "rsqrt_0", "shape": [256, 256], "dtype": "float32", "layout": "AB"}],
+        "outputs": [{"name": "rsqrt", "shape": [256, 256], "dtype": "float32", "layout": "AB"}],
         "nodes": {"total": 2, "input": 1, "rsqrt": 1},
     }
 
@@ -1855,9 +1843,7 @@ def test_neg():
 
     expected = {
         "inputs": [{"name": "inp_0", "shape": [256, 256], "dtype": "float32", "layout": "AB"}],
-        "outputs": [
-            {"name": "negative_0", "shape": [256, 256], "dtype": "float32", "layout": "AB"}
-        ],
+        "outputs": [{"name": "negative", "shape": [256, 256], "dtype": "float32", "layout": "AB"}],
         "nodes": {"total": 2, "input": 1, "negative": 1},
     }
 
@@ -1874,7 +1860,7 @@ def test_max():
             {"name": "inp_0", "shape": [256, 256], "dtype": "float32", "layout": "AB"},
             {"name": "inp_1", "shape": [256, 256], "dtype": "float32", "layout": "AB"},
         ],
-        "outputs": [{"name": "maximum_0", "shape": [256, 256], "dtype": "float32", "layout": "AB"}],
+        "outputs": [{"name": "maximum", "shape": [256, 256], "dtype": "float32", "layout": "AB"}],
         "nodes": {"total": 3, "input": 2, "maximum": 1},
     }
 
@@ -1900,7 +1886,7 @@ def test_attention():
         ],
         "outputs": [
             {
-                "name": "msc.attention_0",
+                "name": "msc.attention",
                 "shape": [32, 128, 8, 64],
                 "dtype": "float32",
                 "layout": "ABCD",
@@ -1930,7 +1916,7 @@ def test_attention():
         ],
         "outputs": [
             {
-                "name": "msc.attention_0",
+                "name": "msc.attention",
                 "shape": [32, 128, 8, 64],
                 "dtype": "float32",
                 "layout": "ABCD",

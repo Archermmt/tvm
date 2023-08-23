@@ -56,6 +56,7 @@ using namespace tvm::runtime;
  */
 struct MSCRBuildConfig {
   bool prune_graph{false};
+  int float_precision = 6;
   std::string sort_by;
   std::vector<std::string> input_aliass;
   std::vector<std::string> output_aliass;
@@ -77,6 +78,8 @@ struct MSCRBuildConfig {
     while (reader->NextObjectItem(&key)) {
       if (key == "prune_graph") {
         reader->Read(&prune_graph);
+      } else if (key == "float_precision") {
+        reader->Read(&float_precision);
       } else if (key == "sort_by") {
         reader->Read(&sort_by);
       } else if (key == "input_aliass") {
