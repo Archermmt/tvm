@@ -14,6 +14,10 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+# pylint: disable=unused-argument
+
+""" Test translate from relay. """
+
 import numpy as np
 import torch
 from torch import fx
@@ -38,25 +42,27 @@ def _valid_target(target):
     return target
 
 
-def _run_relax(relax_mod, target, inputs):
+def _run_relax(relax_mod, target, datas):
     relax_mod = tvm.relax.transform.LegalizeOps()(relax_mod)
     with tvm.transform.PassContext(opt_level=3):
-        ex = tvm.relax.build(relax_mod, target)
-        vm = tvm.relax.VirtualMachine(ex, tvm.cpu())
-    res = vm["main"](*inputs)
+        relax_exec = tvm.relax.build(relax_mod, target)
+        runnable = tvm.relax.VirtualMachine(relax_exec, tvm.cpu())
+    res = runnable["main"](*datas)
     if isinstance(res, tvm.runtime.NDArray):
         return [res.asnumpy()]
     return [e.asnumpy() for e in res]
 
 
 def verify_model(torch_model, input_info, opt_config=None, codegen_config=None, build_target=None):
+    """Compare relax with relay"""
+
     graph_model = fx.symbolic_trace(torch_model)
     with torch.no_grad():
         expected = from_fx(graph_model, input_info)
     # graph from relay
-    input_datas = [np.random.rand(*i[0]).astype(i[1]) for i in input_info]
-    t_inputs = [torch.from_numpy(i) for i in input_datas]
-    scripted_model = torch.jit.trace(torch_model, tuple(t_inputs)).eval()  # type: ignore
+    datas = [np.random.rand(*i[0]).astype(i[1]) for i in input_info]
+    torch_datas = [torch.from_numpy(i) for i in datas]
+    scripted_model = torch.jit.trace(torch_model, tuple(torch_datas)).eval()  # type: ignore
     shape_list = [("input" + str(idx), i) for idx, i in enumerate(input_info)]
     relay_mod, params = from_pytorch(scripted_model, shape_list)
     graph, weights = translate.from_relay(relay_mod, params, opt_config=opt_config)
@@ -68,32 +74,35 @@ def verify_model(torch_model, input_info, opt_config=None, codegen_config=None, 
         build_target = _valid_target(build_target)
         if not build_target:
             return
-        tvm_inputs = [tvm.nd.array(i) for i in input_datas]
-        expected_res = _run_relax(expected, build_target, tvm_inputs)
-        inputs = [] if not graph.get_inputs() else tvm_inputs
-        res = _run_relax(mod, build_target, inputs)
-        for exp_r, r in zip(expected_res, res):
-            tvm.testing.assert_allclose(exp_r, r, atol=1e-5, rtol=1e-5)
+        tvm_datas = [tvm.nd.array(i) for i in datas]
+        expected_res = _run_relax(expected, build_target, tvm_datas)
+        if not graph.get_inputs():
+            tvm_datas = []
+        res = _run_relax(mod, build_target, tvm_datas)
+        for exp_r, new_r in zip(expected_res, res):
+            tvm.testing.assert_allclose(exp_r, new_r, atol=1e-5, rtol=1e-5)
     else:
         tvm.ir.assert_structural_equal(mod, expected)
 
 
 def test_conv1d():
+    """test relay to relax for conv1d"""
+
     class Conv1D1(Module):
         def __init__(self):
             super().__init__()
             self.conv = torch.nn.Conv1d(3, 6, 7, bias=True)
 
-        def forward(self, input):
-            return self.conv(input)
+        def forward(self, data):
+            return self.conv(data)
 
     class Conv1D2(Module):
         def __init__(self):
             super().__init__()
             self.conv = torch.nn.Conv1d(3, 6, 7, bias=False)
 
-        def forward(self, input):
-            return self.conv(input)
+        def forward(self, data):
+            return self.conv(data)
 
     input_info = [([1, 3, 10], "float32")]
     verify_model(Conv1D1(), input_info)
@@ -101,21 +110,23 @@ def test_conv1d():
 
 
 def test_conv2d():
+    """test relay to relax for conv2d"""
+
     class Conv2D1(Module):
         def __init__(self):
             super().__init__()
             self.conv = torch.nn.Conv2d(3, 6, 7, bias=True)
 
-        def forward(self, input):
-            return self.conv(input)
+        def forward(self, data):
+            return self.conv(data)
 
     class Conv2D2(Module):
         def __init__(self):
             super().__init__()
             self.conv = torch.nn.Conv2d(3, 6, 7, bias=False)
 
-        def forward(self, input):
-            return self.conv(input)
+        def forward(self, data):
+            return self.conv(data)
 
     input_info = [([1, 3, 10, 10], "float32")]
     verify_model(Conv2D1(), input_info)
@@ -123,26 +134,25 @@ def test_conv2d():
 
 
 def test_linear():
+    """test relay to relax for linear"""
+
     class Dense1(Module):
         def __init__(self):
             super().__init__()
             self.linear = torch.nn.Linear(10, 7, bias=True)
 
-        def forward(self, input):
-            return self.linear(input)
+        def forward(self, data):
+            return self.linear(data)
 
     class Dense2(Module):
         def __init__(self):
             super().__init__()
             self.linear = torch.nn.Linear(10, 7, bias=False)
 
-        def forward(self, input):
-            return self.linear(input)
+        def forward(self, data):
+            return self.linear(data)
 
     class MatMul1(Module):
-        def __init__(self):
-            super().__init__()
-
         def forward(self, x, y):
             return torch.matmul(x, y)
 
@@ -153,10 +163,9 @@ def test_linear():
 
 
 def test_bmm():
-    class BMM(Module):
-        def __init__(self):
-            super().__init__()
+    """test relay to relax for bmm"""
 
+    class BMM(Module):
         def forward(self, x, y):
             return torch.bmm(x, y)
 
@@ -165,17 +174,13 @@ def test_bmm():
 
 
 def test_baddbmm():
-    class BAddBMM1(Module):
-        def __init__(self):
-            super().__init__()
+    """test relay to relax for baddbmm"""
 
+    class BAddBMM1(Module):
         def forward(self, c, x, y):
             return torch.baddbmm(c, x, y)
 
     class BAddBMM2(Module):
-        def __init__(self):
-            super().__init__()
-
         def forward(self, c, x, y):
             return torch.baddbmm(c, x, y, alpha=2, beta=0)
 
@@ -189,17 +194,19 @@ def test_baddbmm():
 
 
 def test_relu():
+    """test relay to relax for relu"""
+
     class ReLU(Module):
         def __init__(self):
             super().__init__()
             self.relu = torch.nn.ReLU()
 
-        def forward(self, input):
-            return self.relu(input)
+        def forward(self, data):
+            return self.relu(data)
 
     class ReLU1(Module):
-        def forward(self, input):
-            return torch.nn.functional.relu(input)
+        def forward(self, data):
+            return torch.nn.functional.relu(data)
 
     input_info = [([10, 10], "float32")]
     verify_model(ReLU(), input_info)
@@ -207,42 +214,46 @@ def test_relu():
 
 
 def test_relu6():
+    """test relay to relax for relu6"""
+
     class ReLU6(Module):
         def __init__(self):
             super().__init__()
             self.relu6 = torch.nn.ReLU6()
 
-        def forward(self, input):
-            return self.relu6(input)
+        def forward(self, data):
+            return self.relu6(data)
 
     input_info = [([10, 10], "float32")]
     verify_model(ReLU6(), input_info)
 
 
 def test_maxpool2d():
+    """test relay to relax for maxpool2d"""
+
     class MaxPool2d(Module):
         def __init__(self):
             super().__init__()
             self.pool = torch.nn.MaxPool2d(kernel_size=[1, 1])
 
-        def forward(self, input):
-            return self.pool(input)
+        def forward(self, data):
+            return self.pool(data)
 
     class MaxPool2d2(Module):
         def __init__(self):
             super().__init__()
             self.pool = torch.nn.MaxPool2d(kernel_size=[2, 2], dilation=[2, 3])
 
-        def forward(self, input):
-            return self.pool(input)
+        def forward(self, data):
+            return self.pool(data)
 
     class MaxPool2d3(Module):
         def __init__(self):
             super().__init__()
             self.pool = torch.nn.MaxPool2d(kernel_size=[4, 4], padding=2, stride=2)
 
-        def forward(self, input):
-            return self.pool(input)
+        def forward(self, data):
+            return self.pool(data)
 
     input_info = [([1, 3, 10, 10], "float32")]
     verify_model(MaxPool2d(), input_info)
@@ -251,21 +262,23 @@ def test_maxpool2d():
 
 
 def test_avgpool2d():
+    """test relay to relax for avgpool2d"""
+
     class AvgPool2d(Module):
         def __init__(self):
             super().__init__()
             self.pool = torch.nn.AvgPool2d(kernel_size=[1, 1])
 
-        def forward(self, input):
-            return self.pool(input)
+        def forward(self, data):
+            return self.pool(data)
 
     class AvgPool2d2(Module):
         def __init__(self):
             super().__init__()
             self.pool = torch.nn.AvgPool2d(kernel_size=[4, 4], stride=2, padding=2, ceil_mode=True)
 
-        def forward(self, input):
-            return self.pool(input)
+        def forward(self, data):
+            return self.pool(data)
 
     input_info = [([1, 3, 10, 10], "float32")]
     verify_model(AvgPool2d(), input_info)
@@ -273,26 +286,30 @@ def test_avgpool2d():
 
 
 def test_adaptive_avgpool2d():
+    """test relay to relax for adaptive_avgpool2d"""
+
     class AdaptiveAvgPool2d0(Module):
         def __init__(self):
             super().__init__()
             self.pool = torch.nn.AdaptiveAvgPool2d([10, 10])
 
-        def forward(self, input):
-            return self.pool(input)
+        def forward(self, data):
+            return self.pool(data)
 
     input_info = [([1, 3, 10, 10], "float32")]
     verify_model(AdaptiveAvgPool2d0(), input_info)
 
 
 def test_flatten():
+    """test relay to relax for flatten"""
+
     class Flatten(Module):
         def __init__(self):
             super().__init__()
             self.f = torch.nn.Flatten(2, -1)
 
-        def forward(self, input):
-            return self.f(input)
+        def forward(self, data):
+            return self.f(data)
 
     input_info = [([1, 3, 10, 10], "float32")]
     verify_model(Flatten(), input_info, opt_config={"opt_level": 3}, build_target="llvm")
@@ -302,54 +319,62 @@ def test_flatten():
 
 
 def test_batchnorm2d():
+    """test relay to relax for batchnorm2d"""
+
     class BatchNorm2d(Module):
         def __init__(self):
             super().__init__()
-            self.bn = torch.nn.BatchNorm2d(3)
+            self.batchnorm = torch.nn.BatchNorm2d(3)
 
-        def forward(self, input):
-            return self.bn(input)
+        def forward(self, data):
+            return self.batchnorm(data)
 
     input_info = [([1, 3, 10, 10], "float32")]
     verify_model(BatchNorm2d(), input_info, build_target="llvm")
 
 
 def test_embedding():
+    """test relay to relax for embedding"""
+
     class Embedding(Module):
         def __init__(self):
             super().__init__()
             self.embedding = torch.nn.Embedding(10, 3)
 
-        def forward(self, input):
-            return self.embedding(input)
+        def forward(self, data):
+            return self.embedding(data)
 
     verify_model(Embedding(), [([4], "int64")])
     verify_model(Embedding(), [([4, 5], "int64")])
 
 
 def test_layernorm():
+    """test relay to relax for layernorm"""
+
     class LayerNorm(Module):
         def __init__(self):
             super().__init__()
-            self.ln = torch.nn.LayerNorm(10)
+            self.layernorm = torch.nn.LayerNorm(10)
 
-        def forward(self, input):
-            return self.ln(input)
+        def forward(self, data):
+            return self.layernorm(data)
 
     input_info = [([1, 10, 10], "float32")]
     verify_model(LayerNorm(), input_info)
 
 
 def test_functional_layernorm():
+    """test relay to relax for functional_layernorm"""
+
     class LayerNorm(Module):
         def __init__(self, shape):
             super().__init__()
             self.weight = torch.nn.Parameter(torch.ones(shape))
             self.bias = torch.nn.Parameter(torch.zeros(shape))
 
-        def forward(self, input):
+        def forward(self, data):
             return torch.nn.functional.layer_norm(
-                input, self.weight.shape, self.weight, self.bias, 1e-5
+                data, self.weight.shape, self.weight, self.bias, 1e-5
             )
 
     input_info = [([1, 10, 10], "float32")]
@@ -357,6 +382,8 @@ def test_functional_layernorm():
 
 
 def test_cross_entropy():
+    """test relay to relax for cross_entropy"""
+
     class CrossEntropy1(Module):
         def __init__(self):
             super().__init__()
@@ -379,6 +406,8 @@ def test_cross_entropy():
 
 
 def test_functional_cross_entropy():
+    """test relay to relax for functional_cross_entropy"""
+
     class CrossEntropy(Module):
         def forward(self, logits, targets):
             return torch.nn.functional.cross_entropy(logits, targets)
@@ -388,17 +417,19 @@ def test_functional_cross_entropy():
 
 
 def test_silu():
+    """test relay to relax for silu"""
+
     class SiLU(Module):
         def __init__(self):
             super().__init__()
             self.silu = torch.nn.SiLU()
 
-        def forward(self, input):
-            return self.silu(input)
+        def forward(self, data):
+            return self.silu(data)
 
     class SiLU2(Module):
-        def forward(self, input):
-            return torch.nn.functional.silu(input)
+        def forward(self, data):
+            return torch.nn.functional.silu(data)
 
     input_info = [([1, 3, 10, 10], "float32")]
     verify_model(SiLU(), input_info, build_target="llvm")
@@ -406,32 +437,38 @@ def test_silu():
 
 
 def test_groupnorm():
+    """test relay to relax for groupnorm"""
+
     class GroupNorm(Module):
         def __init__(self):
             super().__init__()
-            self.gn = torch.nn.GroupNorm(3, 3)
+            self.groupnorm = torch.nn.GroupNorm(3, 3)
 
-        def forward(self, input):
-            return self.gn(input)
+        def forward(self, data):
+            return self.groupnorm(data)
 
     input_info = [([1, 3, 10, 10], "float32")]
     verify_model(GroupNorm(), input_info)
 
 
 def test_softmax():
+    """test relay to relax for softmax"""
+
     class Softmax(Module):
         def __init__(self):
             super().__init__()
-            self.sm = torch.nn.Softmax(dim=1)
+            self.softmax = torch.nn.Softmax(dim=1)
 
-        def forward(self, input):
-            return self.sm(input)
+        def forward(self, data):
+            return self.softmax(data)
 
     input_info = [([1, 3, 10, 10], "float32")]
     verify_model(Softmax(), input_info)
 
 
 def test_binary():
+    """test relay to relax for binary"""
+
     input_info1 = [([1, 3, 10, 10], "float32"), ([1, 3, 10, 10], "float32")]
     input_info2 = [([1, 3, 10, 10], "float32")]
 
@@ -521,13 +558,15 @@ def test_binary():
 
 
 def test_squeeze():
+    """test relay to relax for squeeze"""
+
     class Squeeze1(Module):
-        def forward(self, input):
-            return input.squeeze(1)
+        def forward(self, data):
+            return data.squeeze(1)
 
     class Squeeze2(Module):
-        def forward(self, input):
-            return input.squeeze()
+        def forward(self, data):
+            return data.squeeze()
 
     input_info = [([3, 1, 4, 1], "float32")]
     verify_model(Squeeze1(), input_info)
@@ -535,13 +574,15 @@ def test_squeeze():
 
 
 def test_unsqueeze():
+    """test relay to relax for unsqueeze"""
+
     class Unsqueeze1(Module):
-        def forward(self, input):
-            return input.unsqueeze(1)
+        def forward(self, data):
+            return data.unsqueeze(1)
 
     class Unsqueeze2(Module):
-        def forward(self, input):
-            return input.unsqueeze(-1)
+        def forward(self, data):
+            return data.unsqueeze(-1)
 
     input_info = [([1, 3, 10, 10], "float32")]
     verify_model(Unsqueeze1(), input_info)
@@ -549,6 +590,8 @@ def test_unsqueeze():
 
 
 def test_getitem():
+    """test relay to relax for getitem"""
+
     class Slice1(Module):
         def forward(self, x):
             return x[0, 1::2, :, :3]
@@ -562,91 +605,103 @@ def test_getitem():
 
 
 def test_unary():
+    """test relay to relax for unary"""
+
     input_info = [([1, 3, 10, 10], "float32")]
 
     # sin
     class Sin(Module):
-        def forward(self, input):
-            return torch.sin(input)
+        def forward(self, data):
+            return torch.sin(data)
 
     verify_model(Sin(), input_info)
 
     # cos
     class Cos(Module):
-        def forward(self, input):
-            return torch.cos(input)
+        def forward(self, data):
+            return torch.cos(data)
 
     verify_model(Cos(), input_info)
 
     # exp
     class Exp(Module):
-        def forward(self, input):
-            return torch.exp(input)
+        def forward(self, data):
+            return torch.exp(data)
 
     verify_model(Exp(), input_info)
 
     # sqrt
     class Sqrt(Module):
-        def forward(self, input):
-            return torch.sqrt(input)
+        def forward(self, data):
+            return torch.sqrt(data)
 
     verify_model(Sqrt(), input_info)
 
     # sigmoid
     class Sigmoid(Module):
-        def forward(self, input):
-            return torch.sigmoid(input)
+        def forward(self, data):
+            return torch.sigmoid(data)
 
     verify_model(Sigmoid(), input_info)
 
     # round
     class Round(Module):
-        def forward(self, input):
-            return torch.round(input)
+        def forward(self, data):
+            return torch.round(data)
 
     verify_model(Round(), input_info)
 
 
 def test_gelu():
+    """test relay to relax for gelu"""
+
     class Gelu(Module):
-        def forward(self, input):
-            return torch.nn.functional.gelu(input)
+        def forward(self, data):
+            return torch.nn.functional.gelu(data)
 
     input_info = [([1, 3, 10, 10], "float32")]
     verify_model(Gelu(), input_info)
 
 
 def test_tanh():
+    """test relay to relax for tanh"""
+
     class Tanh(Module):
-        def forward(self, input):
-            return torch.tanh(input)
+        def forward(self, data):
+            return torch.tanh(data)
 
     input_info = [([1, 3, 10, 10], "float32")]
     verify_model(Tanh(), input_info)
 
 
 def test_clamp():
+    """test relay to relax for clamp"""
+
     class Clamp(Module):
-        def forward(self, input):
-            return torch.clamp(input, min=0.1, max=0.5)
+        def forward(self, data):
+            return torch.clamp(data, min=0.1, max=0.5)
 
     input_info = [([1, 3, 10, 10], "float32")]
     verify_model(Clamp(), input_info)
 
 
 def test_interpolate():
+    """test relay to relax for interpolate"""
+
     class Interpolate(Module):
-        def forward(self, input):
-            return torch.nn.functional.interpolate(input, (5, 5))
+        def forward(self, data):
+            return torch.nn.functional.interpolate(data, (5, 5))
 
     input_info = [([1, 3, 10, 10], "float32")]
     verify_model(Interpolate(), input_info, build_target="llvm")
 
 
 def test_addmm():
+    """test relay to relax for addmm"""
+
     class Addmm(Module):
-        def forward(self, x1, x2, x3):
-            return torch.addmm(x1, x2, x3)
+        def forward(self, x_1, x_2, x_3):
+            return torch.addmm(x_1, x_2, x_3)
 
     input_info = [
         ([10, 10], "float32"),
@@ -657,44 +712,54 @@ def test_addmm():
 
 
 def test_split():
+    """test relay to relax for split"""
+
     class Split(Module):
-        def forward(self, input):
-            return torch.split(input, 1, dim=1)
+        def forward(self, data):
+            return torch.split(data, 1, dim=1)
 
     input_info = [([1, 3, 10, 10], "float32")]
     verify_model(Split(), input_info, build_target="llvm")
 
 
 def test_cumsum():
+    """test relay to relax for cumsum"""
+
     class Cumsum(Module):
-        def forward(self, input):
-            return torch.cumsum(input, dim=1, dtype=torch.int32)
+        def forward(self, data):
+            return torch.cumsum(data, dim=1, dtype=torch.int32)
 
     input_info = [([1, 2, 3, 4], "float32")]
     verify_model(Cumsum(), input_info)
 
 
 def test_chunk():
+    """test relay to relax for chunk"""
+
     class Chunk(Module):
-        def forward(self, input):
-            return torch.chunk(input, 3, dim=1)
+        def forward(self, data):
+            return torch.chunk(data, 3, dim=1)
 
     input_info = [([1, 3, 10, 10], "float32")]
     verify_model(Chunk(), input_info, build_target="llvm")
 
 
 def test_inplace_fill():
+    """test relay to relax for inplace_fill"""
+
     class InplaceFill(Module):
-        def forward(self, input):
-            input.fill_(1.5)
-            return input
+        def forward(self, data):
+            data.fill_(1.5)
+            return data
 
     verify_model(InplaceFill(), [([10, 10], "float32")], build_target="llvm")
 
 
 def test_arange():
+    """test relay to relax for arange"""
+
     class Arange(Module):
-        def forward(self, input):
+        def forward(self, data):
             return torch.arange(0, 20, dtype=torch.int32)
 
     verify_model(
@@ -703,8 +768,10 @@ def test_arange():
 
 
 def test_empty():
+    """test relay to relax for empty"""
+
     class Empty(Module):
-        def forward(self, input):
+        def forward(self, data):
             return torch.empty((10, 10), dtype=torch.float32)
 
     verify_model(
@@ -713,12 +780,14 @@ def test_empty():
 
 
 def test_tensor():
+    """test relay to relax for tensor"""
+
     class Empty1(Module):
-        def forward(self, input):
+        def forward(self, data):
             return torch.tensor(3, dtype=torch.float32)
 
     class Empty2(Module):
-        def forward(self, input):
+        def forward(self, data):
             return torch.tensor(3)
 
     verify_model(Empty1(), [([10, 10], "float32")], build_target="llvm")
@@ -726,14 +795,16 @@ def test_tensor():
 
 
 def test_tril():
+    """test relay to relax for tril"""
+
     class Tril(Module):
-        def forward(self, input):
-            return torch.tril(input, 1)
+        def forward(self, data):
+            return torch.tril(data, 1)
 
     class InplaceTril(Module):
-        def forward(self, input):
-            input.tril_(1)
-            return input
+        def forward(self, data):
+            data.tril_(1)
+            return data
 
     input_info = [([10, 10], "float32")]
     verify_model(Tril(), input_info)
@@ -741,14 +812,16 @@ def test_tril():
 
 
 def test_triu():
+    """test relay to relax for triu"""
+
     class Triu(Module):
-        def forward(self, input):
-            return torch.triu(input, 1)
+        def forward(self, data):
+            return torch.triu(data, 1)
 
     class InplaceTriu(Module):
-        def forward(self, input):
-            input.triu_(1)
-            return input
+        def forward(self, data):
+            data.triu_(1)
+            return data
 
     input_info = [([10, 10], "float32")]
     verify_model(Triu(), input_info)
@@ -756,6 +829,8 @@ def test_triu():
 
 
 def test_new_ones():
+    """test relay to relax for new_ones"""
+
     class NewOnes(Module):
         def forward(self, x):
             return x.new_ones(1, 2, 3)
@@ -765,6 +840,8 @@ def test_new_ones():
 
 
 def test_expand():
+    """test relay to relax for expand"""
+
     class Expand(Module):
         def forward(self, x):
             return x.expand(4, 2, 3, 4)
@@ -774,6 +851,8 @@ def test_expand():
 
 
 def test_reduce():
+    """test relay to relax for reduce"""
+
     # sum
     class Sum(Module):
         def forward(self, x):
@@ -784,6 +863,8 @@ def test_reduce():
 
 
 def test_datatype():
+    """test relay to relax for datatype"""
+
     input_info = [([1, 2, 3, 4], "float32")]
 
     # float
@@ -809,6 +890,8 @@ def test_datatype():
 
 
 def test_permute():
+    """test relay to relax for permute"""
+
     class Permute(Module):
         def forward(self, x):
             return x.permute(0, 3, 2, 1)
@@ -818,6 +901,8 @@ def test_permute():
 
 
 def test_reshape():
+    """test relay to relax for reshape"""
+
     class Reshape(Module):
         def forward(self, x):
             return x.reshape(2, 12)
@@ -827,6 +912,8 @@ def test_reshape():
 
 
 def test_transpose():
+    """test relay to relax for transpose"""
+
     class Transpose(Module):
         def forward(self, x):
             return x.transpose(1, 3)
@@ -836,6 +923,8 @@ def test_transpose():
 
 
 def test_view():
+    """test relay to relax for view"""
+
     class View(Module):
         def forward(self, x):
             return x.view(2, 12)
@@ -845,22 +934,23 @@ def test_view():
 
 
 def test_keep_params():
+    """test relay to relax for keep_params"""
+
     class Conv2D1(Module):
         def __init__(self):
             super().__init__()
             self.conv = torch.nn.Conv2d(3, 6, 7, bias=True)
 
-        def forward(self, input):
-            return self.conv(input)
+        def forward(self, data):
+            return self.conv(data)
 
     verify_model(Conv2D1(), [([1, 3, 10, 10], "float32")])
 
 
 def test_unwrap_unit_return_tuple():
-    class Identity(Module):
-        def __init__(self):
-            super().__init__()
+    """test relay to relax for unwrap_unit_return_tuple"""
 
+    class Identity(Module):
         def forward(self, x):
             return (x,)
 
@@ -868,10 +958,9 @@ def test_unwrap_unit_return_tuple():
 
 
 def test_no_bind_return_tuple():
-    class Identity(Module):
-        def __init__(self):
-            super().__init__()
+    """test relay to relax for no_bind_return_tuple"""
 
+    class Identity(Module):
         def forward(self, x, y):
             return (x, y)
 
@@ -880,67 +969,73 @@ def test_no_bind_return_tuple():
 
 
 def test_argmax():
-    class Argmax1(Module):
-        def __init__(self) -> None:
-            super().__init__()
+    """test relay to relax for argmax"""
 
-        def forward(self, input):
-            return torch.argmax(input, dim=-1)
+    class Argmax1(Module):
+        def forward(self, data):
+            return torch.argmax(data, dim=-1)
 
     class Argmax2(Module):
-        def __init__(self) -> None:
-            super().__init__()
-
-        def forward(self, input):
-            return torch.argmax(input, dim=-1, keepdim=True)
+        def forward(self, data):
+            return torch.argmax(data, dim=-1, keepdim=True)
 
     verify_model(Argmax1(), [([256, 256], "float32")])
     verify_model(Argmax2(), [([256, 256], "float32")])
 
 
 def test_to():
+    """test relay to relax for to"""
+
     class To1(Module):
-        def forward(self, input):
-            return input.to(torch.float16)
+        def forward(self, data):
+            return data.to(torch.float16)
 
     class To2(Module):
-        def forward(self, input):
-            return input.to("cpu")
+        def forward(self, data):
+            return data.to("cpu")
 
     verify_model(To1(), [([256, 256], "float32")])
     verify_model(To2(), [([256, 256], "float32")])
 
 
 def test_mean():
+    """test relay to relax for mean"""
+
     class Mean(Module):
-        def forward(self, input):
-            return input.mean(-1)
+        def forward(self, data):
+            return data.mean(-1)
 
     class MeanKeepDim(Module):
-        def forward(self, input):
-            return input.mean(-1, keepdim=True)
+        def forward(self, data):
+            return data.mean(-1, keepdim=True)
 
     verify_model(Mean(), [([256, 256], "float32")])
     verify_model(MeanKeepDim(), [([256, 256], "float32")])
 
 
 def test_rsqrt():
+    """test relay to relax for rsqrt"""
+
     class Rsqrt(Module):
-        def forward(self, input):
-            return torch.rsqrt(input)
+        def forward(self, data):
+            return torch.rsqrt(data)
 
     verify_model(Rsqrt(), [([256, 256], "float32")])
 
 
 def test_neg():
+    """test relay to relax for neg"""
+
     class Neg(Module):
-        def forward(self, input):
-            return -input
+        def forward(self, data):
+            return -data
 
     verify_model(Neg(), [([256, 256], "float32")])
 
 
 def test_max():
+    """test relay to relax for max"""
+
     class Max(Module):
         def forward(self, x, y):
             return torch.max(x, y)
