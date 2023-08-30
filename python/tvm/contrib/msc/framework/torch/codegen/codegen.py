@@ -14,9 +14,10 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""tvm.contrib.msc.framework.tvm.codegen.codegen"""
+"""tvm.contrib.msc.framework.torch.codegen.codegen"""
 
 from typing import Dict, Optional
+import torch
 
 import tvm
 from tvm.relax.transform import BindParams
@@ -26,14 +27,14 @@ from tvm.contrib.msc.core import utils as msc_utils
 from tvm.contrib.msc.framework.tvm import _ffi_api
 
 
-def to_relax(
+def to_torch(
     graph: MSCGraph,
     weights: Optional[Dict[str, tvm.nd.array]] = None,
     codegen_config: Optional[Dict[str, str]] = None,
     print_config: Optional[Dict[str, str]] = None,
     build_folder: msc_utils.MSCDirectory = None,
-) -> tvm.IRModule:
-    """Change MSCGraph to IRModule.
+) -> torch.nn.Module:
+    """Change MSCGraph to torch nn.Module.
 
     Parameters
     ----------
@@ -50,21 +51,20 @@ def to_relax(
 
     Returns
     -------
-    mod: IRModule
-        The IRModule of relax.
+    model: torch.nn.Module
+        The torch.nn.Module.
     """
 
-    inputs = [
-        tvm.relax.Var(i.alias, tvm.relax.TensorStructInfo(i.get_shape(), i.dtype_name))
-        for i in graph.get_inputs()
-    ]
-
-    def _bind_weights(mod: tvm.IRModule, folder: msc_utils.MSCDirectory) -> tvm.IRModule:
+    def _bind_weights(model: torch.nn.Module, folder: msc_utils.MSCDirectory) -> torch.nn.Module:
         if weights:
-            mod = BindParams("main", weights)(mod)
-            with open(folder.relpath(graph.name + "_params.bin"), "wb") as f_params:
-                f_params.write(tvm.runtime.save_param_dict(weights))
-        return mod
+            state_dict = {}
+            for name, data in weights.items():
+                w_tensor = graph.find_tensor(name)
+                w_name = w_tensor.alias or name
+                state_dict[w_name] = torch.from_numpy(data.asnumpy())
+            model.load_state_dict(state_dict)
+            torch.save(state_dict, folder.relpath(graph.name + ".pth"))
+        return model
 
-    codegen = CodeGen(graph, _ffi_api.GetRelaxSources, codegen_config, print_config, build_folder)
-    return codegen.load(inputs, _bind_weights)
+    codegen = CodeGen(graph, _ffi_api.GetTorchSources, codegen_config, print_config, build_folder)
+    return codegen.load([], _bind_weights)

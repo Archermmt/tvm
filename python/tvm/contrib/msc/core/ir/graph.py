@@ -68,6 +68,17 @@ class MSCTensor(Object):
             return int(self.shape[axis])
         return int(_ffi_api.MSCTensorDimAt(self, axis))
 
+    def set_alias(self, alias: str):
+        """Set alis for the tensor
+
+        Parameters
+        -------
+        alias: str
+            The alias.
+        """
+
+        _ffi_api.MSCTensorSetAlias(self, alias)
+
     def equal(self, other: Object) -> bool:
         """A fast method to check if two nodes are same.
 
@@ -220,6 +231,18 @@ class MSCJoint(BaseJoint):
         """
 
         return _ffi_api.MSCJointGetOutputs(self)
+
+    def get_weights(self) -> Dict[str, MSCTensor]:
+        """Get all the weights.
+
+        Returns
+        -------
+        weights: dict<str, MSCJoint>
+            The weight Tensors.
+        """
+
+        src_weights = _ffi_api.MSCJointGetWeights(self)
+        return {ref: src_weights[ref] for ref in src_weights}
 
     def get_attrs(self) -> Dict[str, str]:
         """Get all the attributes from node

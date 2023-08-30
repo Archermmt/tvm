@@ -111,6 +111,29 @@ void BaseStack::FuncEnd(const String& ret_val) {
   PushDoc(FunctionDoc(func->name, func->args, func->decorators, func->return_type, body));
 }
 
+void BaseStack::ClassDef(const String& class_name) {
+  PushDoc(ClassDoc(IdDoc(class_name), Array<ExprDoc>(), Array<StmtDoc>()));
+}
+
+void BaseStack::ClassDecorator(const String& decorator) {
+  const auto& class_doc = PopCheckedDoc<ClassDoc, ClassDocNode>();
+  Array<ExprDoc> decorators = class_doc->decorators;
+  decorators.push_back(IdDoc(decorator));
+  PushDoc(ClassDoc(class_doc->name, decorators, class_doc->body));
+}
+
+void BaseStack::ClassStart() {
+  ICHECK(TopDoc()->IsInstance<ClassDocNode>()) << "ClassDoc is not saved";
+  BlockStart();
+}
+
+void BaseStack::ClassEnd() {
+  const auto& block = PopBlock();
+  const auto& class_doc = PopCheckedDoc<ClassDoc, ClassDocNode>();
+  const auto& body = DocUtils::ToStmts(block);
+  PushDoc(ClassDoc(class_doc->name, class_doc->decorators, body));
+}
+
 void BaseStack::CallStart(const String& callee) {
   PushDoc(CallDoc(IdDoc(callee), Array<ExprDoc>(), Array<String>(), Array<ExprDoc>()));
 }
@@ -141,7 +164,7 @@ void BaseStack::InplaceStart(const String& callee) {
 
 void BaseStack::InplaceEnd() {
   const auto& call = PopCheckedDoc<CallDoc, CallDocNode>();
-  if (TopDoc()->IsInstance<AssignDocNode>() &&
+  if (HasDoc() && TopDoc()->IsInstance<AssignDocNode>() &&
       Downcast<AssignDoc>(TopDoc())->comment == "msc::inplace") {
     const auto& assign = PopCheckedDoc<AssignDoc, AssignDocNode>();
     PushDoc(AssignDoc(assign->lhs, call, assign->annotation));

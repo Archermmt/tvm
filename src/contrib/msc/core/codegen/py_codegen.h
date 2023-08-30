@@ -83,7 +83,7 @@ class PyCodeGen : public BaseCodeGen<ConfigType> {
         .line("import numpy as np")
         .line("from typing import List, Dict")
         .line("import tvm")
-        .line("from tvm.contrib.msc.core import utils as msir_utils");
+        .line("from tvm.contrib.msc.core import utils as msc_utils");
   }
 
   /*! \brief Stack the docs for the helpers*/

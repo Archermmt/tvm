@@ -21,8 +21,8 @@
  * \file src/contrib/msc/framework/tvm/relax_opcode.h
  * \brief Relax codegen for MSCJoint.
  */
-#ifndef TVM_CONTRIB_MSCFramework_TVM_RELAX_OPCODE_H_
-#define TVM_CONTRIB_MSCFramework_TVM_RELAX_OPCODE_H_
+#ifndef TVM_CONTRIB_MSC_FRAMEWORK_TVM_RELAX_OPCODE_H_
+#define TVM_CONTRIB_MSC_FRAMEWORK_TVM_RELAX_OPCODE_H_
 
 #include <memory>
 #include <string>
@@ -55,6 +55,8 @@ class RelaxOpCode : public BaseOpCode<RelaxCodeGenConfig> {
   const Array<Doc> GetDocs() final;
 
  protected:
+  RelaxOpCodeStack stack_;
+
   /*! \brief Convert op build*/
   virtual void CodeGenBuild() = 0;
 
@@ -66,8 +68,6 @@ class RelaxOpCode : public BaseOpCode<RelaxCodeGenConfig> {
 
   /*! \brief Get the axes attribute*/
   const std::vector<int> GetAxes(const String& key = "axes");
-
-  RelaxOpCodeStack stack_;
 };
 
 /*!
@@ -79,4 +79,4 @@ const std::shared_ptr<std::unordered_map<String, std::shared_ptr<RelaxOpCode>>> 
 }  // namespace msc
 }  // namespace contrib
 }  // namespace tvm
-#endif  // TVM_CONTRIB_MSCFramework_TVM_RELAX_OPCODE_H_
+#endif  // TVM_CONTRIB_MSC_FRAMEWORK_TVM_RELAX_OPCODE_H_

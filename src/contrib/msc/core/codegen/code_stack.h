@@ -109,6 +109,18 @@ class BaseStack {
   /*! \brief End function body block*/
   void FuncEnd(const String& ret_val = "");
 
+  /*! \brief Cache class Doc*/
+  void ClassDef(const String& class_name);
+
+  /*! \brief Cache class decorator*/
+  void ClassDecorator(const String& decorator);
+
+  /*! \brief Start class body block*/
+  void ClassStart();
+
+  /*! \brief End class body block*/
+  void ClassEnd();
+
   /*! \brief Cache call Doc*/
   void CallStart(const String& callee);
 
@@ -273,6 +285,22 @@ class BaseStack {
   }                                                                                                \
   Stack& func_end(const String& ret_val = "") {                                                    \
     FuncEnd(ret_val);                                                                              \
+    return *this;                                                                                  \
+  }                                                                                                \
+  Stack& class_def(const String& class_name) {                                                     \
+    ClassDef(class_name);                                                                          \
+    return *this;                                                                                  \
+  }                                                                                                \
+  Stack& class_decorator(const String& decorator) {                                                \
+    ClassDecorator(decorator);                                                                     \
+    return *this;                                                                                  \
+  }                                                                                                \
+  Stack& class_start() {                                                                           \
+    ClassStart();                                                                                  \
+    return *this;                                                                                  \
+  }                                                                                                \
+  Stack& class_end() {                                                                             \
+    ClassEnd();                                                                                    \
     return *this;                                                                                  \
   }                                                                                                \
   Stack& call_start(const String& callee) {                                                        \

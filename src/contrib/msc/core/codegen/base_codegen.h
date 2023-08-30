@@ -83,7 +83,7 @@ class BaseOpCode {
   virtual const String Comment() { return Comment(node_); }
 
   /*! \brief Get func_name for the default node*/
-  const String func_name() { return func_name_; }
+  virtual const String func_name() { return func_name_; }
 
   /*! \brief Get the default node*/
   const MSCJoint node() { return node_; }

@@ -146,6 +146,17 @@ void PythonPrinter::PrintTypedDoc(const FunctionDoc& doc) {
   NewLine(false);
 }
 
+void PythonPrinter::PrintTypedDoc(const ClassDoc& doc) {
+  PrintDecorators(doc->decorators);
+
+  output_ << "class ";
+  PrintDoc(doc->name, false);
+  output_ << ":";
+
+  MaybePrintComment(doc, true);
+  PrintIndentedBlock(doc->body);
+}
+
 void PythonPrinter::PrintTypedDoc(const CommentDoc& doc) {
   if (doc->comment.defined()) {
     output_ << "# " << doc->comment.value();
