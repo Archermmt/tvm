@@ -26,8 +26,7 @@ from tvm.relay.frontend import from_pytorch
 
 from tvm.contrib.msc.core.ir.graph import MSCGraph
 from tvm.contrib.msc.core.ir.translate import from_relax, from_relay
-from tvm.contrib.msc.core.codegen import CodeGen
-from tvm.contrib.msc.framework.torch import _ffi_api
+from tvm.contrib.msc.core.codegen import relay_to_relax
 
 
 def from_torch(
@@ -66,8 +65,6 @@ def from_torch(
         The weights from the IRModule.
     """
 
-    trans_config = trans_config or {}
-    build_config = build_config or {}
     if via_relax:
         graph_model, params = torch.fx.symbolic_trace(model), None
         with torch.no_grad():
@@ -84,23 +81,8 @@ def from_torch(
         else:
             shape_list = [("input" + str(idx), i_info) for idx, i_info in enumerate(input_info)]
         relay_mod, params = from_pytorch(scripted_model, shape_list)
-        graph, params = from_relay(
-            relay_mod,
-            params,
-            trans_config=trans_config,
-            build_config=build_config,
-            opt_config=opt_config,
-        )
-        source_getter = tvm.get_global_func("msc.framework.tvm.GetRelaxSources")
-        codegen = CodeGen(graph, source_getter)
-        inputs = [
-            tvm.relax.Var(i.alias, tvm.relax.TensorStructInfo(i.get_shape(), i.dtype_name))
-            for i in graph.get_inputs()
-        ]
-        relax_mod = codegen.load(inputs)
-    graph, weights = from_relax(
-        relax_mod, params, trans_config=trans_config, build_config=build_config
-    )
+        relax_mod = relay_to_relax(relay_mod, params, trans_config, build_config, opt_config)
+    graph, weights = from_relax(relax_mod, trans_config=trans_config, build_config=build_config)
     # set alias for weights
     for node in graph.get_nodes():
         for ref, weight in node.get_weights().items():

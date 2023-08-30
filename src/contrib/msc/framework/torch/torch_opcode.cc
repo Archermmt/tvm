@@ -97,6 +97,10 @@ const std::shared_ptr<std::unordered_map<String, std::shared_ptr<TorchOpCode>>> 
   static auto map = std::make_shared<std::unordered_map<String, std::shared_ptr<TorchOpCode>>>();
   if (!map->empty()) return map;
 
+  // nn ops
+  map->emplace("nn.conv1d",
+               std::make_shared<TorchConvCodeGen>("nn.Conv1d", "functional.conv1d", false));
+
   // msc ops
   map->emplace("msc.conv1d_bias",
                std::make_shared<TorchConvCodeGen>("nn.Conv1d", "functional.conv1d", true));

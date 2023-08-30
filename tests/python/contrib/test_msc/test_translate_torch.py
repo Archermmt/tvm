@@ -69,8 +69,8 @@ def test_conv1d():
 
     input_info = [([1, 3, 10], "float32")]
     for via_relax in [True, False]:
-        verify_model(Conv1D1(), input_info, via_relax)
-        # verify_model(Conv1D2(), input_info,via_relax)
+        # verify_model(Conv1D1(), input_info, via_relax)
+        verify_model(Conv1D2(), input_info, via_relax)
 
 
 def test_conv2d():
