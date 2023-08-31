@@ -16,6 +16,7 @@
 # under the License.
 """Legalize high-level operator calls in Relax functions to call_tir."""
 from . import binary
+from . import ccl
 from . import create
 from . import datatype
 from . import grad

@@ -15,6 +15,9 @@
 # specific language governing permissions and limitations
 # under the License.
 import pytest
+import torch
+import sys
+import io
 
 import tvm
 import tvm.testing
@@ -256,6 +259,81 @@ def test_create():
     tvm.ir.assert_structural_equal(irmodule["test"], test)
 
 
+def test_timestep_embedding():
+    class Model(Module):
+        def test(self, x: Tensor):
+            get_timestep_out = op.get_timestep_embedding(x, 10)
+            return get_timestep_out
+
+    @R.function
+    def test(
+        x: R.Tensor((3,), dtype="float32"), _io: R.Object
+    ) -> R.Tuple(R.Tensor((3, 10), dtype="float32"), R.Tuple(R.Object)):
+        with R.dataflow():
+            lv1: R.Tensor((3,), dtype="float32") = R.astype(x, dtype="float32")
+            lv2: R.Tensor((3, 1), dtype="float32") = R.expand_dims(lv1, axis=[1])
+            lv3: R.Tensor((5,), dtype="float32") = R.arange(
+                R.prim_value(0), R.prim_value(5), R.prim_value(1), dtype="float32"
+            )
+            lv4: R.Tensor((5,), dtype="float32") = R.multiply(
+                R.const(-9.2103404998779297, "float32"), lv3
+            )
+            lv5: R.Tensor((5,), dtype="float32") = R.divide(lv4, R.const(4, "float32"))
+            lv6: R.Tensor((5,), dtype="float32") = R.exp(lv5)
+            lv7: R.Tensor((1, 5), dtype="float32") = R.expand_dims(lv6, axis=[0])
+            lv8: R.Tensor((3, 5), dtype="float32") = R.multiply(lv2, lv7)
+            lv9: R.Tensor((3, 5), dtype="float32") = R.sin(lv8)
+            lv10: R.Tensor((3, 5), dtype="float32") = R.cos(lv8)
+            get_timestep_embedding: R.Tensor((3, 10), dtype="float32") = R.concat(
+                (lv9, lv10), axis=-1
+            )
+            gv1: R.Tuple(
+                R.Tensor((3, 10), dtype="float32"), R.Tuple(R.Object)
+            ) = get_timestep_embedding, (_io,)
+            R.output(gv1)
+        return gv1
+
+    m = Model()
+    irmodule, _ = m.export_tvm(spec={"test": {"x": spec.Tensor([3], "float32")}})
+    tvm.ir.assert_structural_equal(irmodule["test"], test)
+
+
+def test_scaled_dot_product_attention():
+    class Model(Module):
+        def test(self, query: Tensor, key: Tensor, value: Tensor):
+            scaled_dot_product_attention = op.scaled_dot_product_attention(query, key, value)
+            return scaled_dot_product_attention
+
+    @R.function
+    def test(
+        query: R.Tensor((1, 32, 32, 32), dtype="float32"),
+        key: R.Tensor((1, 32, 32, 32), dtype="float32"),
+        value: R.Tensor((1, 32, 32, 32), dtype="float32"),
+        _io: R.Object,
+    ) -> R.Tuple(R.Tensor((1, 32, 32, 32), dtype="float32"), R.Tuple(R.Object)):
+        with R.dataflow():
+            scaled_dot_product_attention: R.Tensor(
+                (1, 32, 32, 32), dtype="float32"
+            ) = R.nn.attention(query, key, value, scale=None, causal_mask=None)
+            gv1: R.Tuple(
+                R.Tensor((1, 32, 32, 32), dtype="float32"), R.Tuple(R.Object)
+            ) = scaled_dot_product_attention, (_io,)
+            R.output(gv1)
+        return gv1
+
+    m = Model()
+    irmodule, _ = m.export_tvm(
+        spec={
+            "test": {
+                "query": spec.Tensor([1, 32, 32, 32], "float32"),
+                "key": spec.Tensor([1, 32, 32, 32], "float32"),
+                "value": spec.Tensor([1, 32, 32, 32], "float32"),
+            }
+        }
+    )
+    tvm.ir.assert_structural_equal(irmodule["test"], test)
+
+
 def test_tensor_expr_op():
     class Model(Module):
         def test(self, x: Tensor):
@@ -302,6 +380,41 @@ def test_tensor_expr_op():
     irmodule, params = m.export_tvm(spec={"test": {"x": spec.Tensor([10, 10], "float32")}})
 
     tvm.ir.assert_structural_equal(irmodule, Expected)
+
+
+def test_print():
+    class Model(Module):
+        def test(self, x: Tensor):
+            z = op.add(x, x)
+            op.print_(z)
+            return x
+
+    # fmt: off
+    @I.ir_module
+    class Expected:
+        @R.function
+        def _initialize_effect() -> R.Tuple(R.Object):
+            with R.dataflow():
+                _io: R.Object = R.null_value()
+                lv: R.Tuple(R.Object) = (_io,)
+                gv: R.Tuple(R.Object) = lv
+                R.output(gv)
+            return gv
+
+        @R.function
+        def test(x: R.Tensor((10, 10), dtype="float32"), _io: R.Object) -> R.Tuple(R.Tensor((10, 10), dtype="float32"), R.Tuple(R.Object)):
+            with R.dataflow():
+                add: R.Tensor((10, 10), dtype="float32") = R.add(x, x)
+                _io1: R.Object = R.call_pure_packed("effect.print", _io, add, sinfo_args=(R.Object(),))
+                gv1: R.Tuple(R.Tensor((10, 10), dtype="float32"), R.Tuple(R.Object)) = x, (_io1,)
+                R.output(gv1)
+            return gv1
+    # fmt: on
+
+    m = Model()
+    irmodule, params = m.export_tvm(spec={"test": {"x": spec.Tensor([10, 10], "float32")}})
+
+    tvm.ir.assert_structural_equal(irmodule["test"], Expected["test"])
 
 
 if __name__ == "__main__":

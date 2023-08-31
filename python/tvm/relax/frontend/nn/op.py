@@ -16,6 +16,7 @@
 # under the License.
 # pylint: disable=too-many-lines,invalid-name,protected-access
 """nn.Tensor operators."""
+import math
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 from tvm import tir as _tir
@@ -25,6 +26,7 @@ from ... import op as _op
 from ...block_builder import BlockBuilder
 from ...struct_info import TensorStructInfo, TupleStructInfo
 from .core import Tensor
+from .spec import SpecBuilder
 
 IntExpr = Union[int, _tir.PrimExpr]
 
@@ -757,6 +759,8 @@ def group_norm(
     weight: Optional[Tensor],
     bias: Optional[Tensor],
     eps: float = 1e-5,
+    channel_axis: int = 1,
+    axes: Optional[List[int]] = None,
     name: str = "group_norm",
 ) -> Tensor:
     r"""
@@ -783,6 +787,13 @@ def group_norm(
     epsilon : float
         Small float added to square mean to avoid dividing by zero.
 
+    channel_axis: int
+        The channel axis of the data.
+
+    axes : Optional[int]
+        Which axes to compute the groupnorm over. If None, assumes first
+        two channels should be ignored.
+
     name : str
         Name hint.
 
@@ -796,9 +807,11 @@ def group_norm(
     if bias is not None:
         bias = bias._expr
     dim = len(x._expr.struct_info.shape)
+    if axes is None:
+        axes = list(range(2, dim))
     return _wrap_nested(
         _op.nn.group_norm(
-            x._expr, weight, bias, num_groups, channel_axis=1, axes=list(range(2, dim)), epsilon=eps
+            x._expr, weight, bias, num_groups, channel_axis=channel_axis, axes=axes, epsilon=eps
         ),
         name,
     )
@@ -858,12 +871,10 @@ def full(
     result : Tensor
         The result tensor.
     """
-    from tvm import relax  # pylint: disable=import-outside-toplevel
-
     if isinstance(fill_value, (_tir.FloatImm, _tir.IntImm)):
-        fill_value = relax.const(fill_value.value, dtype=dtype)
+        fill_value = rx.const(fill_value.value, dtype=dtype)
     elif isinstance(fill_value, (int, float)):
-        fill_value = relax.const(fill_value, dtype=dtype)
+        fill_value = rx.const(fill_value, dtype=dtype)
     else:
         fill_value = fill_value._expr
     return _wrap_nested(_op.full(shape, fill_value, dtype), name)
@@ -893,6 +904,105 @@ def zeros(
         The result tensor.
     """
     return _wrap_nested(_op.zeros(shape, dtype), name)
+
+
+def get_timestep_embedding(
+    x: Tensor,
+    embedding_dim: int,
+    flip_sin_to_cos: bool = False,
+    downscale_freq_shift: float = 1,
+    scale: float = 1,
+    max_period: int = 10000,
+    name: str = "get_timestep_embedding",
+) -> Tensor:
+    """
+    Timestep calculation as described in Denoising Diffusion Probabilistic Models.
+
+    Parameters
+    ----------
+    x : Tensor
+        A 1-D Tensor of N indices.
+    embedding_dim : int
+        The dimension of the output.
+    flip_sin_to_cos : bool
+        If True, change the order of sine and cosine embeddings.
+    downscale_freq_shift : float
+        Adjusts the frequency of the sinusoidal sampling.
+    scale : float
+        Weight adjustment for embedding magnitude.
+    max_period : int
+        Controls the minimum frequency of the embeddings.
+    name : str
+        The name to label this operator with.
+
+    Returns
+    -------
+    result : Tensor
+        [N x dim] Tensor of positional embeddings.
+    """
+    timesteps = _op.astype(x._expr, "float32")
+
+    half_dim = embedding_dim // 2
+    exponent = rx.const(-math.log(max_period), "float32") * _op.arange(
+        start=0, end=half_dim, dtype="float32"
+    )
+    exponent = exponent / (rx.const(half_dim - downscale_freq_shift, "float32"))
+
+    emb = _op.exp(exponent)
+    emb = _op.expand_dims(timesteps, 1) * _op.expand_dims(emb, 0)
+    # Scale embeddings
+    if scale != 1:
+        emb = rx.const(scale, "float32") * emb
+
+    # Concat sine and cosine embeddings.
+    if flip_sin_to_cos:
+        emb = _op.concat([_op.cos(emb), _op.sin(emb)], axis=-1)
+    else:
+        emb = _op.concat([_op.sin(emb), _op.cos(emb)], axis=-1)
+
+    # Zero pad
+    if embedding_dim % 2 == 1:
+        emb = _op.nn.pad(emb, (0, 1, 0, 0))
+    return _wrap_nested(emb, name)
+
+
+def scaled_dot_product_attention(
+    query: Tensor,
+    key: Tensor,
+    value: Tensor,
+    attn_mask: Optional[Tensor] = None,
+    is_causal: Optional[bool] = False,
+    scale: Optional[float] = None,
+    name: str = "scaled_dot_product_attention",
+):
+    """
+    Computes a scaled dot product attention on provided attention
+    query, key, and values. Compliant with the functional torch implementation.
+
+    Parameters
+    ----------
+    query : Tensor
+        Tensor representing current attention lookup.
+    key : Tensor
+        Tensor representing cross attention mapping.
+    value : Tensor
+        Tensor representing embedded attention values.
+    attn_mask : Optional[Tensor]
+        Optional mask for attention, not yet supported.
+    is_causal : Optional[bool]
+        If set, uses a causal attention mask.
+    scale : Optional[float]
+        Optional extra scaling argument applied to attention.
+    name : str
+        Name hint for this function.
+    """
+    assert attn_mask is None, "attn_mask not yet supported."
+    causal_mask = "TopLeft" if is_causal else None
+
+    attn = _op.nn.attention(
+        query._expr, key._expr, value._expr, causal_mask=causal_mask, scale=scale
+    )
+    return _wrap_nested(attn, name)
 
 
 def tensor_expr_op(
@@ -938,3 +1048,7 @@ def tensor_expr_op(
         ),
         name=name_hint,
     )
+
+
+def print_(array: Tensor):
+    SpecBuilder.current().io_effect.print_(array)
