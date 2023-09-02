@@ -59,6 +59,9 @@ def to_torch(
         if weights:
             state_dict = {}
             for name, data in weights.items():
+                w_producer = graph.find_producer(name)
+                if w_producer.optype == "constant" and w_producer.has_attr("scalar"):
+                    continue
                 w_tensor = graph.find_tensor(name)
                 w_name = w_tensor.alias or name
                 state_dict[w_name] = torch.from_numpy(data.asnumpy())

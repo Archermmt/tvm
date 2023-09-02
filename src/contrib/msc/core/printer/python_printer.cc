@@ -49,6 +49,17 @@ void PythonPrinter::PrintTypedDoc(const AttrAccessDoc& doc) {
   output_ << "." << doc->name;
 }
 
+void PythonPrinter::PrintTypedDoc(const IndexDoc& doc) {
+  PrintDoc(doc->value, false);
+  if (doc->indices.size() == 0) {
+    output_ << "[()]";
+  } else {
+    output_ << "[";
+    PrintJoinedDocs(doc->indices, ", ");
+    output_ << "]";
+  }
+}
+
 void PythonPrinter::PrintTypedDoc(const CallDoc& doc) {
   PrintDoc(doc->callee, false);
   output_ << "(";

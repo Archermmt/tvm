@@ -67,24 +67,26 @@ class TorchOpCode : public BaseOpCode<TorchCodeGenConfig> {
     return is_init_ ? module_ref_ : BaseOpCode<TorchCodeGenConfig>::IdxNode(as_raw);
   };
 
+  /*! \brief Get dtype string*/
+  const String DType(const DataType& dtype) final {
+    return "torch." + BaseOpCode<TorchCodeGenConfig>::DType(dtype);
+  }
+
   /*! \brief Get func_name for the default node*/
-  const String func_name() final {
+  const String callee_name() final {
     if (is_init_) {
       return module_name_;
     }
     if (module_name_.size() > 0) {
       return module_ref_;
     }
-    return BaseOpCode<TorchCodeGenConfig>::func_name();
+    return BaseOpCode<TorchCodeGenConfig>::callee_name();
   }
 
   /*! \brief Convert node to docs*/
   const Array<Doc> GetDocs() final;
 
  protected:
-  bool is_init_;
-  String module_name_;
-  String module_ref_;
   TorchOpCodeStack stack_;
 
   /*! \brief Convert op build*/
@@ -95,6 +97,20 @@ class TorchOpCode : public BaseOpCode<TorchCodeGenConfig> {
 
   /*! \brief Get the padding from op*/
   const std::vector<int> GetPadding(const String& key = "padding");
+
+  /*! \brief Get the is_init_ of codegen*/
+  bool is_init() { return is_init_; }
+
+  /*! \brief Get the module_name of codegen*/
+  const String module_name() { return module_name_; }
+
+  /*! \brief Get the module_ref of codegen*/
+  const String module_ref() { return module_ref_; }
+
+ private:
+  bool is_init_;
+  String module_name_;
+  String module_ref_;
 };
 
 /*!

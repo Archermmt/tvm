@@ -273,6 +273,22 @@ class MSCJoint(BaseJoint):
 
         return self.get_attrs().get(key, default)
 
+    def has_attr(self, key: str) -> bool:
+        """Check if key in attributes
+
+        Parameters
+        -------
+        key: str
+            The key of the attribute.
+
+        Returns
+        -------
+        has_attr: bool
+            Whether the key in the attributes.
+        """
+
+        return bool(_ffi_api.MSCJointHasAttr(self, key))
+
     def equal(self, other: BaseJoint) -> bool:
         """A fast method to check if two nodes are same.
 
@@ -422,13 +438,13 @@ class MSCGraph(BaseGraph):
 
         return _ffi_api.MSCGraphFindTensor(self, name)
 
-    def find_producer(self, name: str) -> MSCJoint:
-        """Find producer by tensor_name.
+    def find_producer(self, ref: Union[str, MSCTensor]) -> MSCJoint:
+        """Find producer by tensor_name or tensor.
 
         Parameters
         ----------
-        name: string
-            The name of the tensor.
+        ref: string or MSCTensor
+            The name of the tensor or tensor.
 
         Returns
         -------
@@ -436,15 +452,17 @@ class MSCGraph(BaseGraph):
             The found prducer.
         """
 
-        return _ffi_api.MSCGraphFindProducer(self, name)
+        if isinstance(ref, MSCTensor):
+            return _ffi_api.MSCGraphFindProducer(self, ref.name)
+        return _ffi_api.MSCGraphFindProducer(self, ref)
 
-    def find_consumers(self, name: str) -> List[MSCJoint]:
-        """Find consumers by tensor_name.
+    def find_consumers(self, ref: Union[str, MSCTensor]) -> List[MSCJoint]:
+        """Find consumers by tensor_name or tensor.
 
         Parameters
         ----------
-        name: string
-            The name of the tensor.
+        ref: string or MSCTensor
+            The name of the tensor or tensor.
 
         Returns
         -------
@@ -452,7 +470,9 @@ class MSCGraph(BaseGraph):
             The found consumers.
         """
 
-        return _ffi_api.MSCGraphFindConsumers(self, name)
+        if isinstance(ref, MSCTensor):
+            return _ffi_api.MSCGraphFindConsumers(self, ref.name)
+        return _ffi_api.MSCGraphFindConsumers(self, ref)
 
     def get_nodes(self) -> Iterable[MSCJoint]:
         """Get all the nodes in the graph.

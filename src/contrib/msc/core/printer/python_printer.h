@@ -54,6 +54,9 @@ class PythonPrinter : public MSCBasePrinter {
   /*! * \brief Print a AttrAccessDoc to python format*/
   void PrintTypedDoc(const AttrAccessDoc& doc) final;
 
+  /*! * \brief Print a IndexDoc to python format*/
+  void PrintTypedDoc(const IndexDoc& doc) final;
+
   /*! * \brief Print a CallDoc to python format*/
   void PrintTypedDoc(const CallDoc& doc) final;
 

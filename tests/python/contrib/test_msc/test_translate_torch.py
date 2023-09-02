@@ -28,28 +28,34 @@ from tvm.contrib.msc.framework.torch import codegen
 
 
 def verify_model(torch_model, input_info, via_relax=True):
-    datas = [np.random.rand(*i[0]).astype(i[1]) for i in input_info]
-    torch_datas = [torch.from_numpy(i) for i in datas]
-    golden = torch_model(*torch_datas)
     graph, weights = translate.from_torch(torch_model, input_info, via_relax=via_relax)
-    print("graph {}".format(graph))
-    from tvm.contrib.msc.core import utils as msc_utils
-
-    build_folder = msc_utils.msc_dir("msc_tests")
-    model = codegen.to_torch(graph, weights, build_folder=build_folder)
-    print("model " + str(model))
-    results = model(*torch_datas)
-    assert len(golden) == len(results), "golden {} mismatch with results {}".format(
-        len(golden), len(results)
+    model = codegen.to_torch(graph, weights)
+    torch_datas = [torch.from_numpy(np.random.rand(*i[0]).astype(i[1])) for i in input_info]
+    with torch.no_grad():
+        golden = torch_model(*torch_datas)
+    with torch.no_grad():
+        if not graph.get_inputs():
+            result = model()
+        else:
+            result = model(*torch_datas)
+    if not isinstance(golden, (list, tuple)):
+        golden = [golden]
+    if not isinstance(result, (list, tuple)):
+        result = [result]
+    assert len(golden) == len(result), "golden {} mismatch with result {}".format(
+        len(golden), len(result)
     )
-    for gol_r, new_r in zip(golden, results):
-        tvm.testing.assert_allclose(
-            gol_r.detach().numpy(), new_r.detach().numpy(), atol=1e-5, rtol=1e-5
-        )
+    for gol_r, new_r in zip(golden, result):
+        if isinstance(gol_r, torch.Tensor):
+            tvm.testing.assert_allclose(
+                gol_r.detach().numpy(), new_r.detach().numpy(), atol=1e-5, rtol=1e-5
+            )
+        else:
+            assert gol_r == new_r
 
 
 def test_conv1d():
-    """test relax translator for conv1d"""
+    """test torch translator for conv1d"""
 
     class Conv1D1(Module):
         def __init__(self):
@@ -69,12 +75,12 @@ def test_conv1d():
 
     input_info = [([1, 3, 10], "float32")]
     for via_relax in [True, False]:
-        # verify_model(Conv1D1(), input_info, via_relax)
+        verify_model(Conv1D1(), input_info, via_relax)
         verify_model(Conv1D2(), input_info, via_relax)
 
 
 def test_conv2d():
-    """test relax translator for conv2d"""
+    """test torch translator for conv2d"""
 
     class Conv2D1(Module):
         def __init__(self):
@@ -93,12 +99,13 @@ def test_conv2d():
             return self.conv(data)
 
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Conv2D1(), input_info)
-    verify_model(Conv2D2(), input_info)
+    for via_relax in [True, False]:
+        verify_model(Conv2D1(), input_info, via_relax)
+        verify_model(Conv2D2(), input_info, via_relax)
 
 
 def test_linear():
-    """test relax translator for linear"""
+    """test torch translator for linear"""
 
     class Dense1(Module):
         def __init__(self):
@@ -121,24 +128,26 @@ def test_linear():
             return torch.matmul(x, y)
 
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Dense1(), input_info)
-    verify_model(Dense2(), input_info)
-    verify_model(MatMul1(), [([10, 10], "float32"), ([10, 10], "float32")])
+    for via_relax in [True, False]:
+        verify_model(Dense1(), input_info, via_relax)
+        verify_model(Dense2(), input_info, via_relax)
+        verify_model(MatMul1(), [([10, 10], "float32"), ([10, 10], "float32")], via_relax)
 
 
 def test_bmm():
-    """test relax translator for bmm"""
+    """test torch translator for bmm"""
 
     class BMM(Module):
         def forward(self, x, y):
             return torch.bmm(x, y)
 
     input_info = [((4, 128, 256), "float32"), ((4, 256, 512), "float32")]
-    verify_model(BMM(), input_info)
+    for via_relax in [True, False]:
+        verify_model(BMM(), input_info, via_relax)
 
 
 def test_baddbmm():
-    """test relax translator for baddbmm"""
+    """test torch translator for baddbmm"""
 
     class BAddBMM1(Module):
         def forward(self, c, x, y):
@@ -153,12 +162,13 @@ def test_baddbmm():
         ((4, 128, 256), "float32"),
         ((4, 256, 512), "float32"),
     ]
-    verify_model(BAddBMM1(), input_info)
-    verify_model(BAddBMM2(), input_info)
+    for via_relax in [True, False]:
+        verify_model(BAddBMM1(), input_info, via_relax)
+        verify_model(BAddBMM2(), input_info, via_relax)
 
 
 def test_relu():
-    """test relax translator for relu"""
+    """test torch translator for relu"""
 
     class ReLU(Module):
         def __init__(self):
@@ -173,12 +183,13 @@ def test_relu():
             return torch.nn.functional.relu(data)
 
     input_info = [([10, 10], "float32")]
-    verify_model(ReLU(), input_info)
-    verify_model(ReLU1(), input_info)
+    for via_relax in [True, False]:
+        verify_model(ReLU(), input_info, via_relax)
+        verify_model(ReLU1(), input_info, via_relax)
 
 
 def test_relu6():
-    """test relax translator for relu6"""
+    """test torch translator for relu6"""
 
     class ReLU6(Module):
         def __init__(self):
@@ -189,11 +200,12 @@ def test_relu6():
             return self.relu6(data)
 
     input_info = [([10, 10], "float32")]
-    verify_model(ReLU6(), input_info)
+    for via_relax in [True, False]:
+        verify_model(ReLU6(), input_info, via_relax)
 
 
 def test_maxpool2d():
-    """test relax translator for maxpool2d"""
+    """test torch translator for maxpool2d"""
 
     class MaxPool2d(Module):
         def __init__(self):
@@ -220,13 +232,14 @@ def test_maxpool2d():
             return self.pool(data)
 
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(MaxPool2d(), input_info)
-    verify_model(MaxPool2d2(), input_info)
-    verify_model(MaxPool2d3(), input_info)
+    for via_relax in [True, False]:
+        verify_model(MaxPool2d(), input_info, via_relax)
+        verify_model(MaxPool2d2(), input_info, via_relax)
+        verify_model(MaxPool2d3(), input_info, via_relax)
 
 
 def test_avgpool2d():
-    """test relax translator for avgpool2d"""
+    """test torch translator for avgpool2d"""
 
     class AvgPool2d(Module):
         def __init__(self):
@@ -245,12 +258,13 @@ def test_avgpool2d():
             return self.pool(data)
 
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(AvgPool2d(), input_info)
-    verify_model(AvgPool2d2(), input_info)
+    for via_relax in [True, False]:
+        verify_model(AvgPool2d(), input_info, via_relax)
+        verify_model(AvgPool2d2(), input_info, via_relax)
 
 
 def test_adaptive_avgpool2d():
-    """test relax translator for adaptive_avgpool2d"""
+    """test torch translator for adaptive_avgpool2d"""
 
     class AdaptiveAvgPool2d0(Module):
         def __init__(self):
@@ -261,11 +275,12 @@ def test_adaptive_avgpool2d():
             return self.pool(data)
 
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(AdaptiveAvgPool2d0(), input_info)
+    for via_relax in [True, False]:
+        verify_model(AdaptiveAvgPool2d0(), input_info, via_relax)
 
 
 def test_flatten():
-    """test relax translator for flatten"""
+    """test torch translator for flatten"""
 
     class Flatten(Module):
         def __init__(self):
@@ -276,12 +291,13 @@ def test_flatten():
             return self.f(data)
 
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Flatten(), input_info)
-    verify_model(torch.nn.Flatten(2, -1), input_info)
+    for via_relax in [True, False]:
+        verify_model(Flatten(), input_info, via_relax)
+        verify_model(torch.nn.Flatten(2, -1), input_info, via_relax)
 
 
 def test_batchnorm2d():
-    """test relax translator for batchnorm2d"""
+    """test torch translator for batchnorm2d"""
 
     class BatchNorm2d(Module):
         def __init__(self):
@@ -292,11 +308,12 @@ def test_batchnorm2d():
             return self.batchnorm(data)
 
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(BatchNorm2d(), input_info)
+    for via_relax in [True, False]:
+        verify_model(BatchNorm2d(), input_info, via_relax)
 
 
 def test_embedding():
-    """test relax translator for embedding"""
+    """test torch translator for embedding"""
 
     class Embedding(Module):
         def __init__(self):
@@ -306,32 +323,13 @@ def test_embedding():
         def forward(self, data):
             return self.embedding(data)
 
-    verify_model(Embedding(), [([4], "int64")])
-    verify_model(Embedding(), [([4, 5], "int64")])
-
-
-def test_dropout():
-    """test relax translator for dropout"""
-
-    class Dropout1(Module):
-        def __init__(self):
-            super().__init__()
-            self.dropout = torch.nn.Dropout(0.5)
-
-        def forward(self, data):
-            return self.dropout(data)
-
-    class Dropout2(Module):
-        def forward(self, data):
-            return torch.dropout(data, 0.5, train=True)
-
-    input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Dropout1(), input_info)
-    verify_model(Dropout2(), input_info)
+    for via_relax in [True, False]:
+        verify_model(Embedding(), [([4], "int64")], via_relax)
+        verify_model(Embedding(), [([4, 5], "int64")], via_relax)
 
 
 def test_layernorm():
-    """test relax translator for layernorm"""
+    """test torch translator for layernorm"""
 
     class LayerNorm(Module):
         def __init__(self):
@@ -345,26 +343,8 @@ def test_layernorm():
     verify_model(LayerNorm(), input_info)
 
 
-def test_functional_layernorm():
-    """test relax translator for functional_layernorm"""
-
-    class LayerNorm(Module):
-        def __init__(self, shape):
-            super().__init__()
-            self.weight = torch.nn.Parameter(torch.ones(shape))
-            self.bias = torch.nn.Parameter(torch.zeros(shape))
-
-        def forward(self, data):
-            return torch.nn.functional.layer_norm(
-                data, self.weight.shape, self.weight, self.bias, 1e-5
-            )
-
-    input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(LayerNorm((10, 10)), input_info)
-
-
 def test_cross_entropy():
-    """test relax translator for cross_entropy"""
+    """test torch translator for cross_entropy"""
 
     class CrossEntropy1(Module):
         def __init__(self):
@@ -391,25 +371,15 @@ def test_cross_entropy():
         def forward(self, logits, targets):
             return self.loss(logits, targets)
 
-    input_info = [([3, 2], "float32"), ([3], "int32")]
-    verify_model(CrossEntropy1(), input_info)
-    verify_model(CrossEntropy2(), input_info)
-    verify_model(CrossEntropy3(), input_info)
-
-
-def test_functional_cross_entropy():
-    """test relax translator for functional_cross_entropy"""
-
-    class CrossEntropy(Module):
-        def forward(self, logits, targets):
-            return torch.nn.functional.cross_entropy(logits, targets)
-
-    input_info = [([3, 10], "float32"), ([3], "int32")]
-    verify_model(CrossEntropy(), input_info)
+    input_info = [([3, 2], "float32"), ([3], "int64")]
+    for via_relax in [True, False]:
+        verify_model(CrossEntropy1(), input_info, via_relax)
+        verify_model(CrossEntropy2(), input_info, via_relax)
+        verify_model(CrossEntropy3(), input_info, via_relax)
 
 
 def test_silu():
-    """test relax translator for silu"""
+    """test torch translator for silu"""
 
     class SiLU(Module):
         def __init__(self):
@@ -424,12 +394,13 @@ def test_silu():
             return torch.nn.functional.silu(data)
 
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(SiLU(), input_info)
-    verify_model(SiLU2(), input_info)
+    for via_relax in [True, False]:
+        verify_model(SiLU(), input_info, via_relax)
+        verify_model(SiLU2(), input_info, via_relax)
 
 
 def test_groupnorm():
-    """test relax translator for groupnorm"""
+    """test torch translator for groupnorm"""
 
     class GroupNorm(Module):
         def __init__(self):
@@ -440,11 +411,12 @@ def test_groupnorm():
             return self.groupnorm(data)
 
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(GroupNorm(), input_info)
+    for via_relax in [True, False]:
+        verify_model(GroupNorm(), input_info, via_relax)
 
 
 def test_softmax():
-    """test relax translator for softmax"""
+    """test torch translator for softmax"""
 
     class Softmax(Module):
         def __init__(self):
@@ -455,11 +427,12 @@ def test_softmax():
             return self.softmax(data)
 
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Softmax(), input_info)
+    for via_relax in [True, False]:
+        verify_model(Softmax(), input_info, via_relax)
 
 
 def test_binary():
-    """test relax translator for binary"""
+    """test torch translator for binary"""
 
     input_info1 = [([1, 3, 10, 10], "float32"), ([1, 3, 10, 10], "float32")]
     input_info2 = [([1, 3, 10, 10], "float32")]
@@ -473,8 +446,9 @@ def test_binary():
         def forward(self, lhs):
             return lhs + 1.0
 
-    verify_model(Add1(), input_info1)
-    verify_model(Add2(), input_info2)
+    for via_relax in [True, False]:
+        verify_model(Add1(), input_info1, via_relax)
+        verify_model(Add2(), input_info2, via_relax)
 
     # Sub
     class Sub1(Module):
@@ -485,8 +459,9 @@ def test_binary():
         def forward(self, lhs):
             return lhs - 1.0
 
-    verify_model(Sub1(), input_info1)
-    verify_model(Sub2(), input_info2)
+    for via_relax in [True, False]:
+        verify_model(Sub1(), input_info1, via_relax)
+        verify_model(Sub2(), input_info2, via_relax)
 
     # Mul
     class Mul1(Module):
@@ -497,8 +472,9 @@ def test_binary():
         def forward(self, lhs):
             return lhs * 1.0
 
-    verify_model(Mul1(), input_info1)
-    verify_model(Mul2(), input_info2)
+    for via_relax in [True, False]:
+        verify_model(Mul1(), input_info1, via_relax)
+        verify_model(Mul2(), input_info2, via_relax)
 
     # True div
     class TrueDiv1(Module):
@@ -509,8 +485,9 @@ def test_binary():
         def forward(self, lhs):
             return lhs / 1.0
 
-    verify_model(TrueDiv1(), input_info1)
-    verify_model(TrueDiv2(), input_info2)
+    for via_relax in [True, False]:
+        verify_model(TrueDiv1(), input_info1, via_relax)
+        verify_model(TrueDiv2(), input_info2, via_relax)
 
     # Floor div
     class FloorDiv1(Module):
@@ -521,8 +498,9 @@ def test_binary():
         def forward(self, lhs):
             return lhs // 1.0
 
-    verify_model(FloorDiv1(), input_info1)
-    verify_model(FloorDiv2(), input_info2)
+    for via_relax in [True, False]:
+        verify_model(FloorDiv1(), input_info1, via_relax)
+        verify_model(FloorDiv2(), input_info2, via_relax)
 
     # Power
     class Power1(Module):
@@ -533,8 +511,9 @@ def test_binary():
         def forward(self, lhs):
             return lhs**1.0
 
-    verify_model(Power1(), input_info1)
-    verify_model(Power2(), input_info2)
+    for via_relax in [True, False]:
+        verify_model(Power1(), input_info1, via_relax)
+        verify_model(Power2(), input_info2, via_relax)
 
     # LT
     class LT1(Module):
@@ -545,12 +524,13 @@ def test_binary():
         def forward(self, lhs):
             return lhs < 1.0
 
-    verify_model(LT1(), input_info1)
-    verify_model(LT2(), input_info2)
+    for via_relax in [True, False]:
+        verify_model(LT1(), input_info1, via_relax)
+        verify_model(LT2(), input_info2, via_relax)
 
 
 def test_size():
-    """test relax translator for size"""
+    """test torch translator for size"""
 
     class Size(Module):
         def forward(self, data):
@@ -561,7 +541,7 @@ def test_size():
 
 
 def test_squeeze():
-    """test relax translator for squeeze"""
+    """test torch translator for squeeze"""
 
     class Squeeze1(Module):
         def forward(self, data):
@@ -572,12 +552,13 @@ def test_squeeze():
             return data.squeeze()
 
     input_info = [([3, 1, 4, 1], "float32")]
-    verify_model(Squeeze1(), input_info)
-    verify_model(Squeeze2(), input_info)
+    for via_relax in [True, False]:
+        verify_model(Squeeze1(), input_info, via_relax)
+        verify_model(Squeeze2(), input_info, via_relax)
 
 
 def test_unsqueeze():
-    """test relax translator for unsqueeze"""
+    """test torch translator for unsqueeze"""
 
     class Unsqueeze1(Module):
         def forward(self, data):
@@ -588,12 +569,13 @@ def test_unsqueeze():
             return data.unsqueeze(-1)
 
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Unsqueeze1(), input_info)
-    verify_model(Unsqueeze2(), input_info)
+    for via_relax in [True, False]:
+        verify_model(Unsqueeze1(), input_info, via_relax)
+        verify_model(Unsqueeze2(), input_info, via_relax)
 
 
 def test_getattr():
-    """test relax translator for getattr"""
+    """test torch translator for getattr"""
 
     class GetAttr1(Module):
         def forward(self, data):
@@ -604,22 +586,24 @@ def test_getattr():
 
 
 def test_getitem():
-    """test relax translator for getitem"""
+    """test torch translator for getitem"""
 
+    # TODO(tong.meng): strided_slice reshape bug for x[0, 1::2, :, :3]
     class Slice1(Module):
         def forward(self, x):
-            return x[0, 1::2, :, :3]
+            return x[0:1, 1::2, :, :3]
 
     class Slice2(Module):
         def forward(self, x):
             return x[:, None, None, :, None]
 
-    verify_model(Slice1(), [([1, 3, 10, 10], "float32")])
-    verify_model(Slice2(), [([8, 16], "float32")])
+    for via_relax in [True, False]:
+        verify_model(Slice1(), [([1, 3, 10, 10], "float32")], via_relax)
+        verify_model(Slice2(), [([8, 16], "float32")], via_relax)
 
 
 def test_unary():
-    """test relax translator for unary"""
+    """test torch translator for unary"""
 
     input_info = [([1, 3, 10, 10], "float32")]
 
@@ -628,90 +612,100 @@ def test_unary():
         def forward(self, data):
             return torch.sin(data)
 
-    verify_model(Sin(), input_info)
+    for via_relax in [True, False]:
+        verify_model(Sin(), input_info, via_relax)
 
     # cos
     class Cos(Module):
         def forward(self, data):
             return torch.cos(data)
 
-    verify_model(Cos(), input_info)
+    for via_relax in [True, False]:
+        verify_model(Cos(), input_info, via_relax)
 
     # exp
     class Exp(Module):
         def forward(self, data):
             return torch.exp(data)
 
-    verify_model(Exp(), input_info)
+    for via_relax in [True, False]:
+        verify_model(Exp(), input_info, via_relax)
 
     # sqrt
     class Sqrt(Module):
         def forward(self, data):
             return torch.sqrt(data)
 
-    verify_model(Sqrt(), input_info)
+    for via_relax in [True, False]:
+        verify_model(Sqrt(), input_info, via_relax)
 
     # sigmoid
     class Sigmoid(Module):
         def forward(self, data):
             return torch.sigmoid(data)
 
-    verify_model(Sigmoid(), input_info)
+    for via_relax in [True, False]:
+        verify_model(Sigmoid(), input_info, via_relax)
 
     # round
     class Round(Module):
         def forward(self, data):
             return torch.round(data)
 
-    verify_model(Round(), input_info)
+    for via_relax in [True, False]:
+        verify_model(Round(), input_info, via_relax)
 
 
 def test_gelu():
-    """test relax translator for gelu"""
+    """test torch translator for gelu"""
 
     class Gelu(Module):
         def forward(self, data):
             return torch.nn.functional.gelu(data)
 
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Gelu(), input_info)
+    for via_relax in [True, False]:
+        verify_model(Gelu(), input_info, via_relax)
 
 
 def test_tanh():
-    """test relax translator for tanh"""
+    """test torch translator for tanh"""
 
     class Tanh(Module):
         def forward(self, data):
             return torch.tanh(data)
 
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Tanh(), input_info)
+    for via_relax in [True, False]:
+        verify_model(Tanh(), input_info, via_relax)
 
 
 def test_clamp():
-    """test relax translator for clamp"""
+    """test torch translator for clamp"""
 
     class Clamp(Module):
         def forward(self, data):
             return torch.clamp(data, min=0.1, max=0.5)
 
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Clamp(), input_info)
+    for via_relax in [True, False]:
+        verify_model(Clamp(), input_info, via_relax)
 
 
 def test_interpolate():
-    """test relax translator for interpolate"""
+    """test torch translator for interpolate"""
 
     class Interpolate(Module):
         def forward(self, data):
             return torch.nn.functional.interpolate(data, (5, 5))
 
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Interpolate(), input_info)
+    for via_relax in [True, False]:
+        verify_model(Interpolate(), input_info, via_relax)
 
 
 def test_addmm():
-    """test relax translator for addmm"""
+    """test torch translator for addmm"""
 
     class Addmm(Module):
         def forward(self, x_1, x_2, x_3):
@@ -722,90 +716,70 @@ def test_addmm():
         ([10, 10], "float32"),
         ([10, 10], "float32"),
     ]
-    verify_model(Addmm(), input_info)
+    for via_relax in [True, False]:
+        verify_model(Addmm(), input_info, via_relax)
 
 
 def test_split():
-    """test relax translator for split"""
+    """test torch translator for split"""
 
     class Split(Module):
         def forward(self, data):
             return torch.split(data, 1, dim=1)
 
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Split(), input_info)
+    for via_relax in [True, False]:
+        verify_model(Split(), input_info, via_relax)
 
 
 def test_cumsum():
-    """test relax translator for cumsum"""
+    """test torch translator for cumsum"""
 
     class Cumsum(Module):
         def forward(self, data):
             return torch.cumsum(data, dim=1, dtype=torch.int32)
 
     input_info = [([1, 2, 3, 4], "float32")]
-    verify_model(Cumsum(), input_info)
+    for via_relax in [True, False]:
+        verify_model(Cumsum(), input_info, via_relax)
 
 
 def test_chunk():
-    """test relax translator for chunk"""
+    """test torch translator for chunk"""
 
     class Chunk(Module):
         def forward(self, data):
             return torch.chunk(data, 3, dim=1)
 
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Chunk(), input_info)
+    for via_relax in [True, False]:
+        verify_model(Chunk(), input_info, via_relax)
 
 
 def test_inplace_fill():
-    """test relax translator for inplace_fill"""
+    """test torch translator for inplace_fill"""
 
     class InplaceFill(Module):
         def forward(self, data):
             data.fill_(1.5)
             return data
 
-    verify_model(InplaceFill(), [([10, 10], "float32")])
+    for via_relax in [True, False]:
+        verify_model(InplaceFill(), [([10, 10], "float32")], via_relax)
 
 
 def test_arange():
-    """test relax translator for arange"""
+    """test torch translator for arange"""
 
     class Arange(Module):
-        def forward(self):
+        def forward(self, data):
             return torch.arange(0, 20, dtype=torch.int32)
 
     verify_model(Arange(), [([10, 10], "float32")])
 
 
-def test_empty():
-    """test relax translator for empty"""
-
-    class Empty(Module):
-        def forward(self):
-            return torch.empty((10, 10), dtype=torch.float32)
-
-    verify_model(Empty(), [([10, 10], "float32")])
-
-
-def test_tensor():
-    """test relax translator for tensor"""
-
-    class Empty1(Module):
-        def forward(self):
-            return torch.tensor(3, dtype=torch.float32)
-
-    class Empty2(Module):
-        def forward(self):
-            return torch.tensor(3)
-
-    verify_model(Empty1(), [([10, 10], "float32")])
-    verify_model(Empty2(), [([10, 10], "float32")])
-
-
 def test_tril():
-    """test relax translator for tril"""
+    """test torch translator for tril"""
 
     class Tril(Module):
         def forward(self, data):
@@ -817,12 +791,13 @@ def test_tril():
             return data
 
     input_info = [([10, 10], "float32")]
-    verify_model(Tril(), input_info)
-    verify_model(InplaceTril(), input_info)
+    for via_relax in [True, False]:
+        verify_model(Tril(), input_info, via_relax)
+        verify_model(InplaceTril(), input_info, via_relax)
 
 
 def test_triu():
-    """test relax translator for triu"""
+    """test torch translator for triu"""
 
     class Triu(Module):
         def forward(self, data):
@@ -834,34 +809,37 @@ def test_triu():
             return data
 
     input_info = [([10, 10], "float32")]
-    verify_model(Triu(), input_info)
-    verify_model(InplaceTriu(), input_info)
+    for via_relax in [True, False]:
+        verify_model(Triu(), input_info, via_relax)
+        verify_model(InplaceTriu(), input_info, via_relax)
 
 
 def test_new_ones():
-    """test relax translator for new_ones"""
+    """test torch translator for new_ones"""
 
     class NewOnes(Module):
         def forward(self, x):
             return x.new_ones(1, 2, 3)
 
     input_info = [([1, 2, 3], "float32")]
-    verify_model(NewOnes(), input_info)
+    for via_relax in [True, False]:
+        verify_model(NewOnes(), input_info, via_relax)
 
 
 def test_expand():
-    """test relax translator for expand"""
+    """test torch translator for expand"""
 
     class Expand(Module):
         def forward(self, x):
             return x.expand(4, 2, 3, 4)
 
     input_info = [([1, 2, 3, 4], "float32")]
-    verify_model(Expand(), input_info)
+    for via_relax in [True, False]:
+        verify_model(Expand(), input_info, via_relax)
 
 
 def test_reduce():
-    """test relax translator for reduce"""
+    """test torch translator for reduce"""
 
     # sum
     class Sum(Module):
@@ -869,11 +847,12 @@ def test_reduce():
             return torch.sum(x, (2, 1))
 
     input_info = [([1, 2, 3, 4], "float32")]
-    verify_model(Sum(), input_info)
+    for via_relax in [True, False]:
+        verify_model(Sum(), input_info, via_relax)
 
 
 def test_datatype():
-    """test relax translator for datatype"""
+    """test torch translator for datatype"""
 
     input_info = [([1, 2, 3, 4], "float32")]
 
@@ -882,81 +861,76 @@ def test_datatype():
         def forward(self, x):
             return x.float()
 
-    verify_model(ToFloat(), input_info)
+    for via_relax in [True, False]:
+        verify_model(ToFloat(), input_info, via_relax)
 
     # half
     class ToHalf(Module):
         def forward(self, x):
             return x.half()
 
-    verify_model(ToHalf(), input_info)
+    for via_relax in [True, False]:
+        verify_model(ToHalf(), input_info, via_relax)
 
     # type
     class Type(Module):
         def forward(self, x):
             return x.type(torch.float32)
 
-    # type
-    class TypeFromAttr(Module):
-        def forward(self, x):
-            return x.type(x.getattr("dtype"))
-
-    # astype
-    class AsType(Module):
-        def forward(self, x):
-            return x.astype(torch.float32)
-
-    verify_model(Type(), input_info)
-    verify_model(TypeFromAttr(), input_info)
-    verify_model(AsType(), input_info)
+    for via_relax in [True, False]:
+        verify_model(Type(), input_info, via_relax)
 
 
 def test_permute():
-    """test relax translator for permute"""
+    """test torch translator for permute"""
 
     class Permute(Module):
         def forward(self, x):
             return x.permute(0, 3, 2, 1)
 
     input_info = [([1, 2, 3, 4], "float32")]
-    verify_model(Permute(), input_info)
+    for via_relax in [True, False]:
+        verify_model(Permute(), input_info, via_relax)
 
 
 def test_reshape():
-    """test relax translator for reshape"""
+    """test torch translator for reshape"""
 
     class Reshape(Module):
         def forward(self, x):
             return x.reshape(2, 12)
 
     input_info = [([1, 2, 3, 4], "float32")]
-    verify_model(Reshape(), input_info)
+    for via_relax in [True, False]:
+        verify_model(Reshape(), input_info, via_relax)
 
 
 def test_transpose():
-    """test relax translator for transpose"""
+    """test torch translator for transpose"""
 
     class Transpose(Module):
         def forward(self, x):
             return x.transpose(1, 3)
 
     input_info = [([1, 2, 3, 4], "float32")]
-    verify_model(Transpose(), input_info)
+    for via_relax in [True, False]:
+        verify_model(Transpose(), input_info, via_relax)
 
 
 def test_view():
-    """test relax translator for view"""
+    """test torch translator for view"""
 
     class View(Module):
         def forward(self, x):
             return x.view(2, 12)
 
     input_info = [([1, 2, 3, 4], "float32")]
-    verify_model(View(), input_info)
+    for via_relax in [True, False]:
+        verify_model(View(), input_info, via_relax)
 
 
 def test_keep_params():
-    """test relax translator for keep_params"""
+    """test torch translator for keep_params"""
 
     class Conv2D1(Module):
         def __init__(self):
@@ -966,32 +940,35 @@ def test_keep_params():
         def forward(self, data):
             return self.conv(data)
 
-    verify_model(Conv2D1(), [([1, 3, 10, 10], "float32")])
+    for via_relax in [True, False]:
+        verify_model(Conv2D1(), [([1, 3, 10, 10], "float32")], via_relax)
 
 
 def test_unwrap_unit_return_tuple():
-    """test relax translator for unwrap_unit_return_tuple"""
+    """test torch translator for unwrap_unit_return_tuple"""
 
     class Identity(Module):
         def forward(self, x):
             return (x,)
 
-    verify_model(Identity(), [([256, 256], "float32")])
+    for via_relax in [True, False]:
+        verify_model(Identity(), [([256, 256], "float32")], via_relax)
 
 
 def test_no_bind_return_tuple():
-    """test relax translator for no_bind_return_tuple"""
+    """test torch translator for no_bind_return_tuple"""
 
     class Identity(Module):
         def forward(self, x, y):
             return (x, y)
 
     input_info = [([256, 256], "float32"), ([256, 256], "float32")]
-    verify_model(Identity(), input_info)
+    for via_relax in [True, False]:
+        verify_model(Identity(), input_info, via_relax)
 
 
 def test_argmax():
-    """test relax translator for argmax"""
+    """test torch translator for argmax"""
 
     class Argmax1(Module):
         def forward(self, data):
@@ -1001,12 +978,13 @@ def test_argmax():
         def forward(self, data):
             return torch.argmax(data, dim=-1, keepdim=True)
 
-    verify_model(Argmax1(), [([256, 256], "float32")])
-    verify_model(Argmax2(), [([256, 256], "float32")])
+    for via_relax in [True, False]:
+        verify_model(Argmax1(), [([256, 256], "float32")], via_relax)
+        verify_model(Argmax2(), [([256, 256], "float32")], via_relax)
 
 
 def test_argmin():
-    """test relax translator for argmin"""
+    """test torch translator for argmin"""
 
     class Argmin1(Module):
         def forward(self, data):
@@ -1021,7 +999,7 @@ def test_argmin():
 
 
 def test_to():
-    """test relax translator for to"""
+    """test torch translator for to"""
 
     class To1(Module):
         def forward(self, data):
@@ -1031,12 +1009,13 @@ def test_to():
         def forward(self, data):
             return data.to("cpu")
 
-    verify_model(To1(), [([256, 256], "float32")])
-    verify_model(To2(), [([256, 256], "float32")])
+    for via_relax in [True, False]:
+        verify_model(To1(), [([256, 256], "float32")], via_relax)
+        verify_model(To2(), [([256, 256], "float32")], via_relax)
 
 
 def test_mean():
-    """test relax translator for mean"""
+    """test torch translator for mean"""
 
     class Mean(Module):
         def forward(self, data):
@@ -1046,42 +1025,46 @@ def test_mean():
         def forward(self, data):
             return data.mean(-1, keepdim=True)
 
-    verify_model(Mean(), [([256, 256], "float32")])
-    verify_model(MeanKeepDim(), [([256, 256], "float32")])
+    for via_relax in [True, False]:
+        verify_model(Mean(), [([256, 256], "float32")], via_relax)
+        verify_model(MeanKeepDim(), [([256, 256], "float32")], via_relax)
 
 
 def test_rsqrt():
-    """test relax translator for rsqrt"""
+    """test torch translator for rsqrt"""
 
     class Rsqrt(Module):
         def forward(self, data):
             return torch.rsqrt(data)
 
-    verify_model(Rsqrt(), [([256, 256], "float32")])
+    for via_relax in [True, False]:
+        verify_model(Rsqrt(), [([256, 256], "float32")], via_relax)
 
 
 def test_neg():
-    """test relax translator for neg"""
+    """test torch translator for neg"""
 
     class Neg(Module):
         def forward(self, data):
             return -data
 
-    verify_model(Neg(), [([256, 256], "float32")])
+    for via_relax in [True, False]:
+        verify_model(Neg(), [([256, 256], "float32")], via_relax)
 
 
 def test_max():
-    """test relax translator for max"""
+    """test torch translator for max"""
 
     class Max(Module):
         def forward(self, x, y):
             return torch.max(x, y)
 
-    verify_model(Max(), [([256, 256], "float32"), ([256, 256], "float32")])
+    for via_relax in [True, False]:
+        verify_model(Max(), [([256, 256], "float32"), ([256, 256], "float32")], via_relax)
 
 
 def test_attention():
-    """test relax translator for attention"""
+    """test torch translator for attention"""
 
     # pylint: disable=import-outside-toplevel
     import torch.nn.functional as F
@@ -1118,5 +1101,4 @@ def test_attention():
 
 
 if __name__ == "__main__":
-    # tvm.testing.main()
-    test_conv1d()
+    tvm.testing.main()

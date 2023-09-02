@@ -134,7 +134,7 @@ class PyCodeGen : public BaseCodeGen<ConfigType> {
       const auto& input = this->graph()->FindTensor(i);
       this->stack_.call_start("load_data")
           .call_str_arg(input->alias)
-          .call_list_arg(input->shape)
+          .call_list_arg(input->shape, "", true)
           .call_str_arg(runtime::DLDataType2String(input->dtype))
           .call_end("inputs[\"" + input->alias + "\"]");
     }
@@ -142,7 +142,7 @@ class PyCodeGen : public BaseCodeGen<ConfigType> {
       const auto& output = this->graph()->FindTensor(o);
       this->stack_.call_start("load_data")
           .call_str_arg(output->alias)
-          .call_list_arg(output->shape)
+          .call_list_arg(output->shape, "", true)
           .call_str_arg(runtime::DLDataType2String(output->dtype))
           .call_end("golden[\"" + output->alias + "\"]");
     }

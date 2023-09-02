@@ -38,12 +38,21 @@ void BaseStack::Line(const String& line) { Line(IdDoc(line)); }
 
 void BaseStack::Comment(const String& comment) { PushDoc(CommentDoc(comment)); }
 
-void BaseStack::Assign(const String& lhs, const String& rhs, const String& annotation) {
+void BaseStack::AssignBase(const String& lhs, const ExprDoc& rhs, const String& annotation) {
   if (annotation.size() == 0) {
-    PushDoc(AssignDoc(IdDoc(lhs), IdDoc(rhs), NullOpt));
+    PushDoc(AssignDoc(IdDoc(lhs), rhs, NullOpt));
   } else {
-    PushDoc(AssignDoc(IdDoc(lhs), IdDoc(rhs), IdDoc(annotation)));
+    PushDoc(AssignDoc(IdDoc(lhs), rhs, IdDoc(annotation)));
   }
+}
+
+void BaseStack::AssignIndexBase(const String& lhs, const String& rhs, const Array<ExprDoc>& indices,
+                                const String& annotation) {
+  Array<Doc> doc_indices;
+  for (const auto& i : indices) {
+    doc_indices.push_back(i);
+  }
+  AssignBase(lhs, IndexDoc(IdDoc(rhs), doc_indices), annotation);
 }
 
 void BaseStack::AttrAccess(const String& attr) {
@@ -173,9 +182,10 @@ void BaseStack::InplaceEnd() {
   }
 }
 
-void BaseStack::CallArgument(const ExprDoc& value, const String& key) {
+void BaseStack::CallArgBase(const ExprDoc& value, const String& key) {
   const auto& call = PopCheckedDoc<CallDoc, CallDocNode>();
   if (key.size() == 0) {
+    ICHECK(call->kwargs_keys.size() == 0) << "kwargs followed by args " << value;
     Array<ExprDoc> args = call->args;
     args.push_back(value);
     PushDoc(CallDoc(call->callee, args, call->kwargs_keys, call->kwargs_values));
@@ -190,13 +200,20 @@ void BaseStack::CallArgument(const ExprDoc& value, const String& key) {
 
 void BaseStack::CallStrArg(const String& value, const String& key) {
   if (value.size() > 0) {
-    CallArgument(DocUtils::ToStrDoc(value), key);
+    CallArgBase(DocUtils::ToStrDoc(value), key);
   }
 }
 
-void BaseStack::CallListArg(const Array<ExprDoc>& values, const String& key, bool allow_empty) {
+void BaseStack::CallListArgBase(const Array<ExprDoc>& values, const String& key, bool allow_empty,
+                                bool as_list) {
   if (values.size() > 0 || allow_empty) {
-    CallArgument(ListDoc(values), key);
+    if (as_list) {
+      CallArgBase(ListDoc(values), key);
+    } else {
+      for (const auto& v : values) {
+        CallArgBase(v);
+      }
+    }
   }
 }
 
@@ -204,7 +221,7 @@ void BaseStack::CallInplaceStart(const String& callee) { CallStart(callee); }
 
 void BaseStack::CallInplaceEnd(const String& key) {
   const auto& inplace = PopCheckedDoc<CallDoc, CallDocNode>();
-  CallArgument(inplace, key);
+  CallArgBase(inplace, key);
 }
 
 void BaseStack::ConditionIf(const String& predicate) {

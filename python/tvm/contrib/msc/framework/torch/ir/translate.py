@@ -72,7 +72,8 @@ def from_torch(
     else:
         datas = [np.random.rand(*i[0]).astype(i[1]) for i in input_info]
         torch_datas = [torch.from_numpy(i) for i in datas]
-        scripted_model = torch.jit.trace(model, tuple(torch_datas)).eval()
+        with torch.no_grad():
+            scripted_model = torch.jit.trace(model, tuple(torch_datas)).eval()
         if input_names:
             assert len(input_names) == len(
                 input_info
@@ -88,6 +89,15 @@ def from_torch(
         for ref, weight in node.get_weights().items():
             if node.optype == "constant":
                 alias = node.name.replace(".", "_")
+            elif node.optype in ("nn.batch_norm", "nn.layer_norm", "nn.group_norm"):
+                if ref == "gamma":
+                    alias = node.name.replace(".", "_") + ".weight"
+                elif ref == "beta":
+                    alias = node.name.replace(".", "_") + ".bias"
+                elif ref == "mean":
+                    alias = node.name.replace(".", "_") + ".running_mean"
+                elif ref == "var":
+                    alias = node.name.replace(".", "_") + ".running_var"
             else:
                 alias = node.name.replace(".", "_") + "." + ref
             weight.set_alias(alias)
