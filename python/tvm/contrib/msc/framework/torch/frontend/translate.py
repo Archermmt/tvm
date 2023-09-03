@@ -14,10 +14,10 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""tvm.contrib.msc.framework.torch.ir.translate"""
+"""tvm.contrib.msc.framework.torch.frontend.translate"""
 
-import numpy as np
 from typing import Dict, Optional, Tuple, List
+import numpy as np
 
 import torch
 import tvm
@@ -25,7 +25,7 @@ from tvm.relax.frontend.torch import from_fx
 from tvm.relay.frontend import from_pytorch
 
 from tvm.contrib.msc.core.ir.graph import MSCGraph
-from tvm.contrib.msc.core.ir.translate import from_relax, from_relay
+from tvm.contrib.msc.core.ir.translate import from_relax
 from tvm.contrib.msc.core.codegen import relay_to_relax
 
 
@@ -78,7 +78,7 @@ def from_torch(
             assert len(input_names) == len(
                 input_info
             ), "input_names {} length mismatch with input_info {}".format(input_names, input_info)
-            shape_list = [(i_name, i_info) for i_name, i_info in zip(input_names, input_info)]
+            shape_list = list(zip(input_names, input_info))
         else:
             shape_list = [("input" + str(idx), i_info) for idx, i_info in enumerate(input_info)]
         relay_mod, params = from_pytorch(scripted_model, shape_list)

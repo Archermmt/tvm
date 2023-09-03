@@ -20,7 +20,6 @@ from typing import Dict, Optional
 import torch
 
 import tvm
-from tvm.relax.transform import BindParams
 from tvm.contrib.msc.core.ir import MSCGraph
 from tvm.contrib.msc.core.codegen import CodeGen
 from tvm.contrib.msc.core import utils as msc_utils

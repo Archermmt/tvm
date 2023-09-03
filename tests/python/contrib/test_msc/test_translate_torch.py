@@ -23,11 +23,13 @@ import torch
 from torch.nn import Module
 
 import tvm.testing
-from tvm.contrib.msc.framework.torch.ir import translate
+from tvm.contrib.msc.framework.torch.frontend import translate
 from tvm.contrib.msc.framework.torch import codegen
 
 
 def verify_model(torch_model, input_info, via_relax=True):
+    """Compare torch module results"""
+
     graph, weights = translate.from_torch(torch_model, input_info, via_relax=via_relax)
     model = codegen.to_torch(graph, weights)
     torch_datas = [torch.from_numpy(np.random.rand(*i[0]).astype(i[1])) for i in input_info]
@@ -771,6 +773,7 @@ def test_inplace_fill():
 def test_arange():
     """test torch translator for arange"""
 
+    # pylint: disable=unused-argument
     class Arange(Module):
         def forward(self, data):
             return torch.arange(0, 20, dtype=torch.int32)
