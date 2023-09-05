@@ -14,19 +14,18 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""tvm.contrib.msc.framework.torch.codegen.codegen"""
+"""tvm.contrib.msc.framework.tensorflow.codegen.codegen"""
 
 from typing import Dict, Optional
-import torch
 
 import tvm
 from tvm.contrib.msc.core.ir import MSCGraph
 from tvm.contrib.msc.core.codegen import CodeGen
 from tvm.contrib.msc.core import utils as msc_utils
-from tvm.contrib.msc.framework.torch import _ffi_api
+from tvm.contrib.msc.framework.tensorflow import _ffi_api
 
 
-def to_torch(
+def to_tensorflow(
     graph: MSCGraph,
     weights: Optional[Dict[str, tvm.nd.array]] = None,
     codegen_config: Optional[Dict[str, str]] = None,
@@ -68,5 +67,7 @@ def to_torch(
             torch.save(state_dict, folder.relpath(graph.name + ".pth"))
         return model
 
-    codegen = CodeGen(graph, _ffi_api.GetTorchSources, codegen_config, print_config, build_folder)
+    codegen = CodeGen(
+        graph, _ffi_api.GetTensorflowSources, codegen_config, print_config, build_folder
+    )
     return codegen.load([], _bind_weights)
