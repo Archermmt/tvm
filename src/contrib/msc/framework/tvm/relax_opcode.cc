@@ -429,6 +429,7 @@ class RelaxNllLossCodeGen : public RelaxOpCode {
 
 class RelaxPool2dCodeGen : public RelaxOpCode {
   RELAX_OP_CODEGEN_METHODS(RelaxPool2dCodeGen)
+
  protected:
   void CodeGenBuild() final {
     stack_.op_start()

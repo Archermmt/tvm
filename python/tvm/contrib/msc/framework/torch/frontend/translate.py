@@ -22,7 +22,6 @@ import numpy as np
 import torch
 import tvm
 from tvm.relax.frontend.torch import from_fx
-from tvm.relay.frontend import from_pytorch
 
 from tvm.contrib.msc.core.ir.graph import MSCGraph
 from tvm.contrib.msc.core.ir.translate import from_relax
@@ -81,7 +80,7 @@ def from_torch(
             shape_list = list(zip(input_names, input_info))
         else:
             shape_list = [("input" + str(idx), i_info) for idx, i_info in enumerate(input_info)]
-        relay_mod, params = from_pytorch(scripted_model, shape_list)
+        relay_mod, params = tvm.relay.frontend.from_pytorch(scripted_model, shape_list)
         relax_mod = relay_to_relax(relay_mod, params, trans_config, build_config, opt_config)
     graph, weights = from_relax(relax_mod, trans_config=trans_config, build_config=build_config)
     # set alias for weights

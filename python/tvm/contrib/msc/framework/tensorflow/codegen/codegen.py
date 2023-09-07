@@ -16,12 +16,13 @@
 # under the License.
 """tvm.contrib.msc.framework.tensorflow.codegen.codegen"""
 
-from typing import Dict, Optional
+from typing import Dict, Optional, Union, List
 
 import tvm
 from tvm.contrib.msc.core.ir import MSCGraph
 from tvm.contrib.msc.core.codegen import CodeGen
 from tvm.contrib.msc.core import utils as msc_utils
+from tvm.contrib.msc.framework.tensorflow import tf_v1
 from tvm.contrib.msc.framework.tensorflow import _ffi_api
 
 
@@ -31,8 +32,8 @@ def to_tensorflow(
     codegen_config: Optional[Dict[str, str]] = None,
     print_config: Optional[Dict[str, str]] = None,
     build_folder: msc_utils.MSCDirectory = None,
-) -> torch.nn.Module:
-    """Change MSCGraph to torch nn.Module.
+) -> tf_v1.Graph:
+    """Change MSCGraph to tensorflow graph.
 
     Parameters
     ----------
@@ -49,25 +50,20 @@ def to_tensorflow(
 
     Returns
     -------
-    model: torch.nn.Module
-        The torch.nn.Module.
+    tf_graph: tf_v1.Graph
+        The tensorflow Graph.
     """
 
-    def _bind_weights(model: torch.nn.Module, folder: msc_utils.MSCDirectory) -> torch.nn.Module:
+    def _bind_weights(
+        outs: Union[tf_v1.Tensor, List[tf_v1.Tensor]], folder: msc_utils.MSCDirectory
+    ) -> Union[tf_v1.Tensor, List[tf_v1.Tensor]]:
         if weights:
-            state_dict = {}
-            for name, data in weights.items():
-                w_producer = graph.find_producer(name)
-                if w_producer.optype == "constant" and w_producer.has_attr("scalar"):
-                    continue
-                w_tensor = graph.find_tensor(name)
-                w_name = w_tensor.alias or name
-                state_dict[w_name] = torch.from_numpy(data.asnumpy())
-            model.load_state_dict(state_dict)
-            torch.save(state_dict, folder.relpath(graph.name + ".pth"))
-        return model
+            with open(folder.relpath(graph.name + "_params.bin"), "wb") as f_params:
+                f_params.write(tvm.runtime.save_param_dict(weights))
+        return outs
 
+    inputs = [tf_v1.placeholder(i.dtype_name, i.get_shape(), i.alias) for i in graph.get_inputs()]
     codegen = CodeGen(
         graph, _ffi_api.GetTensorflowSources, codegen_config, print_config, build_folder
     )
-    return codegen.load([], _bind_weights)
+    return codegen.load(inputs + [weights], _bind_weights)

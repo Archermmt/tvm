@@ -329,6 +329,49 @@ void SetRelayExprName(const IRModule& ref_module, const Expr& e) {
   RelayExprNameSetter(ref_module).VisitExpr(e);
 }
 
+/*!
+ * \brief Name binder for Relay
+ */
+class RelayExprNameBinder : public ExprVisitor {
+ public:
+  explicit RelayExprNameBinder(const String& name_key, const String& seperator)
+      : name_key_(name_key), seperator_(seperator) {}
+
+  void VisitExpr_(const CallNode* op) final {
+    ExprVisitor::VisitExpr_(op);
+    if (op->span.defined()) {
+      const auto& name = op->span->source_name->name;
+      String valid_name;
+      if (name_key_.size() == 0) {
+        valid_name = name;
+        op->span = Span(SourceName::Get(""), op->span->line, op->span->end_line, op->span->column,
+                        op->span->end_column);
+      } else {
+        const auto& right = std::get<1>(StringUtils::SplitOnce(name, name_key_));
+        if (right.size() > 0) {
+          valid_name = std::get<0>(StringUtils::SplitOnce(name, seperator_));
+          if (valid_name.size() > 0) {
+            const auto& new_source = StringUtils::Replace(name, name_key_ + valid_name, "");
+            op->span = Span(SourceName::Get(new_source), op->span->line, op->span->end_line,
+                            op->span->column, op->span->end_column);
+          }
+        }
+      }
+      if (valid_name.size() > 0) {
+        op->span = SpanUtils::SetAttr(op->span, "name", valid_name);
+      }
+    }
+  }
+
+ private:
+  String name_key_;
+  String seperator_;
+};  // class ExprNameBinder
+
+void BindRelayExprName(const Expr& e, const String& name_key, const String& seperator) {
+  RelayExprNameBinder(name_key, seperator).VisitExpr(e);
+}
+
 namespace transform {
 
 Pass SetRelayExprName(const String& entry_name) {
@@ -342,7 +385,17 @@ Pass SetRelayExprName(const String& entry_name) {
 
 TVM_REGISTER_GLOBAL("relay._transform.SetRelayExprName").set_body_typed(SetRelayExprName);
 
+Pass BindRelayExprName(const String& name_key, const String& seperator, const String& entry_name) {
+  runtime::TypedPackedFunc<IRModule(IRModule, PassContext)> pass_func = [=](IRModule m,
+                                                                            PassContext pc) {
+    relay::BindRelayExprName(m->Lookup(entry_name), name_key, seperator);
+    return m;
+  };
+  return CreateModulePass(pass_func, 0, "BindRelayExprName", {});
+}
+
+TVM_REGISTER_GLOBAL("relay._transform.BindRelayExprName").set_body_typed(BindRelayExprName);
+
 }  // namespace transform
 }  // namespace relay
-
 }  // namespace tvm

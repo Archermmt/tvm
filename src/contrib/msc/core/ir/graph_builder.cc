@@ -280,19 +280,22 @@ void RelaxGraphBuilder::VisitExpr_(const relax::ConstantNode* op) {
 
 void RelaxGraphBuilder::VisitBinding_(const relax::VarBindingNode* binding,
                                       const relax::ConstantNode* val) {
-  AddNode(GetRef<relax::Constant>(val), binding->var);
+  const String& name = config_.use_var_name ? binding->var->name_hint() : "";
+  AddNode(GetRef<relax::Constant>(val), binding->var, name);
 }
 
 void RelaxGraphBuilder::VisitBinding_(const relax::VarBindingNode* binding,
                                       const relax::ShapeExprNode* val) {
-  AddNode(GetRef<relax::ShapeExpr>(val), binding->var);
+  const String& name = config_.use_var_name ? binding->var->name_hint() : "";
+  AddNode(GetRef<relax::ShapeExpr>(val), binding->var, name);
 }
 
 void RelaxGraphBuilder::VisitBinding_(const relax::VarBindingNode* binding,
                                       const relax::CallNode* call_node) {
   RelaxExprVisitor::VisitBinding_(binding, call_node);
+  const String& name = config_.use_var_name ? binding->var->name_hint() : "";
   try {
-    AddNode(GetRef<relax::Call>(call_node), binding->var);
+    AddNode(GetRef<relax::Call>(call_node), binding->var, name);
   } catch (runtime::InternalError& err) {
     LOG(WARNING) << "Failed to add node from " << binding->var << " : " << binding->value
                  << ", reason: " << err.message();
@@ -303,13 +306,15 @@ void RelaxGraphBuilder::VisitBinding_(const relax::VarBindingNode* binding,
 void RelaxGraphBuilder::VisitBinding_(const relax::VarBindingNode* binding,
                                       const relax::TupleNode* val) {
   RelaxExprVisitor::VisitBinding_(binding, val);
-  AddNode(GetRef<relax::Tuple>(val), binding->var);
+  const String& name = config_.use_var_name ? binding->var->name_hint() : "";
+  AddNode(GetRef<relax::Tuple>(val), binding->var, name);
 }
 
 void RelaxGraphBuilder::VisitBinding_(const relax::VarBindingNode* binding,
                                       const relax::TupleGetItemNode* val) {
   RelaxExprVisitor::VisitBinding_(binding, val);
-  AddNode(GetRef<relax::TupleGetItem>(val), binding->var);
+  const String& name = config_.use_var_name ? binding->var->name_hint() : "";
+  AddNode(GetRef<relax::TupleGetItem>(val), binding->var, name);
 }
 
 void RelaxGraphBuilder::VisitBinding_(const relax::VarBindingNode* binding,

@@ -68,8 +68,10 @@ const std::vector<int> TorchOpCode::GetPadding(const String& key) {
       padding.push_back(src_padding[0]);
       padding.push_back(src_padding[1]);
     } else {
-      LOG_FATAL << "nn.conv1d with unexpected padding " << node();
+      LOG_FATAL << "nn.conv2d/pool2d with unexpected padding " << node();
     }
+  } else {
+    LOG_FATAL << "Unexpected padding node" << node();
   }
   return padding;
 }

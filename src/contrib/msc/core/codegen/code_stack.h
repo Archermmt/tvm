@@ -511,6 +511,12 @@ class OpCodeStack : public BaseStack {
     return *this;
   }
 
+  /*! \brief Cache name as argument*/
+  OpCodeStack<OpCodeGenType>& op_name_arg(const String& key = "name") {
+    return call_str_arg(codegen_->node()->name, key);
+    return *this;
+  }
+
   OpCodeStack<OpCodeGenType>& call_dtype_arg(const DataType& dtype, const String& key = "") {
     return call_arg(codegen_->DType(dtype), key);
   }

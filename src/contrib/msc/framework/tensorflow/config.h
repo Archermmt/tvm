@@ -18,11 +18,11 @@
  */
 
 /*!
- * \file src/contrib/msc/framework/torch/config.h
- * \brief Torch config for codegen.
+ * \file src/contrib/msc/framework/tensorflow/config.h
+ * \brief Tensorflow config for codegen.
  */
-#ifndef TVM_CONTRIB_MSC_FRAMEWORK_TORCH_CONFIG_H_
-#define TVM_CONTRIB_MSC_FRAMEWORK_TORCH_CONFIG_H_
+#ifndef TVM_CONTRIB_MSC_FRAMEWORK_TENSORFLOW_CONFIG_H_
+#define TVM_CONTRIB_MSC_FRAMEWORK_TENSORFLOW_CONFIG_H_
 
 #include <string>
 
@@ -35,7 +35,7 @@ namespace msc {
 /*!
  * \brief CodeGen config for torch codegen
  */
-struct TorchCodeGenConfig {
+struct TensorflowCodeGenConfig {
   bool is_training{false};
   CODEGEN_CONFIG_MEMBERS
   void Load(dmlc::JSONReader* reader) {
@@ -54,4 +54,4 @@ struct TorchCodeGenConfig {
 }  // namespace msc
 }  // namespace contrib
 }  // namespace tvm
-#endif  // TVM_CONTRIB_MSC_FRAMEWORK_TORCH_CONFIG_H_
+#endif  // TVM_CONTRIB_MSC_FRAMEWORK_TENSORFLOW_CONFIG_H_

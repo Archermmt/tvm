@@ -17,13 +17,11 @@
 """tvm.contrib.msc.framework.torch.frontend.translate"""
 
 from typing import Dict, Optional, Tuple, List
-import numpy as np
 
-import tensorflow as tf
 import tvm
-from tvm.relay.frontend import from_tensorflow
 
 from tvm.contrib.msc.core.ir.graph import MSCGraph
+from tvm.contrib.msc.core import transform as msc_transform
 from tvm.contrib.msc.core.ir.translate import from_relax
 from tvm.contrib.msc.core.codegen import relay_to_relax
 from tvm.contrib.msc.framework.tensorflow import tf_v1
@@ -68,7 +66,14 @@ def from_tensorflow(
     if via_relax:
         raise NotImplementedError("Relax frontend for tensorflow is not supported")
     else:
-        relay_mod, params = from_tensorflow(graph_def, shape=shape_dict, outputs=outputs)
+        relay_mod, params = tvm.relay.frontend.from_tensorflow(
+            graph_def, shape=shape_dict, outputs=outputs
+        )
+        passes = [msc_transform.BindExprName()]
+        relay_mod = tvm.transform.Sequential(passes)(relay_mod)
         relax_mod = relay_to_relax(relay_mod, params, trans_config, build_config, opt_config)
+        build_config = build_config or {}
+        build_config["use_var_name"] = True
+    print("[TMINFO] relax_mod " + str(relax_mod))
     graph, weights = from_relax(relax_mod, trans_config=trans_config, build_config=build_config)
     return graph, weights

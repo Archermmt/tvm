@@ -60,6 +60,12 @@ class CommonUtils {
 class StringUtils {
  public:
   /*!
+   * \brief Check if the String contains a substring.
+   * \return Whether substring is contained.
+   */
+  TVM_DLL static bool Contains(const String& src_string, const String& sub_string);
+
+  /*!
    * \brief Split the String into sub Strings.
    * \return The SubStrings.
    */

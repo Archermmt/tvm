@@ -132,7 +132,6 @@ def relay_to_relax(
         for i in graph.get_inputs()
     ]
 
-    # pylint: disable=unused-argument
     def _bind_weights(mod: tvm.IRModule, folder: msc_utils.MSCDirectory) -> tvm.IRModule:
         return BindParams("main", weights)(mod)
 

@@ -252,6 +252,9 @@ InferLayoutOutput ForwardInferLayoutBinary(const Call& call,
     if (const auto* t_info = sinfo.as<TensorStructInfoNode>()) {
       if (t_info->ndim == 0) {
         input_layouts.push_back(LayoutDecision(""));
+      } else if (t_info->ndim == 1) {
+        const auto& ref_layout = output->input_layouts[i].LeafValue()->layout;
+        input_layouts.push_back(LayoutDecision(ref_layout[ref_layout.ndim() - 1].name()));
       } else {
         input_layouts.push_back(output->input_layouts[i]);
       }
@@ -624,6 +627,9 @@ InferLayoutOutput BackwardInferLayoutBinary(const Call& call,
     if (const auto* t_info = sinfo.as<TensorStructInfoNode>()) {
       if (t_info->ndim == 0) {
         input_layouts.push_back(LayoutDecision(""));
+      } else if (t_info->ndim == 1) {
+        const auto& ref_layout = output->input_layouts[i].LeafValue()->layout;
+        input_layouts.push_back(LayoutDecision(ref_layout[ref_layout.ndim() - 1].name()));
       } else {
         input_layouts.push_back(output->input_layouts[i]);
       }
