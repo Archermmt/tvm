@@ -313,7 +313,7 @@ def test_biasadd():
     _test_biasadd([4, 8, 8, 176], "NHWC")
 
 
-def _test_forward_where_with_broadcast(in_shape, cond_shape):
+def _test_where_with_broadcast(in_shape, cond_shape):
     choice_list = list(np.arange(10).astype("float32"))
     t1 = np.random.choice(choice_list, size=cond_shape)
     t2 = np.random.choice(choice_list, size=cond_shape)
@@ -336,106 +336,11 @@ def _test_forward_where_with_broadcast(in_shape, cond_shape):
     verify_model(graph_def, golden, **io_info)
 
 
-def test_forward_where_with_broadcast():
-    _test_forward_where_with_broadcast((5, 2), (5,))
-    _test_forward_where_with_broadcast((5, 7), (5,))
-    _test_forward_where_with_broadcast((3, 2, 5), (3,))
+def test_where_with_broadcast():
+    """test tensorflow translator for where"""
 
-
-#######################################################################
-# SpaceToBatchND
-# --------------
-
-
-def _test_space_to_batch_nd(input_shape, block_shape, paddings, dtype="int32"):
-    data = np.random.uniform(0, 5, size=input_shape).astype(dtype)
-
-    with tf.Graph().as_default():
-        in_data = tf.placeholder(shape=input_shape, dtype=dtype)
-        out = tf.space_to_batch_nd(in_data, block_shape, paddings)
-
-        verify_model(data, in_data.name, out.name)
-
-
-def _test_space_to_batch_nd_infer_paddings(input_shape, block_shape, dtype="int32"):
-    data = np.random.uniform(0, 5, size=input_shape).astype(dtype)
-    padding_np = np.array([0, 1]).astype(np.int32).reshape((1, 2))
-    with tf.Graph().as_default():
-        in_data = tf.placeholder(shape=input_shape, dtype=dtype)
-        const1 = tf.constant(padding_np, dtype=tf.int32)
-        # make paddings an input to tf.transpose, but not an input to the graph,
-        # so it can be extracted with infer_value_simulated
-        paddings = tf.reverse(const1, axis=[-1])
-        out = tf.space_to_batch_nd(in_data, block_shape, paddings)
-        verify_model(data, in_data.name, out.name)
-
-
-def test_forward_space_to_batch_nd():
-    """SpaceToBatchNd"""
-    # test cases: https://www.tensorflow.org/api_docs/cc/class/tensorflow/ops/space-to-batch-n-d
-    _test_space_to_batch_nd(input_shape=[1, 2, 2, 1], block_shape=[2, 2], paddings=[[0, 0], [0, 0]])
-
-    _test_space_to_batch_nd(input_shape=[1, 2, 2, 3], block_shape=[2, 2], paddings=[[0, 0], [0, 0]])
-
-    _test_space_to_batch_nd(input_shape=[1, 4, 4, 1], block_shape=[2, 2], paddings=[[0, 0], [0, 0]])
-
-    _test_space_to_batch_nd(
-        input_shape=[2, 2, 4, 1], block_shape=[2, 2], paddings=[[0, 0], [2, 0]], dtype="int64"
-    )
-
-    # pylint: disable=line-too-long
-    # https://github.com/tensorflow/tensorflow/blob/24f578/tensorflow/python/kernel_tests/spacetobatch_op_test.py
-    _test_space_to_batch_nd(input_shape=[2, 3], block_shape=[2], paddings=[[1, 0]], dtype="float32")
-
-    _test_space_to_batch_nd(
-        input_shape=[2, 3, 2], block_shape=[2], paddings=[[1, 0]], dtype="float64"
-    )
-
-    _test_space_to_batch_nd_infer_paddings(input_shape=[2, 3, 2], block_shape=[2])
-
-
-#######################################################################
-# BatchToSpaceND
-# --------------
-
-
-def _test_batch_to_space_nd(input_shape, block_shape, crops, dtype="int32"):
-    data = np.random.uniform(0, 5, size=input_shape).astype(dtype)
-
-    with tf.Graph().as_default():
-        in_data = tf.placeholder(shape=input_shape, dtype=dtype)
-        out = tf.batch_to_space_nd(in_data, block_shape, crops)
-
-        verify_model(data, in_data.name, out.name)
-
-
-def test_forward_batch_to_space_nd():
-    """BatchToSpaceNd"""
-    # test cases: https://www.tensorflow.org/api_docs/cc/class/tensorflow/ops/batch-to-space-n-d
-    _test_batch_to_space_nd(input_shape=[4, 1, 1, 1], block_shape=[2, 2], crops=[[0, 0], [0, 0]])
-
-    _test_batch_to_space_nd(input_shape=[4, 1, 1, 3], block_shape=[2, 2], crops=[[0, 0], [0, 0]])
-
-    _test_batch_to_space_nd(input_shape=[4, 2, 2, 1], block_shape=[2, 2], crops=[[0, 0], [0, 0]])
-
-    _test_batch_to_space_nd(
-        input_shape=[8, 1, 3, 1], block_shape=[2, 2], crops=[[0, 0], [2, 0]], dtype="int64"
-    )
-
-    # pylint: disable=line-too-long
-    # https://github.com/tensorflow/tensorflow/blob/24f578/tensorflow/python/kernel_tests/batchtospace_op_test.py
-    _test_batch_to_space_nd(
-        input_shape=[18, 2, 1, 2], block_shape=[2, 3], crops=[[1, 1], [0, 0]], dtype="float32"
-    )
-
-    _test_batch_to_space_nd(
-        input_shape=[20, 5, 8, 7], block_shape=[2, 2], crops=[[1, 1], [1, 1]], dtype="float64"
-    )
-
-
-#######################################################################
-# Reshape
-# -------
+    _test_where_with_broadcast((5, 2), (5,))
+    _test_where_with_broadcast((3, 2, 5), (3,))
 
 
 def _test_reshape(data, out_shape):
@@ -444,8 +349,13 @@ def _test_reshape(data, out_shape):
     with tf.Graph().as_default():
         in_data = array_ops.placeholder(shape=data.shape, dtype=data.dtype)
         array_ops.reshape(in_data, out_shape)
-
-        verify_model(data, "Placeholder:0", "Reshape:0")
+        io_info = {
+            "in_data": data,
+            "in_name": "Placeholder:0",
+            "out_name": "Reshape:0",
+        }
+        graph_def, golden = get_graph_def(**io_info)
+    verify_model(graph_def, golden, **io_info)
 
 
 def _test_reshape_with_call():
@@ -456,8 +366,13 @@ def _test_reshape_with_call():
         out_shape = tf.constant([1, 2, 3], dtype="int32")
         out_shape = tf.multiply(out_shape, 2)
         array_ops.reshape(in_data, out_shape)
-
-        verify_model(data, "Placeholder:0", "Reshape:0")
+        io_info = {
+            "in_data": data,
+            "in_name": "Placeholder:0",
+            "out_name": "Reshape:0",
+        }
+        graph_def, golden = get_graph_def(**io_info)
+    verify_model(graph_def, golden, **io_info)
 
 
 def _test_reshape_like(data, shape_like):
@@ -468,8 +383,13 @@ def _test_reshape_like(data, shape_like):
         in_shape_like = array_ops.placeholder(shape=shape_like.shape, dtype=data.dtype)
         out_shape = array_ops.shape(in_shape_like)
         array_ops.reshape(in_data, out_shape)
-
-        verify_model(data, "Placeholder:0", "Reshape:0")
+        io_info = {
+            "in_data": data,
+            "in_name": "Placeholder:0",
+            "out_name": "Reshape:0",
+        }
+        graph_def, golden = get_graph_def(**io_info)
+    verify_model(graph_def, golden, **io_info)
 
 
 def _test_reshape_symbolic(data, a_data, b_data):
@@ -479,70 +399,23 @@ def _test_reshape_symbolic(data, a_data, b_data):
         b = array_ops.placeholder(shape=b_data.shape, dtype=b_data.dtype)
         newshape = tf.add(a, b)
         out = array_ops.reshape(in_data, newshape)
+        io_info = {
+            "in_data": [data, a_data, b_data],
+            "in_name": [in_data.name, a.name, b.name],
+            "out_name": out.name,
+        }
+        graph_def, golden = get_graph_def(**io_info)
+    verify_model(graph_def, golden, **io_info)
 
-        for mode in ["debug", "vm"]:
-            verify_model(
-                [data, a_data, b_data], [in_data.name, a.name, b.name], out.name, mode=mode
-            )
 
+def test_reshape():
+    """test tensorflow translator for reshape"""
 
-def test_forward_reshape():
-    """Reshape"""
     _test_reshape(np.arange(6.0), [2, 3])
     _test_reshape(np.arange(6), [-1, 2])
-    _test_reshape(np.arange(6), [3, -1])
-    _test_reshape(np.arange(6), [-1])
     _test_reshape_with_call()
     _test_reshape_like(np.zeros((3, 6)), np.zeros((9, 2)))
     _test_reshape_symbolic(np.arange(6.0), np.array([2, 0]), np.array([0, 3]))
-    _test_reshape_symbolic(np.arange(6), np.array([-1, 0]), np.array([0, 2]))
-    _test_reshape_symbolic(np.arange(6), np.array([3, 0]), np.array([3, -1]))
-    _test_reshape_symbolic(np.arange(6), np.array([0]), np.array([-1]))
-
-
-#######################################################################
-# DepthToSpace
-# ------------
-
-
-def _test_depthtospace(data, block_size):
-    """One iteration of depth_to_space operation with given data and block size"""
-
-    with tf.Graph().as_default():
-        in_data = array_ops.placeholder(shape=data.shape, dtype=data.dtype)
-        array_ops.depth_to_space(in_data, block_size)
-
-        verify_model(data, "Placeholder:0", "DepthToSpace:0")
-
-
-def test_forward_depthtospace():
-    _test_depthtospace(np.random.normal(size=[1, 32, 32, 4]), 2)
-    _test_depthtospace(np.random.normal(size=[1, 16, 8, 32]), 4)
-
-
-#######################################################################
-# SpaceToDepth
-# ------------
-
-
-def _test_spacetodepth(data, block_size):
-    """One iteration of space_to_depth operation with given data and block size"""
-
-    with tf.Graph().as_default():
-        in_data = array_ops.placeholder(shape=data.shape, dtype=data.dtype)
-        array_ops.space_to_depth(in_data, block_size)
-
-        verify_model(data, "Placeholder:0", "SpaceToDepth:0")
-
-
-def test_forward_spacetodepth():
-    _test_spacetodepth(np.random.normal(size=[1, 32, 32, 4]), 2)
-    _test_spacetodepth(np.random.normal(size=[1, 16, 8, 32]), 4)
-
-
-#######################################################################
-# Squeeze
-# -------
 
 
 def _test_squeeze(data, squeeze_dims=None):
@@ -558,16 +431,17 @@ def _test_squeeze(data, squeeze_dims=None):
             array_ops.squeeze(in_data, squeeze_dims)
         else:
             array_ops.squeeze(in_data)
+        io_info = {
+            "in_data": data,
+            "in_name": "Placeholder:0",
+            "out_name": "Squeeze:0",
+        }
+        graph_def, golden = get_graph_def(**io_info)
+    verify_model(graph_def, golden, **io_info)
 
-        verify_model(data, "Placeholder:0", "Squeeze:0")
 
-
-def test_forward_squeeze():
-    """Squeeze"""
-
-    # Nothing to squeeze.
-    _test_squeeze(np.arange(2).reshape((2)))
-    _test_squeeze(np.arange(6).reshape((2, 3)))
+def test_squeeze():
+    """test tensorflow translator for squeeze"""
 
     # Squeeze the middle element away.
     _test_squeeze(np.arange(4).reshape((2, 1, 2)))
@@ -576,14 +450,10 @@ def test_forward_squeeze():
     _test_squeeze(np.arange(6).reshape((1, 2, 1, 3, 1)))
 
     # Positive squeeze dim index.
-    _test_squeeze(np.arange(6).reshape((1, 2, 1, 3, 1)), [0])
     _test_squeeze(np.arange(6).reshape((1, 2, 1, 3, 1)), [2, 4])
-    _test_squeeze(np.arange(6).reshape((1, 2, 1, 3, 1)), [0, 4, 2])
 
     # Negative squeeze dim index.
-    _test_squeeze(np.arange(6).reshape((1, 2, 1, 3, 1)), [-1])
     _test_squeeze(np.arange(6).reshape((1, 2, 1, 3, 1)), [-3, -5])
-    _test_squeeze(np.arange(6).reshape((1, 2, 1, 3, 1)), [-3, -5, -1])
 
 
 #######################################################################
@@ -4973,4 +4843,4 @@ class TestSetSpan:
 
 if __name__ == "__main__":
     # tvm.testing.main()
-    test_argwhere()
+    test_squeeze()

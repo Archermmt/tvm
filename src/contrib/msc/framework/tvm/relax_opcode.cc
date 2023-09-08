@@ -619,6 +619,7 @@ const std::shared_ptr<std::unordered_map<String, std::shared_ptr<RelaxOpCode>>> 
   map->emplace("subtract", std::make_shared<RelaxSimpleCodeGen>("relax.op.subtract"));
   map->emplace("tan", std::make_shared<RelaxSimpleCodeGen>("relax.op.tan"));
   map->emplace("tanh", std::make_shared<RelaxSimpleCodeGen>("relax.op.tanh"));
+  map->emplace("where", std::make_shared<RelaxSimpleCodeGen>("relax.op.where"));
 
   // reduce axis ops
   map->emplace("argmax", std::make_shared<RelaxReduceAxisCodeGen>("relax.op.argmax", false));

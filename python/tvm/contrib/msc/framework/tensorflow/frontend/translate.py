@@ -74,6 +74,5 @@ def from_tensorflow(
         relax_mod = relay_to_relax(relay_mod, params, trans_config, build_config, opt_config)
         build_config = build_config or {}
         build_config["use_var_name"] = True
-    print("[TMINFO] relax_mod " + str(relax_mod))
     graph, weights = from_relax(relax_mod, trans_config=trans_config, build_config=build_config)
     return graph, weights

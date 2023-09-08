@@ -338,7 +338,6 @@ class RelayExprNameBinder : public ExprVisitor {
       : name_key_(name_key), seperator_(seperator) {}
 
   void VisitExpr_(const CallNode* op) final {
-    ExprVisitor::VisitExpr_(op);
     if (op->span.defined()) {
       const auto& name = op->span->source_name->name;
       String valid_name;
@@ -358,12 +357,23 @@ class RelayExprNameBinder : public ExprVisitor {
         }
       }
       if (valid_name.size() > 0) {
+        if (setted_names_.count(valid_name)) {
+          int cnt = 1;
+          while (setted_names_.count(valid_name + "_" + std::to_string(cnt)) &&
+                 setted_names_[valid_name + "_" + std::to_string(cnt)] != GetRef<Call>(op)) {
+            cnt++;
+          }
+          valid_name = valid_name + "_" + std::to_string(cnt);
+        }
+        setted_names_.Set(valid_name, GetRef<Call>(op));
         op->span = SpanUtils::SetAttr(op->span, "name", valid_name);
       }
     }
+    ExprVisitor::VisitExpr_(op);
   }
 
  private:
+  Map<String, Expr> setted_names_;
   String name_key_;
   String seperator_;
 };  // class ExprNameBinder

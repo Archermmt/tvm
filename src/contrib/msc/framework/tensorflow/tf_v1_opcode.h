@@ -54,6 +54,11 @@ class TFV1OpCode : public BaseOpCode<TensorflowCodeGenConfig> {
   /*! \brief Convert node to docs*/
   const Array<Doc> GetDocs() final;
 
+  /*! \brief Get dtype string*/
+  const String DType(const DataType& dtype) final {
+    return "tf_v1." + BaseOpCode<TensorflowCodeGenConfig>::DType(dtype);
+  }
+
  protected:
   TFV1OpCodeStack stack_;
 

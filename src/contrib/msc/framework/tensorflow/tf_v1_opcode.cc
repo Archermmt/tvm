@@ -100,6 +100,19 @@ const std::pair<String, Array<String>> TFV1OpCode::GetPadding(const String& stri
  public:                                  \
   TypeName(const String& func_name) : TFV1OpCode(func_name) {}
 
+class TFV1AstypeCodeGen : public TFV1OpCode {
+  TFV1_OP_CODEGEN_METHODS(TFV1AstypeCodeGen)
+
+ protected:
+  void CodeGenBuild() final {
+    stack_.op_start()
+        .op_input_arg()
+        .call_dtype_arg(node()->OutputAt(0)->dtype)
+        .op_name_arg()
+        .op_end();
+  }
+};
+
 class TFV1AxesCodeGen : public TFV1OpCode {
  public:
   TFV1AxesCodeGen(const String& func_name, const String& attr_name) : TFV1OpCode(func_name) {
@@ -114,6 +127,15 @@ class TFV1AxesCodeGen : public TFV1OpCode {
 
  private:
   String attr_name_;
+};
+
+class TFV1BroadcastToCodeGen : public TFV1OpCode {
+  TFV1_OP_CODEGEN_METHODS(TFV1BroadcastToCodeGen)
+
+ protected:
+  void CodeGenBuild() final {
+    stack_.op_start().op_input_arg().op_list_arg<int>("shape").op_name_arg().op_end();
+  }
 };
 
 class TFV1ConstantCodeGen : public TFV1OpCode {
@@ -217,6 +239,15 @@ class TFV1Pool2dCodeGen : public TFV1OpCode {
   }
 };
 
+class TFV1ReshapeCodeGen : public TFV1OpCode {
+  TFV1_OP_CODEGEN_METHODS(TFV1ReshapeCodeGen)
+
+ protected:
+  void CodeGenBuild() final {
+    stack_.op_start().op_input_arg().op_list_arg<int>("shape").op_name_arg().op_end();
+  }
+};
+
 class TensorflowSimpleCodeGen : public TFV1OpCode {
   TFV1_OP_CODEGEN_METHODS(TensorflowSimpleCodeGen)
 
@@ -229,12 +260,20 @@ const std::shared_ptr<std::unordered_map<String, std::shared_ptr<TFV1OpCode>>> G
   if (!map->empty()) return map;
   // binary && unary ops
   map->emplace("add", std::make_shared<TensorflowSimpleCodeGen>("tf_v1.add"));
+  map->emplace("less", std::make_shared<TensorflowSimpleCodeGen>("tf_v1.less"));
+  map->emplace("where", std::make_shared<TensorflowSimpleCodeGen>("tf_v1.where"));
 
   // create ops
   map->emplace("constant", std::make_shared<TFV1ConstantCodeGen>("get_variable"));
 
   // axis && axes ops
   map->emplace("expand_dims", std::make_shared<TFV1AxesCodeGen>("tf_v1.expand_dims", "axis"));
+  map->emplace("squeeze", std::make_shared<TFV1AxesCodeGen>("ops.array_ops.squeeze", "axis"));
+
+  // math ops
+  map->emplace("astype", std::make_shared<TFV1AstypeCodeGen>("tf_v1.cast"));
+  map->emplace("broadcast_to", std::make_shared<TFV1BroadcastToCodeGen>("tf_v1.broadcast_to"));
+  map->emplace("reshape", std::make_shared<TFV1ReshapeCodeGen>("ops.array_ops.reshape"));
 
   // nn ops
   map->emplace("nn.avg_pool2d", std::make_shared<TFV1Pool2dCodeGen>("ops.nn_ops.pool"));
