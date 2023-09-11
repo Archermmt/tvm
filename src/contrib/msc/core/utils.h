@@ -165,7 +165,11 @@ class ArrayUtils {
   TVM_DLL static const Array<T> Cast(const Array<PrimExpr>& src_array) {
     Array<T> new_array;
     for (const auto& s : src_array) {
-      new_array.push_back(Downcast<T>(s));
+      if (s->IsInstance<tvm::tir::AnyNode>()) {
+        new_array.push_back(T(-1));
+      } else {
+        new_array.push_back(Downcast<T>(s));
+      }
     }
     return new_array;
   }

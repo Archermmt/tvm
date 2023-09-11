@@ -61,6 +61,7 @@ def get_span_attrs(mod: tvm.IRModule) -> dict:
 
         def visit_constant_(self, op: relax.Constant) -> None:
             super().visit_constant_(op)
+            print("visiting {} with {}".format(op, op.span))
             self._update_attrs(op)
 
         def visit_var_(self, op: relax.Var) -> None:

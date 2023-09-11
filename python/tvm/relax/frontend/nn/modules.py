@@ -18,13 +18,15 @@
 """Builtin Modules."""
 from typing import List, Optional, Sequence, Union
 
+import numpy as np
+
 from tvm import relax as rx
 from tvm import tir
 from tvm._ffi import register_func
 from tvm.runtime import NDArray
 
 from . import op
-from .core import Effect, Module, Parameter, Tensor, get_default_dtype, ModuleList
+from .core import Effect, Module, ModuleList, Parameter, Tensor, get_default_dtype
 
 
 class IOEffect(Effect):
@@ -78,6 +80,24 @@ class SiLU(Module):
         return op.silu(x)
 
 
+class Identity(Module):
+    """Module that does nothing, sometimes useful for naming purposes."""
+
+    def forward(self, x: Tensor):
+        """Forward method for identity.
+
+        Parameters
+        ----------
+        x : Tensor
+            The input tensor.
+        Returns
+        -------
+        Result : Tensor
+            The unchanged input tensor.
+        """
+        return x
+
+
 class Linear(Module):
     """
     Module for linear layer.
@@ -123,6 +143,56 @@ class Linear(Module):
         if self.bias is not None:
             x = x + self.bias
         return x
+
+
+class MultiLinear(Module):
+    """A layer that applies multiple linear transformations to the input."""
+
+    def __init__(
+        self,
+        in_features: int,
+        out_features: Sequence[int],
+        bias: bool = True,
+        dtype: Optional[str] = None,
+        out_dtype: Optional[str] = None,
+    ):
+        assert len(out_features) > 0
+        total_out_features = sum(out_features)
+
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.out_dtype = out_dtype
+        self.weight = Parameter((total_out_features, in_features), dtype)
+        if bias:
+            self.bias = Parameter((total_out_features,), dtype)
+        else:
+            self.bias = None
+
+    def forward(self, x: Tensor) -> Tensor:
+        """
+        Forward method for linear layer.
+
+        Parameters
+        ----------
+        x : Tensor
+            The input tensor.
+
+        Returns
+        -------
+        ret : Tensor
+            The output tensor for the linear layer.
+        """
+        sections = list(np.cumsum(self.out_features)[:-1])
+        # x: [*B, in_features]
+        # w: [in_features, out_features]
+        w = op.permute_dims(self.weight)
+        # x: [*B, out_features]
+        x = op.matmul(x, w, out_dtype=self.out_dtype)
+        if self.bias is not None:
+            x = x + self.bias
+        results = op.split(x, sections, axis=-1)
+        return results
 
 
 class Conv1D(Module):
@@ -250,15 +320,20 @@ class LayerNorm(Module):
     def __init__(
         self,
         normalized_shape: int,
-        axes: Union[int, List[int]],
         eps: Optional[float] = 1e-5,
+        elementwise_affine: bool = True,
         dtype: Optional[str] = None,
     ) -> None:
         super().__init__()
+        self.normalized_shape = normalized_shape
         self.eps = eps
-        self.axes = axes
-        self.weight = Parameter((normalized_shape,), dtype=dtype)
-        self.bias = Parameter((normalized_shape,), dtype=dtype)
+        self.elementwise_affine = elementwise_affine
+        if self.elementwise_affine:
+            self.weight = Parameter((normalized_shape,), dtype=dtype)
+            self.bias = Parameter((normalized_shape,), dtype=dtype)
+        else:
+            self.weight = None
+            self.bias = None
 
     def forward(self, x: Tensor) -> Tensor:
         """
@@ -274,8 +349,13 @@ class LayerNorm(Module):
         ret : Tensor
             The output tensor for the layer normalization layer.
         """
-        out = op.layer_norm(x, weight=self.weight, bias=self.bias, axes=self.axes, epsilon=self.eps)
-        return out
+        return op.layer_norm(
+            x,
+            normalized_shape=self.normalized_shape,
+            weight=self.weight,
+            bias=self.bias,
+            eps=self.eps,
+        )
 
 
 class RMSNorm(Module):

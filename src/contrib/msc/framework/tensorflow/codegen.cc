@@ -69,7 +69,7 @@ void TensorflowCodeGen::CodeGenGraph() {
     for (const auto& pair : node->weights) {
       stack_.call_start("get_variable")
           .call_str_arg(pair.second->name)
-          .call_list_arg(pair.second->shape)
+          .call_list_arg(pair.second->shape, "", true)
           .call_str_arg(pair.second->DTypeName())
           .call_arg("weights")
           .call_end(IdxWeight(node, pair.first));

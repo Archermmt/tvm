@@ -103,7 +103,7 @@ const MSCGraph RelaxGraphBuilder::Build(const relax::Function& func) {
 const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>& binding_var,
                                           const String& name) {
   const auto& node_name = name.size() > 0 ? name : SpanUtils::GetAttr(expr->span, "name");
-  const auto& master_name = SpanUtils::GetAttr(expr->span, "master_name");
+  const auto& shared_ref = SpanUtils::GetAttr(expr->span, "shared_ref");
   String optype;
   if (expr->IsInstance<relax::VarNode>()) {
     optype = "input";
@@ -179,9 +179,19 @@ const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>
         attrs.Set(input_types[i], StringUtils::ToString(s_node->value));
         continue;
       }
-      ICHECK(expr_tensor_map_.count(arg)) << "Missing argument " << arg;
+      Array<String> arg_names;
+      if (expr_tensor_map_.count(arg)) {
+        arg_names = expr_tensor_map_[arg];
+      } else if (const auto* tuple_node = arg.as<relax::TupleNode>()) {
+        for (const auto& f : tuple_node->fields) {
+          ICHECK(expr_tensor_map_.count(f)) << "Can not find tuple field " << f;
+          for (const auto& in_name : expr_tensor_map_[f]) {
+            arg_names.push_back(in_name);
+          }
+        }
+      }
       if (input_types[i] != "input" && arg->IsInstance<relax::ConstantNode>()) {
-        const auto& t_name = expr_tensor_map_[arg][0];
+        const auto& t_name = arg_names[0];
         const auto& w_name = SpanUtils::GetAttr(arg->span, "name");
         const auto& pair = tensor_input_map_[t_name];
         const auto& producer = Downcast<MSCJoint>(pair.first);
@@ -195,7 +205,7 @@ const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>
         }
         node_weights.Set(input_types[i], weights_[w_name]);
       } else {
-        for (const auto& in_name : expr_tensor_map_[arg]) {
+        for (const auto& in_name : arg_names) {
           input_names.push_back(in_name);
         }
       }
@@ -256,7 +266,7 @@ const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>
     LOG(FATAL) << "Unexpected struct info (" << sinfo->GetTypeKey() << ")" << sinfo;
   }
   // Build node
-  const auto& node = MSCJoint(nodes_.size(), node_name, master_name, optype, attrs, scope, inputs,
+  const auto& node = MSCJoint(nodes_.size(), node_name, shared_ref, optype, attrs, scope, inputs,
                               outputs, node_weights);
   Array<String> output_names;
   for (size_t i = 0; i < outputs.size(); i++) {
@@ -424,7 +434,7 @@ MSCGraph RelayGraphBuilder::Build(const relay::Function& func) {
 
 MSCJoint RelayGraphBuilder::AddNode(const Expr& expr, const String& name) {
   const auto& node_name = name.size() > 0 ? name : SpanUtils::GetAttr(expr->span, "name");
-  const auto& master_name = SpanUtils::GetAttr(expr->span, "master_name");
+  const auto& shared_ref = SpanUtils::GetAttr(expr->span, "shared_ref");
   String optype;
   if (expr->IsInstance<relay::VarNode>()) {
     optype = "input";
@@ -575,7 +585,7 @@ MSCJoint RelayGraphBuilder::AddNode(const Expr& expr, const String& name) {
   }
 
   // Build node
-  const auto& node = MSCJoint(nodes_.size(), node_name, master_name, optype, attrs, scope, inputs,
+  const auto& node = MSCJoint(nodes_.size(), node_name, shared_ref, optype, attrs, scope, inputs,
                               outputs, node_weights);
   Array<String> output_names;
   for (size_t i = 0; i < outputs.size(); i++) {
@@ -611,6 +621,9 @@ void RelayGraphBuilder::VisitExpr_(const relay::CallNode* op) {
     const auto& name_opt = f_node->GetAttr<runtime::String>(relay::attr::kComposite);
     if (name_opt.defined()) {
       for (size_t i = 0; i < op->args.size(); i++) {
+        if (!expr_tensor_map_.count(op->args[i])) {
+          RelayExprVisitor::VisitExpr(op->args[i]);
+        }
         ICHECK(expr_tensor_map_.count(op->args[i]))
             << "Can not find argument " << relay::PrettyPrint(op->args[i]);
         expr_tensor_map_.Set(f_node->params[i], expr_tensor_map_[op->args[i]]);

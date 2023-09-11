@@ -143,7 +143,8 @@ def get_relay_patterns(
 
         def visit_call(self, expr):
             super().visit_call(expr)
-            self._optypes.add(expr.op.name)
+            if isinstance(expr.op, tvm.ir.Op):
+                self._optypes.add(expr.op.name)
 
     op_names = OpExtractor().extract(mod[entry_name])
     skip_tags, patterns = set(), tvm.relay.op.contrib.get_pattern_table("msc")

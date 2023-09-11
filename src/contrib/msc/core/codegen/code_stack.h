@@ -152,15 +152,32 @@ class BaseStack {
   /*! \brief Push inplace call or/and assign Doc*/
   void InplaceEnd();
 
-  /*! \brief Cache call argument*/
+  /*! \brief Cache call base argument*/
   void CallArgBase(const ExprDoc& value, const String& key = "");
 
+  /*! \brief Cache call normal argument*/
   template <typename T>
   inline void CallArg(T value, const String& key = "") {
     CallArgBase(DocUtils::ToDoc(value), key);
   }
 
+  /*! \brief Cache call string argument*/
   void CallStrArg(const String& value, const String& key = "");
+
+  /*! \brief Cache call index argument*/
+  void CallIndexArgBase(const ExprDoc& value, const Array<ExprDoc>& indices,
+                        const String& key = "");
+
+  template <typename T>
+  inline void CallIndexArg(const String& value, const std::vector<T>& indices,
+                           const String& key = "") {
+    CallIndexArgBase(IdDoc(value), DocUtils::ToDocList(indices), key);
+  }
+
+  template <typename T>
+  inline void CallIndexArg(const String& value, const Array<T>& indices, const String& key = "") {
+    CallIndexArgBase(IdDoc(value), DocUtils::ToDocList(indices), key);
+  }
 
   /*! \brief Cache call list argument*/
   void CallListArgBase(const Array<ExprDoc>& values, const String& key = "",
@@ -360,6 +377,17 @@ class BaseStack {
   }                                                                                              \
   Stack& call_str_arg(const String& value, const String& key = "") {                             \
     CallStrArg(value, key);                                                                      \
+    return *this;                                                                                \
+  }                                                                                              \
+  template <typename T>                                                                          \
+  Stack& call_index_arg(const String& value, const std::vector<T>& indices,                      \
+                        const String& key = "") {                                                \
+    CallIndexArg(value, indices, key);                                                           \
+    return *this;                                                                                \
+  }                                                                                              \
+  template <typename T>                                                                          \
+  Stack& call_index_arg(const String& value, const Array<T>& indices, const String& key = "") {  \
+    CallIndexArg(value, indices, key);                                                           \
     return *this;                                                                                \
   }                                                                                              \
   Stack& call_list_arg(const Array<ExprDoc>& values, const String& key = "",                     \

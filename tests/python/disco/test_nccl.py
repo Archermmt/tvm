@@ -74,6 +74,50 @@ def test_broadcast_from_worker0():
     np.testing.assert_equal(result, array)
 
 
+def test_scatter():
+    num_workers = 2
+    devices = [1, 2]
+    array = np.arange(36, dtype="float32").reshape(3, 4, 3)
+
+    sess = di.ThreadedSession(num_workers=num_workers)
+    sess.init_ccl("nccl", *devices)
+    d_src = sess.empty((3, 4, 3), "float32")
+    d_dst = sess.empty((3, 3, 2), "float32")
+
+    d_src.debug_copy_from(0, array)
+    sess.scatter_from_worker0(d_src, d_dst)
+
+    np.testing.assert_equal(
+        d_dst.debug_get_from_remote(0).numpy(),
+        array.flat[:18].reshape(3, 3, 2),
+    )
+    np.testing.assert_equal(
+        d_dst.debug_get_from_remote(1).numpy(),
+        array.flat[18:].reshape(3, 3, 2),
+    )
+
+
+def test_gather():
+    num_workers = 2
+    devices = [1, 2]
+    array = np.arange(36, dtype="float32")
+
+    sess = di.ThreadedSession(num_workers=num_workers)
+    sess.init_ccl("nccl", *devices)
+    d_src = sess.empty((3, 3, 2), "float32")
+    d_dst = sess.empty((3, 4, 3), "float32")
+
+    d_src.debug_copy_from(0, array[:18])
+    d_src.debug_copy_from(1, array[18:])
+
+    sess.gather_to_worker0(d_src, d_dst)
+
+    np.testing.assert_equal(
+        d_dst.debug_get_from_remote(0).numpy(),
+        array.reshape(3, 4, 3),
+    )
+
+
 def test_mlp():  # pylint: disable=too-many-locals
     num_workers = 2
     devices = [1, 2]
@@ -334,5 +378,6 @@ if __name__ == "__main__":
     test_init()
     test_broadcast_from_worker0()
     test_allreduce()
+    test_scatter()
     test_mlp()
     test_attention()
