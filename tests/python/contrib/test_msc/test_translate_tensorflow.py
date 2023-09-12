@@ -1692,7 +1692,7 @@ def test_add_n():
     x_in = np.random.randint(1, 100, size=(3, 3, 3), dtype=np.int32)
     y_in = np.random.randint(1, 100, size=(3, 3, 3), dtype=np.int32)
     z_in = np.random.randint(1, 100, size=(3, 3, 3), dtype=np.int32)
-    m_dim, n_dim, o_dim = x.astype(np.float32), y.astype(np.float32), z.astype(np.float32)
+    m_dim, n_dim, o_dim = x_in.astype(np.float32), y_in.astype(np.float32), z_in.astype(np.float32)
     in0 = x_in
     in1 = [x_in, y_in]
     in2 = (x_in, y_in, z_in)
