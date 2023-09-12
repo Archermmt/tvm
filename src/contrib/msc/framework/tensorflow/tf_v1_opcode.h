@@ -21,12 +21,13 @@
  * \file src/contrib/msc/framework/tensorflow/tf_v1_opcode.h
  * \brief Tensorflow codegen for MSCJoint, use v1 format.
  */
-#ifndef TVM_CONTRIB_MSC_FRAMEWORK_TVM_TF_V1_OPCODE_H_
-#define TVM_CONTRIB_MSC_FRAMEWORK_TVM_TF_V1_OPCODE_H_
+#ifndef TVM_CONTRIB_MSC_FRAMEWORK_TENSORFLOW_TF_V1_OPCODE_H_
+#define TVM_CONTRIB_MSC_FRAMEWORK_TENSORFLOW_TF_V1_OPCODE_H_
 
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "../../core/codegen/base_codegen.h"
@@ -80,4 +81,4 @@ const std::shared_ptr<std::unordered_map<String, std::shared_ptr<TFV1OpCode>>> G
 }  // namespace msc
 }  // namespace contrib
 }  // namespace tvm
-#endif  // TVM_CONTRIB_MSC_FRAMEWORK_TVM_TF_V1_OPCODE_H_
+#endif  // TVM_CONTRIB_MSC_FRAMEWORK_TENSORFLOW_TF_V1_OPCODE_H_

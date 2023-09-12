@@ -508,8 +508,8 @@ const std::shared_ptr<std::unordered_map<String, std::shared_ptr<TFV1OpCode>>> G
   map->emplace("cos", std::make_shared<TFV1SimpleCodeGen>("tf_v1.cos"));
   map->emplace("cosh", std::make_shared<TFV1SimpleCodeGen>("tf_v1.cosh"));
   map->emplace("divide", std::make_shared<TFV1SimpleCodeGen>("tf_v1.divide"));
-  map->emplace("erf", std::make_shared<TFV1SimpleCodeGen>("tf_v1.erf"));
   map->emplace("equal", std::make_shared<TFV1SimpleCodeGen>("tf_v1.equal"));
+  map->emplace("erf", std::make_shared<TFV1SimpleCodeGen>("tf_v1.erf"));
   map->emplace("exp", std::make_shared<TFV1SimpleCodeGen>("tf_v1.exp"));
   map->emplace("floor", std::make_shared<TFV1SimpleCodeGen>("tf_v1.floor"));
   map->emplace("floor_divide", std::make_shared<TFV1SimpleCodeGen>("tf_v1.floor_div"));

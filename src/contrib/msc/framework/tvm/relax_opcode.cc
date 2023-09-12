@@ -737,8 +737,9 @@ const std::shared_ptr<std::unordered_map<String, std::shared_ptr<RelaxOpCode>>> 
   map->emplace("cos", std::make_shared<RelaxSimpleCodeGen>("relax.op.cos"));
   map->emplace("cosh", std::make_shared<RelaxSimpleCodeGen>("relax.op.cosh"));
   map->emplace("divide", std::make_shared<RelaxSimpleCodeGen>("relax.op.divide"));
-  map->emplace("exp", std::make_shared<RelaxSimpleCodeGen>("relax.op.exp"));
   map->emplace("equal", std::make_shared<RelaxSimpleCodeGen>("relax.op.equal"));
+  map->emplace("erf", std::make_shared<RelaxSimpleCodeGen>("relax.op.erf"));
+  map->emplace("exp", std::make_shared<RelaxSimpleCodeGen>("relax.op.exp"));
   map->emplace("floor", std::make_shared<RelaxSimpleCodeGen>("relax.op.floor"));
   map->emplace("floor_divide", std::make_shared<RelaxSimpleCodeGen>("relax.op.floor_divide"));
   map->emplace("greater", std::make_shared<RelaxSimpleCodeGen>("relax.op.greater"));

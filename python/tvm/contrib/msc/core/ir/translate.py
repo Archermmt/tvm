@@ -147,7 +147,7 @@ def get_relay_patterns(
                 self._optypes.add(expr.op.name)
 
     op_names = OpExtractor().extract(mod[entry_name])
-    skip_tags, patterns = set(), tvm.relay.op.contrib.get_pattern_table("msc")
+    skip_tags, patterns = set(), list(tvm.relay.op.contrib.get_pattern_table("msc"))
     if "nn.conv1d" not in op_names or "add" not in op_names:
         skip_tags.add("msc.conv1d_bias")
     if "nn.conv2d" not in op_names or "add" not in op_names:
@@ -155,14 +155,15 @@ def get_relay_patterns(
     if "nn.batch_matmul" not in op_names or "add" not in op_names:
         skip_tags.add("msc.linear_bias")
     if "nn.batch_matmul" not in op_names:
-        skip_tags |= set([p[0] for p in patterns if p[0].startswith("msc.linear")])
+        skip_tags |= set(p[0] for p in patterns if p[0].startswith("msc.linear"))
         if "nn.dense" not in op_names:
-            skip_tags |= set([p[0] for p in patterns if p[0].startswith("msc.matmul")])
+            skip_tags |= set(p[0] for p in patterns if p[0].startswith("msc.matmul"))
     if "take" not in op_names:
-        skip_tags |= set([p[0] for p in patterns if p[0].startswith("msc.embedding")])
+        skip_tags |= set(p[0] for p in patterns if p[0].startswith("msc.embedding"))
     if "erf" not in op_names:
-        skip_tags |= set([p[0] for p in patterns if p[0].startswith("msc.gelu")])
-    return [p for p in patterns if p[0] not in skip_tags]
+        skip_tags |= set(p[0] for p in patterns if p[0].startswith("msc.gelu"))
+    valid_patterns = [p for p in patterns if p[0] not in skip_tags]
+    return valid_patterns
 
 
 def from_relay(

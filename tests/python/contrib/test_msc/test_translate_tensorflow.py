@@ -14,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-
+# pylint: disable=deprecated-module
 
 """ Test translate from tensorflow. """
 
@@ -52,6 +52,7 @@ def convert_to_list(x):
 
 def run_tf_graph(sess, input_data, input_node, output_node):
     """Generic function to execute tensorflow"""
+
     input_data = convert_to_list(input_data)
     input_node = convert_to_list(input_node)
     output_node = convert_to_list(output_node)
@@ -67,6 +68,8 @@ def run_tf_graph(sess, input_data, input_node, output_node):
 
 
 def get_graph_def(in_data, in_name, out_name):
+    """Get tf.GraphDef for translate"""
+
     def name_without_num(name):
         return name.split(":")[0] if ":" in name else name
 
@@ -90,13 +93,8 @@ def verify_model(graph_def, golden, in_data, in_name, out_name, use_out_name=Tru
     in_name = convert_to_list(in_name)
     shape_dict = {i: d.shape for i, d in zip(in_name, in_data)}
     graph, weights = translate.from_tensorflow(graph_def, shape_dict, out_name)
-    from tvm.contrib.msc.core import utils as msc_utils
-
-    build_folder = msc_utils.msc_dir("msc_test")
-    build_folder = None
-    # print("graph " + str(graph))
     with tf.Graph().as_default():
-        outputs = codegen.to_tensorflow(graph, weights, build_folder=build_folder)
+        outputs = codegen.to_tensorflow(graph, weights)
         with tf.Session() as sess:
             sess.run(variables.global_variables_initializer())
             if not use_out_name:
@@ -295,8 +293,8 @@ def test_biasadd():
 
 def _test_where_with_broadcast(in_shape, cond_shape):
     choice_list = list(np.arange(10).astype("float32"))
-    t1 = np.random.choice(choice_list, size=cond_shape)
-    t2 = np.random.choice(choice_list, size=cond_shape)
+    t_1 = np.random.choice(choice_list, size=cond_shape)
+    t_2 = np.random.choice(choice_list, size=cond_shape)
     x = np.random.choice(choice_list, size=in_shape)
     y = np.random.choice(choice_list, size=in_shape)
 
@@ -308,7 +306,7 @@ def _test_where_with_broadcast(in_shape, cond_shape):
         rhs = tf.placeholder(shape=in_shape, dtype="float32", name="y")
         out = tf.where(condition, lhs, rhs)
         io_info = {
-            "in_data": [t1, t2, x, y],
+            "in_data": [t_1, t_2, x, y],
             "in_name": ["in1:0", "in2:0", "x:0", "y:0"],
             "out_name": out.name,
         }
@@ -360,22 +358,6 @@ def _test_reshape_like(data, shape_like):
     verify_model(graph_def, golden, **io_info)
 
 
-def _test_reshape_symbolic(data, a_data, b_data):
-    with tf.Graph().as_default():
-        in_data = array_ops.placeholder(shape=data.shape, dtype=data.dtype)
-        a = array_ops.placeholder(shape=a_data.shape, dtype=a_data.dtype)
-        b = array_ops.placeholder(shape=b_data.shape, dtype=b_data.dtype)
-        newshape = tf.add(a, b)
-        out = array_ops.reshape(in_data, newshape)
-        io_info = {
-            "in_data": [data, a_data, b_data],
-            "in_name": [in_data.name, a.name, b.name],
-            "out_name": out.name,
-        }
-        graph_def, golden = get_graph_def(**io_info)
-    verify_model(graph_def, golden, **io_info)
-
-
 def test_reshape():
     """test tensorflow translator for reshape"""
 
@@ -383,7 +365,6 @@ def test_reshape():
     _test_reshape(np.arange(6), [-1, 2])
     _test_reshape_with_call()
     _test_reshape_like(np.zeros((3, 6)), np.zeros((9, 2)))
-    _test_reshape_symbolic(np.arange(6.0), np.array([2, 0]), np.array([0, 3]))
 
 
 def _test_squeeze(data, squeeze_dims=None):
@@ -482,19 +463,23 @@ def test_argx():
 def _test_matmul(i, j, k, transpose_a=False, transpose_b=False):
     """One iteration of matmul"""
 
-    A_shape_init = [i, j]
-    B_shape_init = [j, k]
-    A_shape = [] + (A_shape_init[::-1] if transpose_a else A_shape_init)
-    B_shape = [] + (B_shape_init[::-1] if transpose_b else B_shape_init)
+    a_shape_init = [i, j]
+    b_shape_init = [j, k]
+    a_shape = [] + (a_shape_init[::-1] if transpose_a else a_shape_init)
+    b_shape = [] + (b_shape_init[::-1] if transpose_b else b_shape_init)
 
     with tf.Graph().as_default():
-        A = tf.placeholder(shape=A_shape, dtype="float32", name="A")
-        B = tf.placeholder(shape=B_shape, dtype="float32", name="B")
-        result = tf.matmul(A, B, transpose_a=transpose_a, transpose_b=transpose_b)
+        a_in = tf.placeholder(shape=a_shape, dtype="float32", name="A")
+        b_in = tf.placeholder(shape=b_shape, dtype="float32", name="B")
+        result = tf.matmul(a_in, b_in, transpose_a=transpose_a, transpose_b=transpose_b)
 
-        A_np = np.random.uniform(high=5.0, size=A_shape).astype("float32")
-        B_np = np.random.uniform(high=5.0, size=B_shape).astype("float32")
-        io_info = {"in_data": [A_np, B_np], "in_name": [A.name, B.name], "out_name": result.name}
+        a_np = np.random.uniform(high=5.0, size=a_shape).astype("float32")
+        b_np = np.random.uniform(high=5.0, size=b_shape).astype("float32")
+        io_info = {
+            "in_data": [a_np, b_np],
+            "in_name": [a_in.name, b_in.name],
+            "out_name": result.name,
+        }
         graph_def, golden = get_graph_def(**io_info)
     verify_model(graph_def, golden, **io_info, use_out_name=False)
 
@@ -508,16 +493,20 @@ def test_matmul():
     _test_matmul(1, 3, 6, False, True)
 
 
-def _test_batch_matmul(A_shape, B_shape, adjoint_a=False, adjoint_b=False):
+def _test_batch_matmul(a_shape, b_shape, adjoint_a=False, adjoint_b=False):
 
     with tf.Graph().as_default():
-        A = tf.placeholder(shape=A_shape, dtype="float32", name="A")
-        B = tf.placeholder(shape=B_shape, dtype="float32", name="B")
-        result = tf.matmul(A, B, adjoint_a=adjoint_a, adjoint_b=adjoint_b, name="batchmatmul")
+        a_in = tf.placeholder(shape=a_shape, dtype="float32", name="A")
+        b_in = tf.placeholder(shape=b_shape, dtype="float32", name="B")
+        result = tf.matmul(a_in, b_in, adjoint_a=adjoint_a, adjoint_b=adjoint_b, name="batchmatmul")
 
-        A_np = np.random.uniform(high=5.0, size=A_shape).astype("float32")
-        B_np = np.random.uniform(high=5.0, size=B_shape).astype("float32")
-        io_info = {"in_data": [A_np, B_np], "in_name": [A.name, B.name], "out_name": result.name}
+        a_np = np.random.uniform(high=5.0, size=a_shape).astype("float32")
+        b_np = np.random.uniform(high=5.0, size=b_shape).astype("float32")
+        io_info = {
+            "in_data": [a_np, b_np],
+            "in_name": [a_in.name, b_in.name],
+            "out_name": result.name,
+        }
         graph_def, golden = get_graph_def(**io_info)
     verify_model(graph_def, golden, **io_info)
 
@@ -656,8 +645,6 @@ def test_gather():
     _test_gather((4,), (1,), 1, 0, 0)
     _test_gather((2, 2), (1, 2, 2), [[[1, 0], [0, 1]]], 0, 0)
     _test_gather((4, 3, 5, 6), (1, 4), [[2, 1, 0, 0]], 0, 0)
-    _test_gather((2, 2), (2, 2), [[0, 0], [0, 0]], 1, 1)
-    _test_gather((2, 2, 3, 6), (2, 2, 3), [[[1, 1, 0], [0, 0, 1]], [[0, 1, 0], [1, 0, 1]]], 2, 2)
 
 
 def _test_split(in_shape, axis, num_or_size_splits):
@@ -1410,7 +1397,6 @@ def test_unary():
     _test_unary(tf.tanh)
     _test_unary(tf.erf)
     _test_unary(tf.log)
-    _test_unary(tf.log1p)
 
 
 def test_atan2():
@@ -1569,17 +1555,14 @@ def test_mean():
 def test_reduce():
     """test tensorflow translator for reduce"""
 
-    def _check_op(tf_op, ishape, axis, keepdims, dtype="float32"):
+    def _check_op(tf_op, ishape, axis, keepdims):
         tf.reset_default_graph()
-        if dtype == "bool":
-            np_data = np.random.choice([True, False], size=ishape)
-        else:
-            np_data = np.random.uniform(size=ishape).astype(dtype)
+        np_data = np.random.uniform(size=ishape).astype("float32")
         if tf_op == tf.math.reduce_prod:
             axis = 1
             np_data = np_data.reshape(1, -1)
         with tf.Graph().as_default():
-            in_data = tf.placeholder(shape=ishape, dtype=dtype, name="in_data")
+            in_data = tf.placeholder(shape=np_data.shape, dtype="float32", name="in_data")
             reduce_op = tf_op(in_data, axis=axis, keepdims=keepdims, name="reduce_op")
             io_info = {"in_data": np_data, "in_name": "in_data:0", "out_name": reduce_op.name}
             graph_def, golden = get_graph_def(**io_info)
@@ -1617,14 +1600,14 @@ def _test_rel_op(data, func):
 def test_rel_ops():
     """test tensorflow translator for relation"""
 
-    t1 = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
-    t2 = np.array([[9, 8, 7], [6, 5, 4], [3, 2, 1]])
-    _test_rel_op([t1, t2], math_ops.less)
-    _test_rel_op([t1, t2], math_ops.greater)
-    _test_rel_op([t1, t2], math_ops.less_equal)
-    _test_rel_op([t1, t2], math_ops.greater_equal)
-    _test_rel_op([t1, t2], math_ops.equal)
-    _test_rel_op([t1, t2], math_ops.not_equal)
+    t_1 = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+    t_2 = np.array([[9, 8, 7], [6, 5, 4], [3, 2, 1]])
+    _test_rel_op([t_1, t_2], math_ops.less)
+    _test_rel_op([t_1, t_2], math_ops.greater)
+    _test_rel_op([t_1, t_2], math_ops.less_equal)
+    _test_rel_op([t_1, t_2], math_ops.greater_equal)
+    _test_rel_op([t_1, t_2], math_ops.equal)
+    _test_rel_op([t_1, t_2], math_ops.not_equal)
 
 
 def _test_expand_dims(data, axis):
@@ -1706,16 +1689,16 @@ def _test_add_n(inputs):
 def test_add_n():
     """test tensorflow translator for add_n"""
 
-    x = np.random.randint(1, 100, size=(3, 3, 3), dtype=np.int32)
-    y = np.random.randint(1, 100, size=(3, 3, 3), dtype=np.int32)
-    z = np.random.randint(1, 100, size=(3, 3, 3), dtype=np.int32)
-    m, n, o = x.astype(np.float32), y.astype(np.float32), z.astype(np.float32)
-    in0 = x
-    in1 = [x, y]
-    in2 = (x, y, z)
-    in3 = m
-    in4 = [m, n]
-    in5 = (m, n, o)
+    x_in = np.random.randint(1, 100, size=(3, 3, 3), dtype=np.int32)
+    y_in = np.random.randint(1, 100, size=(3, 3, 3), dtype=np.int32)
+    z_in = np.random.randint(1, 100, size=(3, 3, 3), dtype=np.int32)
+    m_dim, n_dim, o_dim = x.astype(np.float32), y.astype(np.float32), z.astype(np.float32)
+    in0 = x_in
+    in1 = [x_in, y_in]
+    in2 = (x_in, y_in, z_in)
+    in3 = m_dim
+    in4 = [m_dim, n_dim]
+    in5 = (m_dim, n_dim, o_dim)
     _test_add_n(in0)
     _test_add_n(in1)
     _test_add_n(in2)

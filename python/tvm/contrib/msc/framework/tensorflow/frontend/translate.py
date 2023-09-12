@@ -63,16 +63,14 @@ def from_tensorflow(
         The weights from the IRModule.
     """
 
-    if via_relax:
-        raise NotImplementedError("Relax frontend for tensorflow is not supported")
-    else:
-        relay_mod, params = tvm.relay.frontend.from_tensorflow(
-            graph_def, shape=shape_dict, outputs=outputs
-        )
-        passes = [msc_transform.BindExprName()]
-        relay_mod = tvm.transform.Sequential(passes)(relay_mod)
-        relax_mod = relay_to_relax(relay_mod, params, trans_config, build_config, opt_config)
-        build_config = build_config or {}
-        build_config["use_var_name"] = True
+    assert not via_relax, "Relax frontend for tensorflow is not supported"
+    relay_mod, params = tvm.relay.frontend.from_tensorflow(
+        graph_def, shape=shape_dict, outputs=outputs
+    )
+    passes = [msc_transform.BindExprName()]
+    relay_mod = tvm.transform.Sequential(passes)(relay_mod)
+    relax_mod = relay_to_relax(relay_mod, params, trans_config, build_config, opt_config)
+    build_config = build_config or {}
+    build_config["use_var_name"] = True
     graph, weights = from_relax(relax_mod, trans_config=trans_config, build_config=build_config)
     return graph, weights
