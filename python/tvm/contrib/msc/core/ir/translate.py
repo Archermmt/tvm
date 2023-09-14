@@ -100,18 +100,54 @@ def from_relax(
     # TODO(tong.meng): optimize before translate?
     if params:
         mod = BindParams("main", params)(mod)
-    patterns = get_patterns_with_prefix("msc")
-    passes = [
-        tvm.relax.transform.FuseOpsByPattern(
-            patterns, bind_constants=False, annotate_codegen=False
-        ),
-        msc_transform.SetExprName(),
-        msc_transform.SetExprLayout(trans_config.get("allow_layout_missing", True)),
-    ]
-    mod = tvm.transform.Sequential(passes)(mod)
-    graph = _ffi_api.BuildFromRelax(mod, "main", msc_utils.dump_dict(build_config))
-    t_weights = _ffi_api.GetRelaxWeights(mod, "main")
+    if trans_config.get("normalize", True):
+        patterns = get_patterns_with_prefix("msc")
+        passes = [
+            tvm.relax.transform.FuseOpsByPattern(
+                patterns, bind_constants=False, annotate_codegen=False
+            ),
+            msc_transform.SetExprName(),
+            msc_transform.SetExprLayout(trans_config.get("allow_layout_missing", True)),
+        ]
+        mod = tvm.transform.Sequential(passes)(mod)
+    entry = trans_config.get("entry", "main")
+    graph = _ffi_api.BuildFromRelax(mod, entry, msc_utils.dump_dict(build_config))
+    t_weights = _ffi_api.GetRelaxWeights(mod, entry)
     return graph, normalize_weights(t_weights, graph)
+
+
+def from_relax_func(
+    func: tvm.relax.Function,
+    graph_name: str = "msc_func",
+    trans_config: Optional[Dict[str, str]] = None,
+    build_config: Optional[Dict[str, str]] = None,
+) -> Tuple[MSCGraph, Dict[str, tvm.nd.array]]:
+    """Change tensorflow GraphDef to MSCGraph.
+
+    Parameters
+    ----------
+    func: relax.Function
+        The tensorrt extern function.
+    graph_name: str
+        The graph name for MSCGraph.
+    trans_config: dict
+        The config for transfrorm IRModule.
+    build_config: dict
+        The config for build MSCGraph.
+
+    Returns
+    -------
+    graph: tvm.contrib.msc.core.ir.MSCGraph
+        The translated graph.
+    weights: dict of <string:tvm.ndarray>
+        The weights from the IRModule.
+    """
+
+    trans_config = trans_config or {}
+    trans_config.update({"normalize": False, "entry": graph_name})
+    mod = tvm.IRModule()
+    mod[graph_name] = func
+    return from_relax(mod, trans_config=trans_config, build_config=build_config)
 
 
 def get_relay_patterns(

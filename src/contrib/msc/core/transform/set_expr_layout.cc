@@ -1039,7 +1039,7 @@ class LayoutInfer : public ExprVisitor {
       // Infer by op_node
       Op op = Downcast<Op>(GetRef<Op>(op_node));
       InferLayoutOutput infered_layout;
-      const auto msc_infer_map = Op::GetAttrMap<FRelaxInferLayout>("FMSCBackwardInferLayout");
+      const auto& msc_infer_map = Op::GetAttrMap<FRelaxInferLayout>("FMSCBackwardInferLayout");
       try {
         if (msc_infer_map.count(op)) {
           FRelaxInferLayout f = msc_infer_map[op];
@@ -1103,8 +1103,8 @@ class LayoutInfer : public ExprVisitor {
         // infer layouts
         Op op = Downcast<Op>(GetRef<Op>(op_node));
         InferLayoutOutput infered_layout;
-        const auto msc_infer_map = Op::GetAttrMap<FRelaxInferLayout>("FMSCForwardInferLayout");
-        const auto relax_infer_map = Op::GetAttrMap<FRelaxInferLayout>("FRelaxInferLayout");
+        const auto& msc_infer_map = Op::GetAttrMap<FRelaxInferLayout>("FMSCForwardInferLayout");
+        const auto& relax_infer_map = Op::GetAttrMap<FRelaxInferLayout>("FRelaxInferLayout");
         bool set_inputs = true;
         try {
           if (msc_infer_map.count(op)) {

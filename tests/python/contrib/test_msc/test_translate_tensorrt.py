@@ -23,38 +23,17 @@ from torch.nn import Module
 
 import tvm.testing
 from tvm.relax.frontend.torch import from_fx
-from tvm.contrib.msc.core.ir import translate
-from tvm.contrib.msc.framework.tvm import codegen as tvm_codegen
+from tvm.contrib.msc.framework.tensorrt.frontend import translate
 
 
 def verify_model(torch_model, input_info):
     graph_model = fx.symbolic_trace(torch_model)
     with torch.no_grad():
         mod = from_fx(graph_model, input_info)
-    print("[TMINFO] mod " + str(mod))
+    mod = translate.partition_for_tensorrt(mod)
+    print("[TMINFO] partitioned " + str(mod))
     raise Exception("stop here!!")
-    conv_pat = make_fused_bias_activation_pattern(
-        "relax.nn.conv2d", with_bias=False, activation=None
-    )
-    relu_pat = is_op("relax.nn.relu")(wildcard())
-    add_pat = is_op("relax.add")(wildcard(), wildcard())
 
-    patterns = [
-        ("tensorrt.nn.conv2d", conv_pat),
-        ("tensorrt.nn.relu", relu_pat),
-        ("tensorrt.add", add_pat),
-    ]
-
-    params_np = {"weight1": inputs[1], "weight2": inputs[2]}
-
-    mod = tvm.transform.Sequential(
-        [
-            relax.transform.BindParams("main", params_np),
-            relax.transform.FuseOpsByPattern(patterns),
-            relax.transform.MergeCompositeFunctions(),
-            relax.transform.RunCodegen(),
-        ]
-    )(mod)
     # graph, weights = translate.from_relax(expected)
 
 
