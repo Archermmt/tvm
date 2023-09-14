@@ -79,7 +79,9 @@ def partition_for_tensorrt(
 
     tensorrt_funcs = [func for _, func in mod.functions.items() if _is_tensorrt_func(func)]
     msc_graphs, msc_weights = [], []
+    print("[TMINFO] mod " + str(mod))
     for idx, func in enumerate(tensorrt_funcs):
+        print("[TMINFO] tensorrt func " + str(func))
         graph, weights = from_relax_func(
             func, "msc_tensorrt_" + str(idx), build_config=build_config
         )

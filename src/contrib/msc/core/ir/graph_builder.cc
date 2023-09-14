@@ -102,6 +102,7 @@ const MSCGraph RelaxGraphBuilder::Build(const relax::Function& func) {
 
 const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>& binding_var,
                                           const String& name) {
+  std::cout << "[TMINFO] addnode for " << expr << std::endl;
   const auto& node_name = name.size() > 0 ? name : SpanUtils::GetAttr(expr->span, "name");
   const auto& shared_ref = SpanUtils::GetAttr(expr->span, "shared_ref");
   String optype;
@@ -276,6 +277,7 @@ const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>
   nodes_.push_back(node);
   const auto& ref_expr = binding_var.defined() ? binding_var.value() : expr;
   expr_tensor_map_.Set(ref_expr, output_names);
+  std::cout << "[TMINFO] added " << node << std::endl;
   return node;
 }
 
