@@ -406,6 +406,22 @@ class MSCGraph(BaseGraph):
             output_names,
         )
 
+    def has_node(self, name: str) -> bool:
+        """Check if node in the graph.
+
+        Parameters
+        ----------
+        name: string
+            The name of the node.
+
+        Returns
+        -------
+        has_node: bool
+            Whether the node is in the graph
+        """
+
+        return bool(_ffi_api.MSCGraphHasNode(self, name))
+
     def find_node(self, name: str) -> MSCJoint:
         """Find node by name.
 
@@ -421,6 +437,22 @@ class MSCGraph(BaseGraph):
         """
 
         return _ffi_api.MSCGraphFindNode(self, name)
+
+    def has_tensor(self, name: str) -> bool:
+        """Check if tensor in the graph.
+
+        Parameters
+        ----------
+        name: string
+            The name of the tensor.
+
+        Returns
+        -------
+        has_tensor: bool
+            Whether the tensor is in the graph
+        """
+
+        return bool(_ffi_api.MSCGraphHasTensor(self, name))
 
     def find_tensor(self, name: str) -> MSCTensor:
         """Find tensor by name.

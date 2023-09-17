@@ -49,7 +49,7 @@ using namespace tvm::script::printer;
   std::string test_device{"cpu"};          \
   std::string prefix{"res_"};              \
   std::string baseline_folder{"baseline"}; \
-  std::string version;
+  std::vector<size_t> version;
 
 #define CODEGEN_CONFIG_PARSE                    \
   if (key == "is_train") {                      \
@@ -81,9 +81,6 @@ using namespace tvm::script::printer;
   }
 
 #define CODEGEN_MEMBERS                                                                            \
- public:                                                                                           \
-  virtual const Array<Doc> GetDocs() = 0;                                                          \
-                                                                                                   \
  protected:                                                                                        \
   const std::shared_ptr<ConfigType> config() { return config_; }                                   \
   const String GetSuffix(bool as_raw = false) {                                                    \

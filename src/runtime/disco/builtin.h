@@ -51,13 +51,13 @@ NDArray DiscoEmptyNDArray(ShapeTuple shape, DataType dtype, Device device);
  * \param reduce_kind The kind of reduction operation (e.g. sum, avg, min, max)
  * \return The outcome of allreduce
  */
-NDArray AllReduce(NDArray send, ReduceKind reduce_kind);
+void AllReduce(NDArray send, ReduceKind reduce_kind, NDArray recv);
 /*!
  * \brief Perform a broadcast operation from worker-0
  * \param buffer The buffer to be broadcasted
  * \return The result buffer
  */
-NDArray BroadcastFromWorker0(NDArray buffer);
+void BroadcastFromWorker0(NDArray send, NDArray recv);
 /*!
  * \brief Perform a scatter operation from worker-0, chunking the given buffer into equal parts.
  * \param send For worker-0, it must be provided, and otherwise, the buffer must be None.
@@ -77,9 +77,14 @@ void GatherToWorker0(NDArray send, Optional<NDArray> recv);
  * \param buffer The buffer to be received
  */
 void RecvFromWorker0(NDArray buffer);
-
 /*! \brief Get the local worker id */
 int WorkerId();
+/*!
+ * \brief Called by the worker thread. Waiting until the worker completes all its tasks.
+ * As a specific example, on a CUDA worker, it blocks until all kernels are launched and
+ * cudaStreamSynchronize is complete.
+ */
+void SyncWorker();
 
 }  // namespace runtime
 }  // namespace tvm

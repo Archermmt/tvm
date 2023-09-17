@@ -41,7 +41,8 @@ namespace relax {
  */
 class RelaxExprNameSetter : public ExprVisitor {
  public:
-  explicit RelaxExprNameSetter(const IRModule& ref_module) : ref_module_(ref_module) {}
+  explicit RelaxExprNameSetter(const IRModule& ref_module, const String& target)
+      : ref_module_(ref_module), target_{target} {}
 
   void VisitBindingBlock(const BindingBlock& block) final {
     String block_name = SpanUtils::GetAttr(block->span, "name");
@@ -109,6 +110,14 @@ class RelaxExprNameSetter : public ExprVisitor {
     expr_names_.Set(binding->var, unique_name);
   }
 
+  void VisitBinding_(const VarBindingNode* binding, const FunctionNode* val) {
+    ExprVisitor::VisitBinding_(binding, val);
+    const auto& name_opt = val->GetAttr<runtime::String>(attr::kComposite);
+    if (name_opt.defined()) {
+      local_funcs_.Set(binding->var, GetRef<Function>(val));
+    }
+  }
+
   void VisitBinding_(const VarBindingNode* binding, const CallNode* val) {
     ExprVisitor::VisitBinding_(binding, val);
     String name_hint, optype;
@@ -119,14 +128,20 @@ class RelaxExprNameSetter : public ExprVisitor {
       optype = StringUtils::Replace(op_node->name, "relax.", "");
     } else if (const auto* v_node = val->op.as<GlobalVarNode>()) {
       const auto& func = Downcast<Function>(ref_module_->Lookup(v_node->name_hint));
-      const auto& name_opt = func->GetAttr<runtime::String>(attr::kComposite);
-      if (name_opt.defined()) {
-        optype = name_opt.value();
-        name_hint = optype;
-        ExprVisitor::VisitExpr(func);
-      } else {
-        optype = "extern_func";
+      ExprVisitor::VisitExpr(func);
+      optype = GetFuncType(func);
+      if (optype == "extern_func") {
         name_hint = v_node->name_hint;
+      } else {
+        name_hint = optype;
+      }
+    } else if (local_funcs_.count(val->op)) {
+      optype = GetFuncType(local_funcs_[val->op]);
+      ExprVisitor::VisitExpr(local_funcs_[val->op]);
+      if (optype == "extern_func") {
+        name_hint = Downcast<Var>(val->op)->name_hint();
+      } else {
+        name_hint = optype;
       }
     }
     if (name_hint.size() > 0) {
@@ -187,24 +202,40 @@ class RelaxExprNameSetter : public ExprVisitor {
     return expr_name;
   }
 
+  const String GetFuncType(const Function& func) {
+    String optype;
+    const auto& name_opt = func->GetAttr<runtime::String>(attr::kComposite);
+    if (name_opt.defined()) {
+      optype = name_opt.value();
+      if (target_.size() > 0) {
+        optype = StringUtils::Replace(optype, target_ + ".", "");
+      }
+    } else {
+      optype = "extern_func";
+    }
+    return optype;
+  }
+
   Map<String, Expr> setted_names_;
   Map<String, String> constant_consumers_;
   std::set<String> setted_blocks_;
   Array<String> block_stack_;
   Map<Expr, String> expr_names_;
+  Map<Expr, Function> local_funcs_;
   IRModule ref_module_;
+  String target_;
 };  // class ExprNameSetter
 
-void SetRelaxExprName(const IRModule& ref_module, const Expr& e) {
-  RelaxExprNameSetter(ref_module).VisitExpr(e);
+void SetRelaxExprName(const IRModule& ref_module, const Expr& e, const String& target) {
+  RelaxExprNameSetter(ref_module, target).VisitExpr(e);
 }
 
 namespace transform {
 
-Pass SetRelaxExprName(const String& entry_name) {
+Pass SetRelaxExprName(const String& entry_name, const String& target) {
   runtime::TypedPackedFunc<IRModule(IRModule, PassContext)> pass_func = [=](IRModule m,
                                                                             PassContext pc) {
-    relax::SetRelaxExprName(m, m->Lookup(entry_name));
+    relax::SetRelaxExprName(m, m->Lookup(entry_name), target);
     return m;
   };
   return CreateModulePass(pass_func, 0, "SetRelaxExprName", {});
@@ -374,7 +405,7 @@ class RelayExprNameBinder : public ExprVisitor {
       expr->span = Span(SourceName::Get(""), expr->span->line, expr->span->end_line,
                         expr->span->column, expr->span->end_column);
     } else {
-      const auto& right = std::get<1>(StringUtils::SplitOnce(name, name_key_));
+      const String& right = std::get<1>(StringUtils::SplitOnce(name, name_key_));
       if (right.size() > 0) {
         valid_name = std::get<0>(StringUtils::SplitOnce(name, seperator_));
         if (valid_name.size() > 0) {

@@ -24,17 +24,36 @@ from torch.nn import Module
 import tvm.testing
 from tvm.relax.frontend.torch import from_fx
 from tvm.contrib.msc.framework.tensorrt.frontend import translate
+from tvm.contrib.msc.framework.tensorrt import codegen
+from tvm.contrib.msc.core import utils as msc_utils
 
 
 def verify_model(torch_model, input_info):
     graph_model = fx.symbolic_trace(torch_model)
     with torch.no_grad():
         mod = from_fx(graph_model, input_info)
-    mod = translate.partition_for_tensorrt(mod)
+    mod, graph_infos = translate.partition_for_tensorrt(mod)
     print("[TMINFO] partitioned " + str(mod))
-    raise Exception("stop here!!")
 
-    # graph, weights = translate.from_relax(expected)
+    build_folder = msc_utils.msc_dir("msc_test")
+    output_folder = msc_utils.msc_dir("msc_output")
+
+    for name, graph, weights in graph_infos:
+        print("has graph({}):{}".format(name, graph))
+        engine = codegen.to_tensorrt(
+            graph, weights, build_folder=build_folder, output_folder=output_folder
+        )
+        print("engine " + str(engine))
+
+    raise Exception("stop here!!")
+    """
+    mod = tvm.transform.Sequential(
+        [
+            relax.transform.RunCodegen(),
+        ]
+    )(mod)
+    print("[TMINFO] compiled mod " + str(mod))
+    """
 
 
 def test_conv1d():

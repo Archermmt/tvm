@@ -253,7 +253,7 @@ InferLayoutOutput ForwardInferLayoutBinary(const Call& call,
       if (t_info->ndim == 0) {
         input_layouts.push_back(LayoutDecision(""));
       } else if (t_info->ndim == 1) {
-        const auto& ref_layout = output->input_layouts[i].LeafValue()->layout;
+        const auto& ref_layout = output->output_layouts[0].LeafValue()->layout;
         input_layouts.push_back(LayoutDecision(ref_layout[ref_layout.ndim() - 1].name()));
       } else {
         input_layouts.push_back(output->input_layouts[i]);
@@ -654,7 +654,7 @@ InferLayoutOutput BackwardInferLayoutBinary(const Call& call,
       if (t_info->ndim == 0) {
         input_layouts.push_back(LayoutDecision(""));
       } else if (t_info->ndim == 1) {
-        const auto& ref_layout = output->input_layouts[i].LeafValue()->layout;
+        const auto& ref_layout = output->output_layouts[0].LeafValue()->layout;
         input_layouts.push_back(LayoutDecision(ref_layout[ref_layout.ndim() - 1].name()));
       } else {
         input_layouts.push_back(output->input_layouts[i]);
@@ -1018,10 +1018,21 @@ class LayoutInfer : public ExprVisitor {
       if (expr->IsInstance<TupleGetItemNode>()) {
         continue;
       }
+      if (expr->IsInstance<ShapeExprNode>()) {
+        continue;
+      }
       if (!expr->IsInstance<CallNode>()) {
         continue;
       }
       const Call& call = Downcast<Call>(expr);
+      if (const auto* v_node = call->op.as<GlobalVarNode>()) {
+        const auto& func = Downcast<Function>(ref_module_->Lookup(v_node->name_hint));
+        BackwardInferFunc(func, call);
+        continue;
+      } else if (call->op->IsInstance<VarNode>() && local_funcs_.count(call->op)) {
+        BackwardInferFunc(local_funcs_[call->op], call);
+        continue;
+      }
       size_t infered_num = 0;
       for (const auto& arg : call->args) {
         if (IsArgInfered(arg)) {
@@ -1054,7 +1065,7 @@ class LayoutInfer : public ExprVisitor {
       }
       try {
         if (infered_layout.defined()) {
-          SetInputLayouts(infered_layout->input_layouts, call);
+          SetInputLayouts(call, infered_layout->input_layouts);
         }
       } catch (runtime::InternalError& err) {
         LOG(WARNING) << "Failed to backward set inputs layout for " << call << " : "
@@ -1067,23 +1078,12 @@ class LayoutInfer : public ExprVisitor {
     ExprVisitor::VisitBinding_(binding, call_node);
     const auto& call = GetRef<Call>(call_node);
     if (const auto* v_node = call->op.as<GlobalVarNode>()) {
-      // infer global func and set var layouts
       const auto& func = Downcast<Function>(ref_module_->Lookup(v_node->name_hint));
-      Infer(func);
-      for (size_t i = 0; i < func->params.size(); i++) {
-        if (var_layout_map_.count(func->params[i]) &&
-            LayoutUtils::SetLayout(call->args[i], var_layout_map_[func->params[i]])) {
-          infered_ = true;
-        }
-      }
-      if (const auto* b_node = func->body.as<relax::SeqExprNode>()) {
-        var_layout_map_[binding->var] = GetNLayout(var_layout_map_, b_node->body);
-        if (LayoutUtils::SetLayout(call, var_layout_map_[binding->var])) {
-          infered_ = true;
-        }
-      } else {
-        LOG(FATAL) << "Function body should be SeqExpr, get " << func->body;
-      }
+      RecordExpr(binding->var, call);
+      ForwardInferFunc(func, call, binding->var);
+    } else if (call->op->IsInstance<VarNode>() && local_funcs_.count(call->op)) {
+      RecordExpr(binding->var, call);
+      ForwardInferFunc(local_funcs_[call->op], call, binding->var);
     } else {
       // infer call
       bool infer_outputs = true;
@@ -1126,10 +1126,7 @@ class LayoutInfer : public ExprVisitor {
         }
         if (infered_layout.defined() && infered_layout->output_layouts.size() == 1) {
           try {
-            var_layout_map_[binding->var] = infered_layout->output_layouts[0];
-            if (LayoutUtils::SetLayout(call, var_layout_map_[binding->var])) {
-              infered_ = true;
-            }
+            SetExprLayout(binding->var, infered_layout->output_layouts[0]);
           } catch (runtime::InternalError& err) {
             LOG(WARNING) << "Failed to forward set output layout for " << binding->var << " : "
                          << binding->value << ", reason: " << err.message();
@@ -1137,7 +1134,7 @@ class LayoutInfer : public ExprVisitor {
         }
         if (set_inputs && infered_layout.defined()) {
           try {
-            SetInputLayouts(infered_layout->input_layouts, call);
+            SetInputLayouts(call, infered_layout->input_layouts);
           } catch (runtime::InternalError& err) {
             LOG(WARNING) << "Failed to forward set inputs layout for " << call << " : "
                          << err.message();
@@ -1147,39 +1144,34 @@ class LayoutInfer : public ExprVisitor {
     }
   }
 
+  void VisitBinding_(const VarBindingNode* binding, const FunctionNode* val) final {
+    local_funcs_.Set(binding->var, GetRef<Function>(val));
+  }
+
   void VisitBinding_(const VarBindingNode* binding, const TupleNode* val) final {
     ExprVisitor::VisitBinding_(binding, val);
+    RecordExpr(binding->var, GetRef<Tuple>(val));
     if (IsNestedTensor(binding->var)) {
       Array<NLayout> input_layouts;
       for (const auto& field : val->fields) {
         input_layouts.push_back(InferLayoutDecision(field, var_layout_map_));
       }
-      var_layout_map_[binding->var] = input_layouts;
-      if (LayoutUtils::SetLayout(GetRef<Tuple>(val), NLayout(input_layouts))) {
-        infered_ = true;
-      }
+      SetExprLayout(binding->var, input_layouts);
     }
-    RecordExpr(binding->var, GetRef<Tuple>(val));
   }
 
   void VisitBinding_(const VarBindingNode* binding, const TupleGetItemNode* val) final {
     ExprVisitor::VisitBinding_(binding, val);
+    RecordExpr(binding->var, GetRef<TupleGetItem>(val));
     const auto& out_layout =
         InferLayoutDecisionAt(GetRef<TupleGetItem>(val)->tuple, var_layout_map_, val->index);
-    var_layout_map_[binding->var] = out_layout;
-    if (LayoutUtils::SetLayout(GetRef<TupleGetItem>(val), out_layout)) {
-      infered_ = true;
-    }
-    RecordExpr(binding->var, GetRef<TupleGetItem>(val));
+    SetExprLayout(binding->var, out_layout);
   }
 
   void VisitBinding_(const VarBindingNode* binding, const ShapeExprNode* val) final {
     ExprVisitor::VisitBinding_(binding, val);
-    const NLayout& out_layout = LayoutDecision("O");
-    var_layout_map_[binding->var] = out_layout;
-    if (LayoutUtils::SetLayout(GetRef<ShapeExpr>(val), out_layout)) {
-      infered_ = true;
-    }
+    RecordExpr(binding->var, GetRef<ShapeExpr>(val));
+    SetExprLayout(binding->var, LayoutDecision("O"));
   }
 
   bool infered() { return infered_; }
@@ -1203,21 +1195,71 @@ class LayoutInfer : public ExprVisitor {
     return false;
   }
 
-  void SetInputLayouts(const Array<NLayout>& input_layouts, const Call& call) {
+  void SetExprLayout(const Expr& expr, const NLayout& layout) {
+    if (expr->IsInstance<VarNode>()) {
+      const auto& var = Downcast<Var>(expr);
+      var_layout_map_[var] = layout;
+      if (LayoutUtils::SetLayout(var, layout)) {
+        infered_ = true;
+      }
+      if (var_map_.count(var) && LayoutUtils::SetLayout(var_map_[var], layout)) {
+        infered_ = true;
+      }
+    } else if (LayoutUtils::SetLayout(expr, layout)) {
+      infered_ = true;
+    }
+  }
+
+  void SetInputLayouts(const Call& call, const Array<NLayout>& input_layouts) {
     if (input_layouts.size() == call->args.size()) {
       for (size_t i = 0; i < input_layouts.size(); i++) {
-        if (call->args[i]->IsInstance<VarNode>()) {
-          const auto& var = Downcast<Var>(call->args[i]);
-          var_layout_map_[var] = input_layouts[i];
-          if (var_map_.count(var)) {
-            if (LayoutUtils::SetLayout(var_map_[var], input_layouts[i])) {
-              infered_ = true;
+        SetExprLayout(call->args[i], input_layouts[i]);
+      }
+    }
+  }
+
+  void ForwardInferFunc(const Function& func, const Call& call, const Var& ret) {
+    for (size_t i = 0; i < call->args.size(); i++) {
+      if (call->args[i]->IsInstance<VarNode>() &&
+          var_layout_map_.count(Downcast<Var>(call->args[i]))) {
+        SetExprLayout(func->params[i], var_layout_map_[Downcast<Var>(call->args[i])]);
+      }
+    }
+    ForwardInfer(func);
+    for (size_t i = 0; i < func->params.size(); i++) {
+      if (var_layout_map_.count(func->params[i])) {
+        SetExprLayout(call->args[i], var_layout_map_[func->params[i]]);
+      }
+    }
+    if (const auto* b_node = func->body.as<relax::SeqExprNode>()) {
+      if (b_node->body->IsInstance<VarNode>() &&
+          var_layout_map_.count(Downcast<Var>(b_node->body))) {
+        SetExprLayout(ret, var_layout_map_[Downcast<Var>(b_node->body)]);
+      }
+    } else {
+      LOG(FATAL) << "Function body should be SeqExpr, get " << func->body;
+    }
+  }
+
+  void BackwardInferFunc(const Function& func, const Call& call) {
+    for (size_t i = 0; i < func->params.size(); i++) {
+      if (var_layout_map_.count(func->params[i])) {
+        const auto& param_layout = var_layout_map_[func->params[i]];
+        SetExprLayout(call->args[i], param_layout);
+        if (call->args[i]->IsInstance<VarNode>() && var_map_.count(Downcast<Var>(call->args[i]))) {
+          const auto& producer = var_map_[Downcast<Var>(call->args[i])];
+          if (producer->IsInstance<CallNode>() &&
+              local_funcs_.count(Downcast<Call>(producer)->op)) {
+            const auto& caller = local_funcs_[Downcast<Call>(producer)->op];
+            if (const auto* b_node = caller->body.as<relax::SeqExprNode>()) {
+              if (b_node->body->IsInstance<VarNode>() &&
+                  var_map_.count(Downcast<Var>(b_node->body))) {
+                SetExprLayout(b_node->body, param_layout);
+              }
+            } else {
+              LOG(FATAL) << "Caller body should be SeqExpr, get " << caller->body;
             }
-          } else if (LayoutUtils::SetLayout(var, input_layouts[i])) {
-            infered_ = true;
           }
-        } else if (LayoutUtils::SetLayout(call->args[i], input_layouts[i])) {
-          infered_ = true;
         }
       }
     }
@@ -1228,6 +1270,7 @@ class LayoutInfer : public ExprVisitor {
   Map<Var, Expr> var_map_;
   Array<Expr> ordered_exprs_;
   std::unordered_map<Var, NLayout, ObjectPtrHash, ObjectPtrEqual> var_layout_map_;
+  Map<Expr, Function> local_funcs_;
 };  // class LayoutInfer
 
 class LayoutChecker : public ExprVisitor {

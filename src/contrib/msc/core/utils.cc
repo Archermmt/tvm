@@ -55,10 +55,38 @@ bool StringUtils::Contains(const String& src_string, const String& sub_string) {
     return false;
   }
 
-  const std::string src_cstring = src_string;
+  const std::string& src_cstring = src_string;
   const std::string& sub_cstring = sub_string;
   int pos = src_cstring.find(sub_cstring);
   return pos >= 0;
+}
+
+bool StringUtils::StartsWith(const String& src_string, const String& sub_string) {
+  if (src_string.size() == 0) {
+    return false;
+  }
+  if (sub_string.size() == 0) {
+    return false;
+  }
+
+  const std::string& src_cstring = src_string;
+  const std::string& sub_cstring = sub_string;
+  int pos = src_cstring.find(sub_cstring);
+  return pos == 0;
+}
+
+bool StringUtils::EndsWith(const String& src_string, const String& sub_string) {
+  if (src_string.size() == 0) {
+    return false;
+  }
+  if (sub_string.size() == 0) {
+    return false;
+  }
+
+  const std::string& src_cstring = src_string;
+  const std::string& sub_cstring = sub_string;
+  int pos = src_cstring.rfind(sub_cstring);
+  return pos == src_cstring.size() - sub_cstring.size();
 }
 
 const Array<String> StringUtils::Split(const String& src_string, const String& sep) {
@@ -282,7 +310,7 @@ const Array<String> ExprUtils::GetInputTypes(const String& optype, size_t inputs
     input_types.push_back("input");
     input_types.push_back("weight");
     input_types.push_back("bias");
-    if (as_relax) {
+    if (as_relax && inputs_num > 3) {
       input_types.push_back("expand_bias");
     }
   } else if (optype == "msc.linear_bias") {

@@ -33,7 +33,7 @@ namespace contrib {
 namespace msc {
 
 /*!
- * \brief CodeGen config for torch codegen
+ * \brief CodeGen config for tensorflow codegen
  */
 struct TensorflowCodeGenConfig {
   bool is_training{false};

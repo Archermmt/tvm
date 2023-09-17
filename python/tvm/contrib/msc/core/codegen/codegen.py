@@ -40,6 +40,8 @@ class CodeGen(object):
         The config to print code.
     build_folder: MSCDirectory
         The codegen folder.
+    output_folder: MSCDirectory
+        The output folder.
     """
 
     def __init__(
@@ -49,12 +51,18 @@ class CodeGen(object):
         codegen_config: Optional[Dict[str, str]] = None,
         print_config: Optional[Dict[str, str]] = None,
         build_folder: msc_utils.MSCDirectory = None,
+        output_folder: msc_utils.MSCDirectory = None,
+        code_format: str = "python",
     ):
         self._graph = graph
         self._source_getter = source_getter
         self._codegen_config = msc_utils.dump_dict(codegen_config)
         self._print_config = msc_utils.dump_dict(print_config)
         self._build_folder = build_folder or msc_utils.msc_dir(keep_history=False, cleanup=True)
+        self._output_folder = output_folder or msc_utils.msc_dir(
+            "msc_output", keep_history=False, cleanup=False
+        )
+        self._code_format = code_format
 
     def load(
         self,
@@ -69,6 +77,8 @@ class CodeGen(object):
             The inputs to build the model.
         weights_binder: Callable
             The method for binding weights to the model.
+        as_cpp: bool
+            Whether load the model in cpp format
 
         Returns
         -------
@@ -81,11 +91,22 @@ class CodeGen(object):
         with self._build_folder as folder:
             for name, source in sources.items():
                 folder.add_file(name, source)
-            builder = msc_utils.load_callable(self._graph.name + ".py:" + self._graph.name)
-            obj = builder(*inputs)
-            # load weights
-            if weights_binder:
-                obj = weights_binder(obj, folder)
+            if self._code_format == "cpp":
+                print("should make the cpp file!!")
+                raise Exception("stop here!!")
+                # load weights
+                if weights_binder:
+                    obj = weights_binder(obj, folder)
+            elif self._code_format == "python":
+                builder = msc_utils.load_callable(self._graph.name + ".py:" + self._graph.name)
+                obj = builder(*inputs)
+                # load weights
+                if weights_binder:
+                    obj = weights_binder(obj, folder)
+            else:
+                raise NotImplementedError(
+                    "Code format {} is not supported".format(self._code_format)
+                )
         return obj
 
 

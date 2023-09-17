@@ -52,7 +52,7 @@ class PyCodeGen : public BaseCodeGen<ConfigType> {
       : BaseCodeGen<ConfigType>(graph, config) {}
 
   /*! \brief Stack the docs for the script*/
-  virtual const Array<Doc> GetDocs() {
+  virtual void CodeGenScript() {
     CodeGenHeader();
     this->stack_.line().comment("Define the helpers");
     CodeGenHelper();
@@ -62,14 +62,14 @@ class PyCodeGen : public BaseCodeGen<ConfigType> {
       this->stack_.line().comment("Define the test");
       CodeGenTest();
     }
-    return this->stack_.GetDocs();
   }
 
   /*! \brief Get sources*/
   virtual const Map<String, String> GetSources(const std::string& print_options = "") {
     Map<String, String> sources;
     PythonPrinter printer(print_options);
-    for (const auto& d : this->GetDocs()) {
+    CodeGenScript();
+    for (const auto& d : this->stack_.GetDocs()) {
       printer.Append(d);
     }
     sources.Set(this->graph()->name + ".py", printer.GetString());

@@ -64,7 +64,7 @@ def normalize_weights(
                 return tvm.nd.array(data.asnumpy().transpose(*permute))
         return data
 
-    weights = {t.name: _to_data(t, d) for t, d in t_weights.items()}
+    weights = {t.name: _to_data(t, d) for t, d in t_weights.items() if graph.has_tensor(t.name)}
     return weights
 
 
@@ -97,57 +97,24 @@ def from_relax(
 
     trans_config = trans_config or {}
     build_config = build_config or {}
+    entry = trans_config.get("entry", "main")
     # TODO(tong.meng): optimize before translate?
     if params:
         mod = BindParams("main", params)(mod)
-    if trans_config.get("normalize", True):
-        patterns = get_patterns_with_prefix("msc")
-        passes = [
-            tvm.relax.transform.FuseOpsByPattern(
-                patterns, bind_constants=False, annotate_codegen=False
-            ),
-            msc_transform.SetExprName(),
-            msc_transform.SetExprLayout(trans_config.get("allow_layout_missing", True)),
-        ]
-        mod = tvm.transform.Sequential(passes)(mod)
-    entry = trans_config.get("entry", "main")
+    patterns = get_patterns_with_prefix("msc")
+    passes = [
+        tvm.relax.transform.FuseOpsByPattern(
+            patterns, bind_constants=False, annotate_codegen=False
+        ),
+        msc_transform.SetExprName(entry_name=entry, target=trans_config.get("target", "")),
+        msc_transform.SetExprLayout(
+            trans_config.get("allow_layout_missing", True), entry_name=entry
+        ),
+    ]
+    mod = tvm.transform.Sequential(passes)(mod)
     graph = _ffi_api.BuildFromRelax(mod, entry, msc_utils.dump_dict(build_config))
     t_weights = _ffi_api.GetRelaxWeights(mod, entry)
     return graph, normalize_weights(t_weights, graph)
-
-
-def from_relax_func(
-    func: tvm.relax.Function,
-    graph_name: str = "msc_func",
-    trans_config: Optional[Dict[str, str]] = None,
-    build_config: Optional[Dict[str, str]] = None,
-) -> Tuple[MSCGraph, Dict[str, tvm.nd.array]]:
-    """Change tensorflow GraphDef to MSCGraph.
-
-    Parameters
-    ----------
-    func: relax.Function
-        The tensorrt extern function.
-    graph_name: str
-        The graph name for MSCGraph.
-    trans_config: dict
-        The config for transfrorm IRModule.
-    build_config: dict
-        The config for build MSCGraph.
-
-    Returns
-    -------
-    graph: tvm.contrib.msc.core.ir.MSCGraph
-        The translated graph.
-    weights: dict of <string:tvm.ndarray>
-        The weights from the IRModule.
-    """
-
-    trans_config = trans_config or {}
-    trans_config.update({"normalize": False, "entry": graph_name})
-    mod = tvm.IRModule()
-    mod[graph_name] = func
-    return from_relax(mod, trans_config=trans_config, build_config=build_config)
 
 
 def get_relay_patterns(
@@ -260,3 +227,66 @@ def from_relay(
     graph = _ffi_api.BuildFromRelay(mod, "main", msc_utils.dump_dict(build_config))
     t_weights = _ffi_api.GetRelayWeights(mod, "main")
     return graph, normalize_weights(t_weights, graph)
+
+
+def byoc_partition(
+    target: str,
+    mod: tvm.IRModule,
+    params: Optional[Dict[str, tvm.nd.array]] = None,
+    trans_config: Optional[Dict[str, str]] = None,
+    build_config: Optional[Dict[str, str]] = None,
+) -> Tuple[tvm.IRModule, List[Tuple[str, MSCGraph, Dict[str, tvm.nd.array]]]]:
+    """Partition module to target sub functions.
+
+    Parameters
+    ----------
+    target: str
+        The target for the BYOC.
+    mod: IRModule
+        The IRModule of relax.
+    trans_config: dict
+        The config for transfrorm IRModule.
+    params: dict of <string:tvm.ndarray>
+        The parameters of the IRModule.
+    build_config: dict
+        The config for build MSCGraph.
+
+    Returns
+    -------
+    mod: IRModule
+        The IRModule of partitioned relax.
+    graphs_info: list<<str, MSCGraph, weights>>
+        The func <name, MSCGraph and weights> list, each element for a sub graph.
+    """
+
+    trans_config = trans_config or {}
+    build_config = build_config or {}
+    build_config["target"] = target
+    entry = trans_config.get("entry", "main")
+    if params:
+        mod = BindParams("main", params)(mod)
+
+    patterns = get_patterns_with_prefix(target)
+    mod = tvm.transform.Sequential(
+        [
+            tvm.relax.transform.FuseOpsByPattern(
+                patterns, bind_constants=False, annotate_codegen=False
+            ),
+            tvm.relax.transform.MergeCompositeFunctions(),
+            msc_transform.SetExprName(target=target),
+            msc_transform.SetExprLayout(trans_config.get("allow_layout_missing", True)),
+        ]
+    )(mod)
+
+    def _is_target_func(func):
+        if "Codegen" not in func.attrs:
+            return False
+        return func.attrs["Codegen"] == target
+
+    func_names = [var.name_hint for var, func in mod.functions.items() if _is_target_func(func)]
+    graphs_info, all_weights = [], _ffi_api.GetRelaxWeights(mod, entry)
+    for idx, name in enumerate(func_names):
+        build_config["graph_name"] = target + "_" + str(idx)
+        graph = _ffi_api.BuildFromRelax(mod, name, msc_utils.dump_dict(build_config))
+        graphs_info.append((name, graph, normalize_weights(all_weights, graph)))
+    return mod, graphs_info

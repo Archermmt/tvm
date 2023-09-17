@@ -66,6 +66,18 @@ class StringUtils {
   TVM_DLL static bool Contains(const String& src_string, const String& sub_string);
 
   /*!
+   * \brief Check if the String starts with a substring.
+   * \return Whether substring is contained.
+   */
+  TVM_DLL static bool StartsWith(const String& src_string, const String& sub_string);
+
+  /*!
+   * \brief Check if the String ens with a substring.
+   * \return Whether substring is contained.
+   */
+  TVM_DLL static bool EndsWith(const String& src_string, const String& sub_string);
+
+  /*!
    * \brief Split the String into sub Strings.
    * \return The SubStrings.
    */

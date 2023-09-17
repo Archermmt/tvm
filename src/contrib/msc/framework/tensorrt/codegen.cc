@@ -22,6 +22,8 @@
  * \brief Codegen related classes.
  */
 
+#include "codegen.h"
+
 #include <tvm/ir/module.h>
 #include <tvm/relax/expr.h>
 
@@ -30,6 +32,62 @@ namespace contrib {
 namespace msc {
 
 using namespace tvm::relax;
+
+void TensorRTCodeGen::CodeGenClassDeclare() {
+  stack_.line("#include \"NvInfer.h\"")
+      .line("#include \"NvInferRuntimeCommon.h\"")
+      .line("#include \"utils/base.h\"")
+      .line()
+      .line("using namsespace nvinfer1;")
+      .line();
+  StartNamespace();
+  stack_.class_def(graph()->name)
+      .class_start()
+      .scope_start("public:")
+      .func_def("build", "bool")
+      .func_arg("inputs", "ITensor**")
+      .func_arg("outputs", "ITensor**")
+      .func_arg("builder", "TRTUniquePtr<IBuilder>&")
+      .func_arg("network", "TRTUniquePtr<INetworkDefinition>&");
+  if (CompareVersion(6, 0, 0) >= 0) {
+    stack_.func_arg("config", "TRTUniquePtr<IBuilderConfig>&");
+  }
+  stack_.func_arg("logger", "TRTLogger&")
+      .func_start()
+      .func_end()
+      .func_def("clean_up", "bool")
+      .func_start()
+      .func_end()
+      .scope_end();
+  stack_.class_end();
+  EndNamespace();
+}
+
+void TensorRTCodeGen::CodeGenClassDefine() {}
+
+void TensorRTCodeGen::CodeGenMain() {}
+
+void TensorRTCodeGen::CodeGenCmake() {}
+
+const Array<Doc> TensorRTCodeGen::GetOpCodes(const MSCJoint& node) {
+  const auto& ops_map = GetTensorRTOpCodes();
+  auto it = ops_map->find(node->optype);
+  ICHECK(it != ops_map->end()) << "Unsupported tensorrt op(" << node->optype << "): " << node;
+  it->second->Config(node, config());
+  try {
+    return it->second->GetDocs();
+  } catch (runtime::InternalError& err) {
+    LOG(WARNING) << "Failed to get docs for " << node << " : " << err.message();
+    throw err;
+  }
+}
+
+TVM_REGISTER_GLOBAL("msc.framework.tensorrt.GetTensorRTSources")
+    .set_body_typed([](const MSCGraph& graph, const String& codegen_config,
+                       const String print_config) -> Map<String, String> {
+      TensorRTCodeGen codegen = TensorRTCodeGen(graph, codegen_config);
+      return codegen.GetSources(print_config);
+    });
 
 /*!
  * \brief Create runtime modules for TensorRT.

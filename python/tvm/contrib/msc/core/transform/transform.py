@@ -22,7 +22,9 @@ from tvm.relax.transform import _ffi_api as relax_api
 from tvm.relay.transform import _ffi_api as relay_api
 
 
-def SetExprName(as_relax: bool = True, entry_name: str = "main") -> tvm.ir.transform.Pass:
+def SetExprName(
+    as_relax: bool = True, entry_name: str = "main", target: str = ""
+) -> tvm.ir.transform.Pass:
     """Set name for the call and constant in IRModule.
 
     Parameters
@@ -31,6 +33,8 @@ def SetExprName(as_relax: bool = True, entry_name: str = "main") -> tvm.ir.trans
         Whether set names for relax, otherwise for relay.
     entry_name: str
         The entry name
+    target: str
+        The target prefix for target functions
 
     Returns
     -------
@@ -38,7 +42,7 @@ def SetExprName(as_relax: bool = True, entry_name: str = "main") -> tvm.ir.trans
     """
 
     if as_relax:
-        return relax_api.SetRelaxExprName(entry_name)  # type: ignore
+        return relax_api.SetRelaxExprName(entry_name, target)  # type: ignore
     return relay_api.SetRelayExprName(entry_name)  # type: ignore
 
 

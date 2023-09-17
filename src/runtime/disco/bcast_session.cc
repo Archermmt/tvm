@@ -22,6 +22,8 @@
 #include <tvm/runtime/packed_func.h>
 #include <tvm/runtime/registry.h>
 
+#include <sstream>
+
 namespace tvm {
 namespace runtime {
 
@@ -66,6 +68,13 @@ void BcastSessionObj::Shutdown() {
   BcastSessionObj::Internal::BroadcastUnpacked(this, DiscoAction::kShutDown, 0);
 }
 
+void BcastSessionObj::InitCCL(String ccl, ShapeTuple device_ids) {
+  const auto* pf = runtime::Registry::Get("runtime.disco." + ccl + ".init_ccl");
+  CHECK(pf) << "ValueError: Cannot initialize CCL `" << ccl
+            << "`, because cannot find function: runtime.disco." << ccl << ".init_ccl";
+  (*pf)(GetRef<Session>(this), device_ids);
+}
+
 void BcastSessionObj::SyncWorker(int worker_id) {
   BcastSessionObj::Internal::BroadcastUnpacked(this, DiscoAction::kSyncWorker, worker_id);
   TVMArgs args = this->RecvReplyPacked(worker_id);
@@ -87,6 +96,24 @@ DRef BcastSessionObj::CallWithPacked(const TVMArgs& args) {
     setter(0, static_cast<int>(DiscoAction::kCallPacked));
     setter(1, reg_id);
     setter(2, func->reg_id);
+  }
+  {
+    std::ostringstream os;
+    int cnt = 0;
+    for (int i = 3; i < num_args; ++i) {
+      int type_code = type_codes[i];
+      if (type_code != kDLInt && type_code != kDLUInt && type_code != kDLFloat &&
+          type_code != kTVMDataType && type_code != kDLDevice && type_code != kTVMOpaqueHandle &&
+          type_code != kTVMStr && type_code != kTVMNullptr && type_code != kTVMBytes &&
+          type_code != kTVMObjectHandle) {
+        os << "\n  Argument #" << i << " has unsupported type code: " << type_code << " ("
+           << ArgTypeCode2Str(type_code) << ")";
+        cnt += 1;
+      }
+    }
+    if (cnt > 0) {
+      LOG(FATAL) << "CallWithPacked() does not support " << cnt << " argument(s):" << os.str();
+    }
   }
   this->BroadcastPacked(TVMArgs(values, type_codes, num_args));
   return BcastSessionObj::Internal::MakeDRef(reg_id, GetRef<Session>(this));

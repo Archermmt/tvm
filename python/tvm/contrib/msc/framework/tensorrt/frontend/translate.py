@@ -20,10 +20,8 @@ from typing import Dict, Optional, Tuple, List
 
 import tvm
 from tvm import relax
-from tvm.relax.transform import BindParams
-from tvm.relax.backend.pattern_registry import get_patterns_with_prefix
 from tvm.contrib.msc.core import transform as msc_transform
-from tvm.contrib.msc.core.ir import MSCGraph, from_relax_func
+from tvm.contrib.msc.core.ir import MSCGraph, byoc_partition
 from tvm.contrib.msc.framework.tensorrt import transform as trt_transform
 
 
@@ -32,7 +30,7 @@ def partition_for_tensorrt(
     params: Optional[Dict[str, tvm.nd.array]] = None,
     trans_config: Optional[Dict[str, str]] = None,
     build_config: Optional[Dict[str, str]] = None,
-) -> Tuple[tvm.IRModule, List[MSCGraph], List[Dict[str, tvm.nd.array]]]:
+) -> Tuple[tvm.IRModule, List[Tuple[str, MSCGraph, Dict[str, tvm.nd.array]]]]:
     """Partition module to tensorrt sub functions.
 
     Parameters
@@ -50,53 +48,15 @@ def partition_for_tensorrt(
     -------
     mod: IRModule
         The IRModule of partitioned relax.
-    graphs: list<MSCGraph>
-        The MSCGraphs.
-    weights: list
-        The weights for MSCGraph.
+    graphs_info: list<<str, MSCGraph, weights>>
+        The func <name, MSCGraph and weights> list, each element for a sub graph.
     """
 
-    trans_config = trans_config or {}
-    if params:
-        mod = BindParams("main", params)(mod)
-
-    patterns = get_patterns_with_prefix("msc_tensorrt")
     mod = tvm.transform.Sequential(
         [
             msc_transform.SetExprName(),
             trt_transform.TransformTensorRT(),
             relax.transform.FoldConstant(),
-            msc_transform.SetExprLayout(trans_config.get("allow_layout_missing", True)),
-            relax.transform.FuseOpsByPattern(patterns),
-            relax.transform.MergeCompositeFunctions(),
         ]
     )(mod)
-
-    def _is_tensorrt_func(func):
-        if "Codegen" not in func.attrs:
-            return False
-        return func.attrs["Codegen"] == "msc_tensorrt"
-
-    tensorrt_funcs = [func for _, func in mod.functions.items() if _is_tensorrt_func(func)]
-    msc_graphs, msc_weights = [], []
-    print("[TMINFO] mod " + str(mod))
-    for idx, func in enumerate(tensorrt_funcs):
-        print("[TMINFO] tensorrt func " + str(func))
-        graph, weights = from_relax_func(
-            func, "msc_tensorrt_" + str(idx), build_config=build_config
-        )
-        msc_graphs.append(graph)
-        msc_weights.append(weights)
-        print("get graph[{}]: {}".format(idx, graph))
-        print("weitgh " + str(weights))
-
-    """
-    mod = tvm.transform.Sequential(
-        [
-            relax.transform.RunCodegen(),
-        ]
-    )(mod)
-    print("[TMINFO] compiled mod " + str(mod))
-    """
-    raise Exception("stop here!!")
-    return mod, msc_graphs, msc_weights
+    return byoc_partition("msc_tensorrt", mod, params, trans_config, build_config)

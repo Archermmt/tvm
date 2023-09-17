@@ -19,47 +19,22 @@
 #include <cuda_runtime_api.h>
 #include <dlpack/dlpack.h>
 #include <nccl.h>
+#include <tvm/runtime/c_runtime_api.h>
 #include <tvm/runtime/disco/session.h>
 #include <tvm/runtime/registry.h>
 
+#include <cstring>
 #include <mutex>
+#include <sstream>
 #include <vector>
 
+#include "../../../support/process_id.h"
 #include "../../cuda/cuda_common.h"
 #include "./utils.h"
 
 namespace tvm {
 namespace runtime {
 namespace nccl {
-
-struct NCCLGlobalContext {
-  std::vector<ncclComm_t> communicators;
-
-  static NCCLGlobalContext* Get() {
-    static NCCLGlobalContext ctx;
-    return &ctx;
-  }
-
-  void Initialize(const std::vector<int>& device_ids) {
-    // TODO(@junrushao): support more flexible communicator pattern for generic SPMD usecases
-    DiscoWorker* worker = DiscoWorker::ThreadLocal();
-    int num_workers = worker->num_workers;
-    CHECK_EQ(device_ids.size(), num_workers)
-        << "ValueError: There are " << num_workers << " worker(s), but " << device_ids.size()
-        << " device id(s) are provided.";
-    ncclUniqueId id;
-    NCCL_CALL(ncclGetUniqueId(&id));
-    NCCL_CALL(ncclGroupStart());
-    for (int worker_id = 0; worker_id < num_workers; ++worker_id) {
-      int device_id = device_ids[worker_id];
-      ncclComm_t comm;
-      CUDA_CALL(cudaSetDevice(device_id));
-      NCCL_CALL(ncclCommInitRank(&comm, num_workers, id, worker_id));
-      this->communicators.push_back(comm);
-    }
-    NCCL_CALL(ncclGroupEnd());
-  }
-};
 
 struct NCCLThreadLocalContext {
   DiscoWorker* worker;
@@ -78,44 +53,57 @@ struct NCCLThreadLocalContext {
   }
 };
 
-void InitCCL(const std::vector<int>& device_ids) {
-  // Set up global context only once
-  static std::once_flag flag;
-  std::call_once(flag, [&]() { NCCLGlobalContext::Get()->Initialize(device_ids); });
-  // Set up thread-local context for each thread
-  DiscoWorker* worker = DiscoWorker::ThreadLocal();
+void InitCCL(Session sess, ShapeTuple device_ids) {
+  DRef func = sess->GetGlobalFunc("runtime.disco.nccl.init_ccl_per_worker");
+  LOG(INFO) << "Initializing NCCL with devices: " << device_ids;
+  ncclUniqueId id;
+  TVMByteArray array;
+  NCCL_CALL(ncclGetUniqueId(&id));
+  array.data = id.internal;
+  array.size = NCCL_UNIQUE_ID_BYTES;
+  sess->CallPacked(func, device_ids, array);
+}
+
+void InitCCLPerWorker(ShapeTuple device_ids, std::string unique_id_bytes) {
   NCCLThreadLocalContext* ctx = NCCLThreadLocalContext::Get();
+  DiscoWorker* worker = DiscoWorker::ThreadLocal();
+  ICHECK(worker != nullptr);
+  CHECK_EQ(unique_id_bytes.size(), NCCL_UNIQUE_ID_BYTES)
+      << "ValueError: The length of unique_id must be " << NCCL_UNIQUE_ID_BYTES << ", but got "
+      << unique_id_bytes.size() << ".";
+  // Step up local context of NCCL
   int device_id = device_ids[worker->worker_id];
   CUDA_CALL(cudaSetDevice(device_id));
+  CUDA_CALL(cudaStreamCreate(&ctx->stream));
   Device device{DLDeviceType::kDLCUDA, device_id};
+  DeviceAPI::Get(device)->SetStream(device, ctx->stream);
   worker->default_device = device;
   worker->ccl = "nccl";
   ctx->worker = worker;
   ctx->device_id = device_id;
-  ctx->comm = NCCLGlobalContext::Get()->communicators[worker->worker_id];
-  CUDA_CALL(cudaStreamCreate(&ctx->stream));
-  DeviceAPI::Get(device)->SetStream(device, ctx->stream);
+  // Initialize the communicator
+  ncclUniqueId id;
+  std::memcpy(id.internal, unique_id_bytes.data(), NCCL_UNIQUE_ID_BYTES);
+  NCCL_CALL(ncclCommInitRank(&ctx->comm, worker->num_workers, id, worker->worker_id));
 }
 
-NDArray AllReduce(NDArray send, ReduceKind reduce_kind) {
+void AllReduce(NDArray send, ReduceKind reduce_kind, NDArray recv) {
   NCCLThreadLocalContext* ctx = NCCLThreadLocalContext::Get();
   ShapeTuple shape = send.Shape();
   int64_t numel = shape->Product();
-  NDArray recv = NDArray::Empty(shape, send->dtype, send->device);
   NCCL_CALL(ncclAllReduce(send->data, recv->data, numel,
                           /*datatype=*/AsNCCLDataType(DataType(send->dtype)),
                           /*op=*/AsNCCLRedOp(reduce_kind), ctx->comm, ctx->stream));
-  return recv;
 }
 
-NDArray BroadcastFromWorker0(NDArray buffer) {
+void BroadcastFromWorker0(NDArray send, NDArray recv) {
   NCCLThreadLocalContext* ctx = NCCLThreadLocalContext::Get();
-  ShapeTuple shape = buffer.Shape();
+  ICHECK(send.Shape()->Product() == recv.Shape()->Product());
+  ShapeTuple shape = send.Shape();
   int64_t numel = shape->Product();
-  NCCL_CALL(ncclBroadcast(buffer->data, buffer->data, numel,
-                          /*datatype=*/AsNCCLDataType(DataType(buffer->dtype)),
+  NCCL_CALL(ncclBroadcast(send->data, recv->data, numel,
+                          /*datatype=*/AsNCCLDataType(DataType(send->dtype)),
                           /*root=*/0, ctx->comm, ctx->stream));
-  return buffer;
 }
 
 void ScatterFromWorker0(Optional<NDArray> send, NDArray recv) {
@@ -146,7 +134,7 @@ void ScatterFromWorker0(Optional<NDArray> send, NDArray recv) {
     }
   } else {
     if (send.defined()) {
-      LOG(WARNING) << "ValueError: buffer `send` must be None when worker_id != 0. However, got "
+      LOG(WARNING) << "Buffer `send` must be None when worker_id != 0, but got "
                       "send = "
                    << send.get() << ". This will be ignored.";
     }
@@ -208,23 +196,25 @@ void RecvFromWorker0(NDArray buffer) {
   NCCL_CALL(ncclGroupEnd());
 }
 
-TVM_REGISTER_GLOBAL("runtime.disco.nccl.init_ccl")
-    .set_body([](TVMArgs args, TVMRetValue* rv) -> void {
-      std::vector<int> device_ids;
-      for (int i = 0; i < args.num_args; ++i) {
-        device_ids.push_back(args[i].operator int());
-      }
-      InitCCL(device_ids);
+void SyncWorker() {
+  NCCLThreadLocalContext* ctx = NCCLThreadLocalContext::Get();
+  ICHECK(ctx->worker != nullptr);
+  CUDA_CALL(cudaStreamSynchronize(ctx->stream));
+}
+
+TVM_REGISTER_GLOBAL("runtime.disco.nccl.init_ccl").set_body_typed(InitCCL);
+TVM_REGISTER_GLOBAL("runtime.disco.nccl.init_ccl_per_worker").set_body_typed(InitCCLPerWorker);
+TVM_REGISTER_GLOBAL("runtime.disco.nccl.allreduce")
+    .set_body_typed([](NDArray send, int kind, NDArray recv) {
+      CHECK(0 <= kind && kind <= 4) << "ValueError: Unknown ReduceKind: " << kind;
+      AllReduce(send, static_cast<ReduceKind>(kind), recv);
     });
-TVM_REGISTER_GLOBAL("runtime.disco.nccl.allreduce").set_body_typed([](NDArray send, int kind) {
-  CHECK(0 <= kind && kind <= 4) << "ValueError: Unknown ReduceKind: " << kind;
-  return AllReduce(send, static_cast<ReduceKind>(kind));
-});
 TVM_REGISTER_GLOBAL("runtime.disco.nccl.broadcast_from_worker0")
     .set_body_typed(BroadcastFromWorker0);
 TVM_REGISTER_GLOBAL("runtime.disco.nccl.scatter_from_worker0").set_body_typed(ScatterFromWorker0);
 TVM_REGISTER_GLOBAL("runtime.disco.nccl.gather_to_worker0").set_body_typed(GatherToWorker0);
 TVM_REGISTER_GLOBAL("runtime.disco.nccl.recv_from_worker0").set_body_typed(RecvFromWorker0);
+TVM_REGISTER_GLOBAL("runtime.disco.nccl.sync_worker").set_body_typed(SyncWorker);
 
 }  // namespace nccl
 }  // namespace runtime

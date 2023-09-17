@@ -448,7 +448,7 @@ class TorchRepeatCodeGen : public TorchOpCode {
     int axis = node()->GetTypeAttr<int>("axis");
     std::vector<int> repeats;
     for (size_t i = 0; i < node()->InputAt(0)->Ndim(); i++) {
-      if (i == axis) {
+      if (i == static_cast<size_t>(axis)) {
         repeats.push_back(repeat);
       } else {
         repeats.push_back(1);
