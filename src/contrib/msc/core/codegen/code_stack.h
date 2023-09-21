@@ -30,6 +30,7 @@
 #include <string>
 #include <vector>
 
+#include "../printer/msc_doc.h"
 #include "../printer/print_utils.h"
 #include "codegen_utils.h"
 
@@ -73,8 +74,13 @@ class BaseStack {
 
   /*! \brief Push typed assign Doc*/
   template <typename T>
-  void Assign(const String& lhs, const T& rhs, const String& annotation = "") {
+  inline void Assign(const String& lhs, const T& rhs, const String& annotation = "") {
     AssignBase(lhs, DocUtils::ToDoc(rhs), annotation);
+  }
+  inline void Assign(const String& lhs, const ExprDoc& rhs, const String& annotation = "") {
+    if (rhs.defined()) {
+      AssignBase(lhs, rhs, annotation);
+    }
   }
 
   /*! \brief Push assign for list Doc*/
@@ -108,6 +114,24 @@ class BaseStack {
   inline void AssignIndex(const String& lhs, const String& rhs, const Array<ExprDoc>& indices,
                           const String& annotation = "") {
     AssignIndexBase(lhs, rhs, indices, annotation);
+  }
+
+  /*! \brief Push declare for variable Doc*/
+  void Declare(const String& type, const String& variable, size_t len = 0,
+               bool use_constructor = true);
+
+  /*! \brief Cache declare base argument*/
+  void DeclareArgBase(const ExprDoc& value);
+
+  /*! \brief Cache declare normal argument*/
+  template <typename T>
+  inline void DeclareArg(T value) {
+    DeclareArgBase(DocUtils::ToDoc(value));
+  }
+  inline void DeclareArg(const ExprDoc& value) {
+    if (value.defined()) {
+      DeclareArgBase(value);
+    }
   }
 
   /*! \brief Push attr access Doc*/
@@ -159,6 +183,11 @@ class BaseStack {
   template <typename T>
   inline void CallArg(T value, const String& key = "") {
     CallArgBase(DocUtils::ToDoc(value), key);
+  }
+  inline void CallArg(const ExprDoc& value, const String& key = "") {
+    if (value.defined()) {
+      CallArgBase(value, key);
+    }
   }
 
   /*! \brief Cache call string argument*/
@@ -214,6 +243,21 @@ class BaseStack {
 
   /*! \brief Push else branch to cached*/
   void ConditionEnd();
+
+  /*! \brief Push for to cache and start for block*/
+  void ForStart(const String& lhs, const String& rhs);
+
+  /*! \brief Push for range to cache and start for block*/
+  void ForStart(const String& lhs, size_t start, size_t end);
+
+  /*! \brief End a for block*/
+  void ForEnd();
+
+  /*! \brief Push while to cache and start while block*/
+  void WhileStart(const String& predicate);
+
+  /*! \brief End a while block*/
+  void WhileEnd();
 
   /*! \brief Start a new block*/
   void BlockStart();
@@ -275,6 +319,10 @@ class BaseStack {
     Assign(lhs, rhs, annotation);                                                                \
     return *this;                                                                                \
   }                                                                                              \
+  Stack& assign(const String& lhs, const ExprDoc& rhs, const String& annotation = "") {          \
+    Assign(lhs, rhs, annotation);                                                                \
+    return *this;                                                                                \
+  }                                                                                              \
   template <typename T>                                                                          \
   Stack& assign_list(const String& lhs, const std::vector<T>& rhs,                               \
                      const String& annotation = "") {                                            \
@@ -300,6 +348,20 @@ class BaseStack {
   }                                                                                              \
   Stack& attr_access(const String& attr) {                                                       \
     AttrAccess(attr);                                                                            \
+    return *this;                                                                                \
+  }                                                                                              \
+  Stack& declare(const String& type, const String& variable, size_t len = 0,                     \
+                 bool use_constructor = true) {                                                  \
+    Declare(type, variable, len, use_constructor);                                               \
+    return *this;                                                                                \
+  }                                                                                              \
+  template <typename T>                                                                          \
+  Stack& declare_arg(T value) {                                                                  \
+    DeclareArg(value);                                                                           \
+    return *this;                                                                                \
+  }                                                                                              \
+  Stack& declare_arg(const ExprDoc& value) {                                                     \
+    DeclareArg(value);                                                                           \
     return *this;                                                                                \
   }                                                                                              \
   Stack& block_start() {                                                                         \
@@ -375,6 +437,10 @@ class BaseStack {
     CallArg(value, key);                                                                         \
     return *this;                                                                                \
   }                                                                                              \
+  Stack& call_arg(const ExprDoc& value, const String& key = "") {                                \
+    CallArg(value, key);                                                                         \
+    return *this;                                                                                \
+  }                                                                                              \
   Stack& call_str_arg(const String& value, const String& key = "") {                             \
     CallStrArg(value, key);                                                                      \
     return *this;                                                                                \
@@ -426,6 +492,26 @@ class BaseStack {
   Stack& cond_end() {                                                                            \
     ConditionEnd();                                                                              \
     return *this;                                                                                \
+  }                                                                                              \
+  Stack& for_start(const String& lhs, const String& rhs) {                                       \
+    ForStart(lhs, rhs);                                                                          \
+    return *this;                                                                                \
+  }                                                                                              \
+  Stack& for_start(const String& lhs, size_t start, size_t end) {                                \
+    ForStart(lhs, start, end);                                                                   \
+    return *this;                                                                                \
+  }                                                                                              \
+  Stack& for_end() {                                                                             \
+    ForEnd();                                                                                    \
+    return *this;                                                                                \
+  }                                                                                              \
+  Stack& while_start(const String& predicate) {                                                  \
+    WhileStart(predicate);                                                                       \
+    return *this;                                                                                \
+  }                                                                                              \
+  Stack& while_end() {                                                                           \
+    WhileEnd();                                                                                  \
+    return *this;                                                                                \
   }
 
 /*!
@@ -470,7 +556,7 @@ class OpCodeStack : public BaseStack {
 
   /*! \brief Push op_call Doc*/
   OpCodeStack<OpCodeGenType>& op_end(const String& assign_str = "msc::auto") {
-    const String& v_assign = assign_str == "msc::auto" ? codegen_->IdxNode(true) : assign_str;
+    const String& v_assign = assign_str == "msc::auto" ? codegen_->ret_name() : assign_str;
     return call_end(v_assign);
   }
 

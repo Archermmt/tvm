@@ -55,6 +55,7 @@ class DocUtils {
   TVM_DLL static const ExprDoc ToDoc(const String& val);
   TVM_DLL static const ExprDoc ToDoc(bool val);
   TVM_DLL static const ExprDoc ToStrDoc(const String& val);
+
   /*!
    * \brief Change object to List of Docs.
    * \return The List of Docs.
@@ -81,12 +82,39 @@ class DocUtils {
    * \return The ListDoc.
    */
   template <typename T>
-  TVM_DLL static const ListDoc ToListDoc(const std::vector<T>& values) {
-    return ListDoc(ToDocList(values));
+  TVM_DLL static const ListDoc ToListDoc(const std::vector<T>& values, bool allow_empty = false) {
+    if (values.size() > 0 || allow_empty) {
+      return ListDoc(ToDocList(values));
+    }
+    return ListDoc();
   }
   template <typename T>
-  TVM_DLL static const ListDoc ToListDoc(const Array<T>& values) {
-    return ListDoc(ToDocList(values));
+  TVM_DLL static const ListDoc ToListDoc(const Array<T>& values, bool allow_empty = false) {
+    if (values.size() > 0 || allow_empty) {
+      return ListDoc(ToDocList(values));
+    }
+    return ListDoc();
+  }
+
+  /*!
+   * \brief Change object to IndexDoc.
+   * \return The ListDoc.
+   */
+  template <typename T>
+  TVM_DLL static const IndexDoc ToIndexDoc(const String& value, const std::vector<T>& indices) {
+    Array<Doc> doc_indices;
+    for (const auto& i : indices) {
+      doc_indices.push_back(ToDoc(i));
+    }
+    return IndexDoc(IdDoc(value), doc_indices);
+  }
+  template <typename T>
+  TVM_DLL static const IndexDoc ToIndexDoc(const String& value, const Array<T>& indices) {
+    Array<Doc> doc_indices;
+    for (const auto& i : indices) {
+      doc_indices.push_back(ToDoc(i));
+    }
+    return IndexDoc(IdDoc(value), doc_indices);
   }
 
   /*!

@@ -257,7 +257,12 @@ const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>
         const auto& producer = Downcast<MSCJoint>(pair.first);
         if (!weights_.count(weight_name)) {
           const auto& ref = producer->OutputAt(pair.second);
-          const auto& weight = MSCTensor(weight_name, ref->dtype, ref->layout.name(), ref->shape);
+          MSCTensor weight;
+          if (input_types[i] == "bias") {
+            weight = MSCTensor(weight_name, ref->dtype, "O", Array<Integer>{ref->GetSize()});
+          } else {
+            weight = MSCTensor(weight_name, ref->dtype, ref->layout.name(), ref->shape);
+          }
           weights_.Set(weight_name, weight);
         }
         if (producer->HasAttr("scalar")) {
@@ -560,18 +565,23 @@ MSCJoint RelayGraphBuilder::AddNode(const Expr& expr, const String& name) {
       ICHECK(expr_tensor_map_.count(arg)) << "Missing argument " << arg;
       if (input_types[i] != "input" && arg->IsInstance<relay::ConstantNode>()) {
         const auto& t_name = expr_tensor_map_[arg][0];
-        const auto& w_name = SpanUtils::GetAttr(arg->span, "name");
+        const auto& weight_name = SpanUtils::GetAttr(arg->span, "name");
         const auto& pair = tensor_input_map_[t_name];
         const auto& producer = Downcast<MSCJoint>(pair.first);
-        if (!weights_.count(w_name)) {
+        if (!weights_.count(weight_name)) {
           const auto& ref = producer->OutputAt(pair.second);
-          const auto& weight = MSCTensor(w_name, ref->dtype, ref->layout.name(), ref->shape);
-          weights_.Set(w_name, weight);
+          MSCTensor weight;
+          if (input_types[i] == "bias") {
+            weight = MSCTensor(weight_name, ref->dtype, "O", Array<Integer>{ref->GetSize()});
+          } else {
+            weight = MSCTensor(weight_name, ref->dtype, ref->layout.name(), ref->shape);
+          }
+          weights_.Set(weight_name, weight);
         }
         if (producer->HasAttr("scalar")) {
           attrs.Set(input_types[i], producer->GetTypeAttr<std::string>("scalar"));
         }
-        node_weights.Set(input_types[i], weights_[w_name]);
+        node_weights.Set(input_types[i], weights_[weight_name]);
       } else {
         for (const auto& in_name : expr_tensor_map_[arg]) {
           input_names.push_back(in_name);

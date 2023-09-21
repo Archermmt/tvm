@@ -60,6 +60,15 @@ class TensorRTCodeGen : public CppCodeGen<TensorRTCodeGenConfig> {
  protected:
   /*! \brief Get the docs for the op*/
   const Array<Doc> GetOpCodes(const MSCJoint& node) final;
+
+  /*! \brief Generate return on fail codes*/
+  void ReturnOnFail(const String& flag, const String& err);
+
+  /*! \brief Get the dtype from the datatype*/
+  const String CppDType(const DataType& dtype);
+
+  /*! \brief Generate describe for tensor bytes*/
+  const String GetTensorBytes(const MSCTensor& tensor);
 };
 
 }  // namespace msc

@@ -36,7 +36,7 @@ namespace msc {
 using namespace tvm::script::printer;
 
 /*!
- * \brief PythonPrinter change list of docs to cpp format
+ * \brief CppPrinter change list of docs to cpp format
  * \sa Doc
  */
 class CppPrinter : public MSCBasePrinter {
@@ -45,11 +45,16 @@ class CppPrinter : public MSCBasePrinter {
    * \brief The constructor of PythonPrinter
    * \param options the options for printer.
    */
-  explicit CppPrinter(const std::string& options = "") : MSCBasePrinter(options) {}
+  explicit CppPrinter(const std::string& options = "") : MSCBasePrinter(options) {
+    endlines_.push_back(true);
+  }
 
  protected:
   /*! * \brief Print a LiteralDoc to python format*/
   void PrintTypedDoc(const LiteralDoc& doc) final;
+
+  /*! \brief Virtual method to print an IndexDoc*/
+  void PrintTypedDoc(const IndexDoc& doc) final;
 
   /*! * \brief Print a AttrAccessDoc to python format*/
   void PrintTypedDoc(const AttrAccessDoc& doc) final;
@@ -62,6 +67,9 @@ class CppPrinter : public MSCBasePrinter {
 
   /*! * \brief Print a IfDoc to python format*/
   void PrintTypedDoc(const IfDoc& doc) final;
+
+  /*! * \brief Print a WhileDoc to python format*/
+  void PrintTypedDoc(const WhileDoc& doc) final;
 
   /*! \brief Virtual method to print a ForDoc*/
   void PrintTypedDoc(const ForDoc& doc) final;
@@ -78,7 +86,42 @@ class CppPrinter : public MSCBasePrinter {
   /*! * \brief Print a CommentDoc to python format*/
   void PrintTypedDoc(const CommentDoc& doc) final;
 
+  /*! \brief Virtual method to print a DeclareDoc*/
+  void PrintTypedDoc(const DeclareDoc& doc) final;
+
  private:
+  /*! \brief endline scopes*/
+  std::vector<bool> endlines_;
+
+  /*! \brief Enter a endline scope*/
+  void EnterEndlineScope(bool endline = false) { endlines_.push_back(endline); }
+
+  /*! \brief Exit a endline scope*/
+  void ExitEndlineScope() {
+    ICHECK(endlines_.size() > 1) << "No endline scope found";
+    endlines_.pop_back();
+  }
+
+  /*! \brief enable enbline*/
+  void EnableEndline() {
+    ICHECK(endlines_.size() > 0) << "No endline scope found";
+    endlines_[endlines_.size() - 1] = true;
+  }
+
+  /*! \brief disable enbline*/
+  void DisableEndline() {
+    ICHECK(endlines_.size() > 0) << "No endline scope found";
+    endlines_[endlines_.size() - 1] = false;
+  }
+
+  /*! \brief Print endline*/
+  void Endline() {
+    ICHECK(endlines_.size() > 0) << "No endline scope found";
+    if (endlines_[endlines_.size() - 1]) {
+      output_ << ";";
+    }
+  }
+
   /*! \brief Print block with indent*/
   void PrintIndentedBlock(const Array<StmtDoc>& docs);
 };

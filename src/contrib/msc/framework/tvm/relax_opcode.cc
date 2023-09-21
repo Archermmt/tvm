@@ -318,7 +318,7 @@ class RelaxConvCodeGen : public RelaxOpCode {
       }
       BuilderEmit(IdxNode());
       stack_.call_start("relax.op.reshape")
-          .call_arg(IdxWeight("bias", true))
+          .op_weight_arg("bias")
           .call_list_arg(expand_shape, "shape")
           .call_end("expand_bias");
       BuilderEmit("expand_bias");
@@ -443,7 +443,7 @@ class RelaxGetItemCodeGen : public RelaxOpCode {
  protected:
   void CodeGenBuild() final {
     const auto& producer = node()->ProducerOf(0);
-    stack_.op_start().call_arg(IdxNode(producer)).op_arg<int>("index").call_end(IdxNode());
+    stack_.op_start().call_arg(IdxNodeBase(producer)).op_arg<int>("index").call_end(IdxNode());
   }
 };
 

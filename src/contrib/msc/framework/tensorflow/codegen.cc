@@ -59,7 +59,7 @@ void TensorflowCodeGen::CodeGenGraph() {
   stack_.func_def(graph()->name, "List[tf_v1.Tensor]");
   for (const auto& i : graph()->GetInputs()) {
     const auto& pair = graph()->FindProducerAndIdx(i);
-    stack_.func_arg(IdxOutput(pair.first, pair.second), "tf_v1.Tensor");
+    stack_.func_arg(IdxOutputBase(pair.first, pair.second), "tf_v1.Tensor");
   }
   stack_.func_arg("weights", "Dict[str, tvm.nd.array]").func_start();
   // define weights
@@ -72,7 +72,7 @@ void TensorflowCodeGen::CodeGenGraph() {
           .call_list_arg(pair.second->shape, "", true)
           .call_str_arg(pair.second->DTypeName())
           .call_arg("weights")
-          .call_end(IdxWeight(node, pair.first));
+          .call_end(IdxWeightBase(node, pair.first));
     }
     if (node->optype == "constant") {
       CodeGenNode(node);
@@ -90,7 +90,7 @@ void TensorflowCodeGen::CodeGenGraph() {
   Array<String> idx_outputs;
   for (const auto& o : graph()->GetOutputs()) {
     const auto& pair = graph()->FindProducerAndIdx(o);
-    idx_outputs.push_back(IdxOutput(pair.first, pair.second));
+    idx_outputs.push_back(IdxOutputBase(pair.first, pair.second));
   }
   if (idx_outputs.size() == 1) {
     stack_.assign("outputs", idx_outputs[0]);
@@ -115,17 +115,17 @@ void TensorflowCodeGen::CodeGenInference() {
         .call_str_arg(i->DTypeName())
         .call_list_arg(i->shape)
         .call_str_arg(i->alias)
-        .call_end(IdxNode(producer));
+        .call_end(IdxNodeBase(producer));
   }
   stack_.call_start(graph()->name);
   for (const auto& i : graph()->GetInputs()) {
     const auto& producer = graph()->FindProducer(i);
-    stack_.call_arg(IdxNode(producer));
+    stack_.call_arg(IdxNodeBase(producer));
   }
   stack_.call_arg("params").call_end("outs").assign("feed_dict", "{}");
   for (const auto& i : graph()->GetInputs()) {
     const auto& producer = graph()->FindProducer(i);
-    stack_.assign("feed_dict[" + IdxNode(producer) + "]", "inputs[\"" + i->alias + "\"]");
+    stack_.assign("feed_dict[" + IdxNodeBase(producer) + "]", "inputs[\"" + i->alias + "\"]");
   }
   stack_.scope_start("tf_v1.Session()", "sess")
       .call_start("sess.run")

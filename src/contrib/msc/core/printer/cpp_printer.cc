@@ -44,12 +44,21 @@ void CppPrinter::PrintTypedDoc(const LiteralDoc& doc) {
   }
 }
 
+void CppPrinter::PrintTypedDoc(const IndexDoc& doc) {
+  ICHECK(doc->indices.size() == 1) << "CppPrinter only support 1 size indices";
+  PrintDoc(doc->value, false);
+  output_ << "[";
+  PrintDoc(doc->indices[0], false);
+  output_ << "]";
+}
+
 void CppPrinter::PrintTypedDoc(const AttrAccessDoc& doc) {
   PrintDoc(doc->value, false);
   output_ << "->" << doc->name;
 }
 
 void CppPrinter::PrintTypedDoc(const CallDoc& doc) {
+  EnterEndlineScope(false);
   PrintDoc(doc->callee, false);
   output_ << "(";
   PrintJoinedDocs(doc->args);
@@ -60,17 +69,23 @@ void CppPrinter::PrintTypedDoc(const CallDoc& doc) {
   }
   PrintJoinedDocs(doc->kwargs_values);
   output_ << ")";
+  ExitEndlineScope();
+  Endline();
 }
 
 void CppPrinter::PrintTypedDoc(const AssignDoc& doc) {
-  ICHECK(doc->annotation.defined()) << "annotation should be given for assign";
   ICHECK(doc->lhs.defined()) << "lhs should be given for assign";
-  PrintDoc(doc->annotation.value(), false);
-  output_ << " ";
+  if (doc->annotation.defined()) {
+    PrintDoc(doc->annotation.value(), false);
+    output_ << " ";
+  }
   PrintDoc(doc->lhs, false);
   if (doc->rhs.defined()) {
     output_ << " = ";
+    EnterEndlineScope(false);
     PrintDoc(doc->rhs.value(), false);
+    ExitEndlineScope();
+    Endline();
   }
 }
 
@@ -85,6 +100,45 @@ void CppPrinter::PrintTypedDoc(const IfDoc& doc) {
     output_ << "} else {";
     PrintIndentedBlock(doc->else_branch);
   }
+  NewLine();
+  output_ << "}";
+}
+
+void CppPrinter::PrintTypedDoc(const WhileDoc& doc) {
+  MaybePrintComment(doc, true);
+  output_ << "while (";
+  PrintDoc(doc->predicate, false);
+  output_ << ") {";
+  PrintIndentedBlock(doc->body);
+  NewLine();
+  output_ << "}";
+}
+
+void CppPrinter::PrintTypedDoc(const ForDoc& doc) {
+  MaybePrintComment(doc, true);
+  if (doc->rhs->IsInstance<TupleDocNode>()) {
+    const auto& tuple = Downcast<TupleDoc>(doc->rhs);
+    ICHECK_EQ(tuple->elements.size(), 2) << "For with tuple should has 2 elements";
+    output_ << "for (size_t ";
+    PrintDoc(doc->lhs, false);
+    output_ << " = ";
+    PrintDoc(tuple->elements[0], false);
+    output_ << "; ";
+    PrintDoc(doc->lhs, false);
+    output_ << " < ";
+    PrintDoc(tuple->elements[1], false);
+    output_ << "; ";
+    PrintDoc(doc->lhs, false);
+    output_ << "++";
+  } else {
+    output_ << "for (const auto& ";
+    PrintDoc(doc->lhs, false);
+    output_ << " : ";
+    PrintDoc(doc->rhs, false);
+  }
+  output_ << ") {";
+  PrintIndentedBlock(doc->body);
+  NewLine();
   output_ << "}";
 }
 
@@ -100,8 +154,11 @@ void CppPrinter::PrintTypedDoc(const FunctionDoc& doc) {
   for (const AssignDoc& arg_doc : doc->args) {
     ICHECK(arg_doc->comment == nullptr) << "Function arg cannot have comment attached to them.";
   }
-  ICHECK(doc->return_type.defined()) << "return_type should be given for function";
-  PrintDoc(doc->return_type.value(), false);
+  if (doc->return_type.defined()) {
+    PrintDoc(doc->return_type.value(), false);
+  } else {
+    output_ << "void";
+  }
   output_ << " ";
   PrintDoc(doc->name, false);
   output_ << "(";
@@ -110,9 +167,13 @@ void CppPrinter::PrintTypedDoc(const FunctionDoc& doc) {
   if (doc->body.size() > 0) {
     output_ << " {";
     PrintIndentedBlock(doc->body);
+    if (doc->return_type.defined()) {
+      Endline();
+    }
+    NewLine();
     output_ << "}";
   } else {
-    output_ << ";";
+    Endline();
   }
   NewLine(false);
 }
@@ -126,13 +187,32 @@ void CppPrinter::PrintTypedDoc(const ClassDoc& doc) {
     PrintDoc(d);
   }
   NewLine(false);
-  output_ << "};";
+  output_ << "}";
+  Endline();
 }
 
 void CppPrinter::PrintTypedDoc(const CommentDoc& doc) {
   if (doc->comment.defined()) {
     output_ << "// " << doc->comment.value();
   }
+}
+
+void CppPrinter::PrintTypedDoc(const DeclareDoc& doc) {
+  PrintDoc(doc->type, false);
+  output_ << " ";
+  PrintDoc(doc->variable, false);
+  if (doc->init_args.size() > 0) {
+    if (doc->use_constructor) {
+      output_ << "(";
+      PrintJoinedDocs(doc->init_args, ", ");
+      output_ << ")";
+    } else {
+      output_ << "{";
+      PrintJoinedDocs(doc->init_args, ", ");
+      output_ << "}";
+    }
+  }
+  Endline();
 }
 
 void CppPrinter::PrintIndentedBlock(const Array<StmtDoc>& docs) {

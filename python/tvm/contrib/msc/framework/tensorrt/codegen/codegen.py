@@ -23,6 +23,8 @@ from tvm.contrib.msc.core.ir import MSCGraph
 from tvm.contrib.msc.core.codegen import CodeGen
 from tvm.contrib.msc.core import utils as msc_utils
 from tvm.contrib.msc.framework.tensorrt import _ffi_api
+from .sources import get_trt_sources
+from .utils import *
 
 
 def to_tensorrt(
@@ -60,7 +62,18 @@ def to_tensorrt(
 
     def _bind_weights(model: str, folder: msc_utils.MSCDirectory) -> str:
         if weights:
-            print("should bind weights " + str(weights))
+            with open(folder.relpath(graph.name + ".wts"), "w") as f:
+                for name, data in weights.items():
+                    array = data.asnumpy()
+                    f.write(
+                        "{} {} {} {}\n".format(
+                            name, enum_dtype(array), array.size, array_to_hex(array)
+                        )
+                    )
+            with folder.create_dir("utils") as utils_folder:
+                for name, source in get_trt_sources().items():
+                    with open(utils_folder.relpath(name), "w") as f:
+                        f.write(source)
             raise Exception("stop here!!")
         return model
 

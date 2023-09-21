@@ -63,7 +63,7 @@ void TorchCodeGen::CodeGenGraph() {
   stack_.func_arg("self", "torch.nn.Module");
   for (const auto& i : graph()->GetInputs()) {
     const auto& pair = graph()->FindProducerAndIdx(i);
-    stack_.func_arg(IdxOutput(pair.first, pair.second), "torch.Tensor");
+    stack_.func_arg(IdxOutputBase(pair.first, pair.second), "torch.Tensor");
   }
   stack_.func_start();
   for (const auto& n : graph()->node_names) {
@@ -76,7 +76,7 @@ void TorchCodeGen::CodeGenGraph() {
   Array<String> idx_outputs;
   for (const auto& o : graph()->GetOutputs()) {
     const auto& pair = graph()->FindProducerAndIdx(o);
-    idx_outputs.push_back(IdxOutput(pair.first, pair.second));
+    idx_outputs.push_back(IdxOutputBase(pair.first, pair.second));
   }
   if (idx_outputs.size() == 1) {
     stack_.assign("outputs", idx_outputs[0]);
@@ -105,12 +105,12 @@ void TorchCodeGen::CodeGenInference() {
     const auto& producer = graph()->FindProducer(i);
     stack_.call_start("torch.from_numpy")
         .call_arg("inputs[\"" + i->alias + "\"]")
-        .call_end(IdxNode(producer));
+        .call_end(IdxNodeBase(producer));
   }
   stack_.call_start("model");
   for (const auto& i : graph()->GetInputs()) {
     const auto& producer = graph()->FindProducer(i);
-    stack_.call_arg(IdxNode(producer));
+    stack_.call_arg(IdxNodeBase(producer));
     if (config()->test_device == "gpu") {
       stack_.inplace_start("to")
           .call_start("torch.device")

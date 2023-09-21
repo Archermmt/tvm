@@ -92,11 +92,11 @@ class CodeGen(object):
             for name, source in sources.items():
                 folder.add_file(name, source)
             if self._code_format == "cpp":
-                print("should make the cpp file!!")
-                raise Exception("stop here!!")
                 # load weights
                 if weights_binder:
-                    obj = weights_binder(obj, folder)
+                    obj = weights_binder(None, folder)
+                print("should make the cpp file!!")
+                raise Exception("stop here!!")
             elif self._code_format == "python":
                 builder = msc_utils.load_callable(self._graph.name + ".py:" + self._graph.name)
                 obj = builder(*inputs)

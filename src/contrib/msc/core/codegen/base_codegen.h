@@ -65,31 +65,34 @@ class BaseOpCode {
   virtual const Array<Doc> GetDocs() = 0;
 
   /*! \brief Get return describe for default node*/
-  virtual const String IdxNode(bool as_raw = true) { return IdxNode(node_, as_raw); }
+  virtual const String IdxNode(bool as_raw = true) { return IdxNodeBase(node_, as_raw); }
 
   /*! \brief Get describe for default node input*/
-  virtual const String IdxInput(int idx = 0, bool as_raw = false) {
-    return IdxInput(node_, idx, as_raw);
+  const String IdxInput(int idx = 0, bool as_raw = false) {
+    return IdxInputBase(node_, idx, as_raw);
   }
 
   /*! \brief Get describe for default node output*/
-  virtual const String IdxOutput(int idx = 0, bool as_raw = false) {
-    return IdxOutput(node_, idx, as_raw);
+  const String IdxOutput(int idx = 0, bool as_raw = false) {
+    return IdxOutputBase(node_, idx, as_raw);
   }
 
   /*! \brief Get describe for default node weight*/
-  virtual const String IdxWeight(const String& wtype, bool as_raw = false) {
-    return IdxWeight(node_, wtype, as_raw);
+  const String IdxWeight(const String& wtype, bool as_raw = false) {
+    return IdxWeightBase(node_, wtype, as_raw);
   }
 
   /*! \brief Get comment for default node*/
-  virtual const String Comment() { return Comment(node_); }
+  const String Comment() { return Comment(node_); }
 
   /*! \brief Get func_name for the default node*/
   const String func_name() { return func_name_; }
 
   /*! \brief Get valid func name for the default node*/
   virtual const String callee_name() { return func_name(); }
+
+  /*! \brief Get valid return name for the default node*/
+  virtual const String ret_name() { return IdxNode(true); }
 
   /*! \brief Get the default node*/
   const MSCJoint node() { return node_; }

@@ -36,14 +36,29 @@ namespace msc {
  * \brief CodeGen config for tensorrt codegen
  */
 struct TensorRTCodeGenConfig {
+  int log_level{0};
+  int profile_level{0};
+  int test_iter{0};
   std::string cmake_version{"3.5"};
+  std::string dataset{"Dataset"};
+  std::string tensorrt_root{"/usr/local/cuda"};
   CODEGEN_CONFIG_MEMBERS
   void Load(dmlc::JSONReader* reader) {
     std::string key;
     reader->BeginObject();
     while (reader->NextObjectItem(&key)) {
-      if (key == "cmake_version") {
+      if (key == "log_level") {
+        reader->Read(&log_level);
+      } else if (key == "profile_level") {
+        reader->Read(&profile_level);
+      } else if (key == "test_iter") {
+        reader->Read(&test_iter);
+      } else if (key == "cmake_version") {
         reader->Read(&cmake_version);
+      } else if (key == "dataset") {
+        reader->Read(&dataset);
+      } else if (key == "tensorrt_root") {
+        reader->Read(&tensorrt_root);
       } else {
         CODEGEN_CONFIG_PARSE
       }

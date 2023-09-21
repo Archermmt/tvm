@@ -78,7 +78,7 @@ class MSCDirectory(object):
         with open(self.relpath(name), "w") as f:
             f.write(contains)
 
-    def create_dir(self, name: str, keep_history: bool = True) -> object:
+    def create_dir(self, name: str, keep_history: bool = True, cleanup: bool = False) -> object:
         """Add a dir under the folder
 
         Parameters
@@ -87,6 +87,9 @@ class MSCDirectory(object):
             The name of the file.
         keep_history: bol
             Whether to keep history.
+        cleanup: bool
+            Whether to clean up before exit.
+
 
         Returns
         -------
@@ -97,7 +100,7 @@ class MSCDirectory(object):
         dir_path = self.relpath(name)
         if os.path.isfile(dir_path):
             os.remove(dir_path)
-        return self.__class__(dir_path, keep_history=keep_history, cleanup=self._cleanup)
+        return self.__class__(dir_path, keep_history=keep_history, cleanup=cleanup)
 
     def relpath(self, name: str) -> str:
         """Relative path in dir

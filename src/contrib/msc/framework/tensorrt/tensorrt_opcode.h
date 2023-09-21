@@ -51,14 +51,69 @@ class TensorRTOpCode : public BaseOpCode<TensorRTCodeGenConfig> {
    */
   explicit TensorRTOpCode(const String& func_name) : BaseOpCode<TensorRTCodeGenConfig>(func_name) {}
 
+  /*! \brief Get describe for default node input*/
+  const String IdxInputBase(const MSCJoint& node, int idx = 0, bool as_raw = false) final {
+    const auto& pair = node->ProducerAndIdxOf(idx);
+    if (pair.first->optype == "input") {
+      return IdxNodeBase(pair.first, as_raw);
+    }
+    return IdxOutputBase(pair.first, pair.second, as_raw);
+  }
+
+  /*! \brief Get describe for default node output*/
+  const String IdxOutputBase(const MSCJoint& node, int idx = 0, bool as_raw = false) final {
+    return IdxNodeBase(node, as_raw) + "->getOutput(" + std::to_string(idx) + ")";
+  }
+
+  /*! \brief Get describe for default node weight*/
+  const String IdxWeightBase(const MSCJoint& node, const String& wtype, bool as_raw = false) final {
+    return "mWeights[\"" + node->WeightAt(wtype)->name + "\"]";
+  }
+
   /*! \brief Convert node to docs*/
   const Array<Doc> GetDocs() final;
+
+  /*! \brief Get func_name for the default node*/
+  const String callee_name() final {
+    return "network->" + BaseOpCode<TensorRTCodeGenConfig>::callee_name();
+  }
+
+  /*! \brief Get valid return name for the default node*/
+  const String ret_name() final { return "auto " + IdxNode(true); }
+
+  /*! \brief Get the dtype from the datatype*/
+  const String DType(const DataType& dtype) final;
 
  protected:
   TensorRTOpCodeStack stack_;
 
   /*! \brief Convert op build*/
   virtual void CodeGenBuild() = 0;
+
+  /*! \brief Get the tensorrt dims from dims*/
+  template <typename T>
+  const String ToDims(const std::vector<T>& dims, bool use_ndim = true);
+  const String ToDims(const Array<Integer>& dims, bool use_ndim = true);
+
+  /*! \brief Get the tensorrt dims from attribute*/
+  const String AttrToDims(const String& key, bool use_ndim = true);
+
+  /*! \brief Set layer by attribute*/
+  template <typename T>
+  void SetLayerByAttr(const String& method, const String& key);
+
+  /*! \brief Set layer by value*/
+  template <typename T>
+  void SetLayerByValue(const String& method, const T& value);
+
+  /*! \brief Set layer by dims attribute*/
+  template <typename T>
+  void SetLayerByDimsAttr(const String& method, const String& key, bool use_ndim = true);
+
+  /*! \brief Set layer by dims value*/
+  template <typename T>
+  void SetLayerByDimsValue(const String& method, const std::vector<T>& value, bool use_ndim = true);
+  void SetLayerByDimsValue(const String& method, const Array<Integer>& value, bool use_ndim = true);
 };
 
 /*!

@@ -36,7 +36,7 @@ void RelaxCodeGen::CodeGenGraph() {
   Array<String> idx_inputs;
   for (const auto& i : graph()->GetInputs()) {
     const auto& pair = graph()->FindProducerAndIdx(i);
-    const auto& idx_input = IdxOutput(pair.first, pair.second);
+    const auto& idx_input = IdxOutputBase(pair.first, pair.second);
     stack_.func_arg(idx_input, "relax.Var");
     idx_inputs.push_back(idx_input);
   }
@@ -46,7 +46,7 @@ void RelaxCodeGen::CodeGenGraph() {
   for (const auto& n : graph()->node_names) {
     const auto& node = graph()->FindNode(n);
     for (const auto& pair : node->weights) {
-      const auto& idx_weight = IdxWeight(node, pair.first);
+      const auto& idx_weight = IdxWeightBase(node, pair.first);
       stack_.call_start("relax.Var")
           .call_str_arg(pair.second->name)
           .call_inplace_start("relax.TensorStructInfo")
@@ -60,7 +60,7 @@ void RelaxCodeGen::CodeGenGraph() {
     }
     if (node->optype == "constant") {
       CodeGenNode(node);
-      stack_.call_start("inputs.append").call_arg(IdxNode(node)).call_end();
+      stack_.call_start("inputs.append").call_arg(IdxNodeBase(node)).call_end();
     }
   }
   stack_.comment("Define the module");
@@ -92,7 +92,7 @@ void RelaxCodeGen::CodeGenGraph() {
   stack_.comment("Emit the outputs");
   Array<String> idx_exits;
   for (const auto& e : graph()->GetExits()) {
-    const auto& idx_exit = IdxNode(e, false);
+    const auto& idx_exit = IdxNodeBase(e, false);
     stack_.call_start("block_builder.emit_output").call_arg(idx_exit).call_end(idx_exit);
     idx_exits.push_back(idx_exit);
   }
@@ -114,12 +114,12 @@ void RelaxCodeGen::CodeGenInference() {
         .call_list_arg(i->shape)
         .call_str_arg(i->DTypeName())
         .call_inplace_end()
-        .call_end(IdxNode(producer));
+        .call_end(IdxNodeBase(producer));
   }
   stack_.comment("Build Module").call_start(graph()->name);
   for (const auto& i : graph()->GetInputs()) {
     const auto& producer = graph()->FindProducer(i);
-    stack_.call_arg(IdxNode(producer));
+    stack_.call_arg(IdxNodeBase(producer));
   }
   stack_.call_end("mod");
   String target, device;

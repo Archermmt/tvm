@@ -55,6 +55,24 @@ void BaseStack::AssignIndexBase(const String& lhs, const String& rhs, const Arra
   AssignBase(lhs, IndexDoc(IdDoc(rhs), doc_indices), annotation);
 }
 
+void BaseStack::Declare(const String& type, const String& variable, size_t len,
+                        bool use_constructor) {
+  if (len == 0) {
+    PushDoc(DeclareDoc(IdDoc(type), IdDoc(variable), Array<ExprDoc>(), use_constructor));
+  } else {
+    Array<Doc> doc_indices{DocUtils::ToDoc(len)};
+    PushDoc(DeclareDoc(IdDoc(type), IndexDoc(IdDoc(variable), doc_indices), Array<ExprDoc>(),
+                       use_constructor));
+  }
+}
+
+void BaseStack::DeclareArgBase(const ExprDoc& value) {
+  const auto& declare = PopCheckedDoc<DeclareDoc, DeclareDocNode>();
+  Array<ExprDoc> init_args = declare->init_args;
+  init_args.push_back(value);
+  PushDoc(DeclareDoc(declare->type, declare->variable, init_args, declare->use_constructor));
+}
+
 void BaseStack::AttrAccess(const String& attr) {
   const auto& host = PopDoc();
   if (host.as<AssignDoc>()) {
@@ -255,6 +273,36 @@ void BaseStack::ConditionEnd() {
   } else {
     PushDoc(IfDoc(if_doc->predicate, if_doc->then_branch, branch));
   }
+}
+
+void BaseStack::ForStart(const String& lhs, const String& rhs) {
+  PushDoc(ForDoc(IdDoc(lhs), IdDoc(rhs), Array<StmtDoc>()));
+  BlockStart();
+}
+
+void BaseStack::ForStart(const String& lhs, size_t start, size_t end) {
+  Array<ExprDoc> range{DocUtils::ToDoc(start), DocUtils::ToDoc(end)};
+  PushDoc(ForDoc(IdDoc(lhs), TupleDoc(range), Array<StmtDoc>()));
+  BlockStart();
+}
+
+void BaseStack::ForEnd() {
+  const auto& block = PopBlock();
+  const auto& for_doc = PopCheckedDoc<ForDoc, ForDocNode>();
+  const auto& body = DocUtils::ToStmts(block);
+  PushDoc(ForDoc(for_doc->lhs, for_doc->rhs, body));
+}
+
+void BaseStack::WhileStart(const String& predicate) {
+  PushDoc(WhileDoc(IdDoc(predicate), Array<StmtDoc>()));
+  BlockStart();
+}
+
+void BaseStack::WhileEnd() {
+  const auto& block = PopBlock();
+  const auto& while_doc = PopCheckedDoc<WhileDoc, WhileDocNode>();
+  const auto& body = DocUtils::ToStmts(block);
+  PushDoc(WhileDoc(while_doc->predicate, body));
 }
 
 void BaseStack::BlockStart() {

@@ -158,17 +158,17 @@ class PyCodeGen : public BaseCodeGen<ConfigType> {
       for (size_t i = 0; i < node->inputs.size(); i++) {
         const auto& input = node->InputAt(i);
         this->stack_.call_start("process_tensor")
-            .call_arg(this->IdxInput(node, i, true))
+            .call_arg(this->IdxInputBase(node, i, true))
             .call_str_arg(input->name)
             .call_str_arg(node->name)
-            .call_end(this->IdxInput(node, i, false));
+            .call_end(this->IdxInputBase(node, i, false));
       }
       for (const auto& pair : node->weights) {
         this->stack_.call_start("process_tensor")
-            .call_arg(this->IdxWeight(node, pair.first, true))
+            .call_arg(this->IdxWeightBase(node, pair.first, true))
             .call_str_arg(pair.second->name)
             .call_str_arg(node->name)
-            .call_end(this->IdxWeight(node, pair.first, false));
+            .call_end(this->IdxWeightBase(node, pair.first, false));
       }
     }
     for (const auto& d : this->GetOpCodes(node)) {
