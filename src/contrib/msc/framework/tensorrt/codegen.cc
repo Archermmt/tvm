@@ -62,9 +62,8 @@ void TensorRTCodeGen::CodeGenClassDeclare() {
   stack_.func_def("CleanUp", "bool")
       .func_start()
       .for_start("mem", "mWeights")
-      .call_start("free")
+      .func_call("free")
       .call_arg("(void*) (mem.second.values)")
-      .call_end()
       .for_end()
       .func_end("true");
   // end public scope
@@ -78,18 +77,16 @@ void TensorRTCodeGen::CodeGenClassDeclare() {
 void TensorRTCodeGen::CodeGenClassDefine() {
   auto malloc_buffer = [this](const MSCTensor& tensor) {
     const String& idx_var = "idx_" + tensor->alias;
-    this->stack_.call_start("engine->getBindingIndex")
+    this->stack_
+        .func_call("getBindingIndex", GetAssignTo(idx_var, "const int"), GetPtrCaller("engine"))
         .call_arg(DocUtils::ToStrDoc(tensor->alias))
-        .call_end("const int " + idx_var)
-        .call_start("CHECK")
-        .call_inplace_start("cudaMalloc")
+        .func_call("CHECK")
+        .func_call("cudaMalloc")
         .call_arg("&gpu_buffers[" + idx_var + "]")
         .call_arg(GetTensorBytes(tensor))
-        .call_inplace_end()
-        .call_end()
-        .call_start("malloc")
-        .call_arg(GetTensorBytes(tensor))
-        .call_end("cpu_buffers[" + idx_var + "]");
+        .nest_end()
+        .func_call("malloc", "cpu_buffers[" + idx_var + "]")
+        .call_arg(GetTensorBytes(tensor));
   };
 
   stack_.line("#include \"" + graph()->name + ".h\"").line();
@@ -122,10 +119,9 @@ void TensorRTCodeGen::CodeGenClassDefine() {
       .func_arg("logger", "TRTLogger&")
       .func_start();
   stack_.comment("Create context")
-      .call_start("TRTPTr<IExecutionContext>")
-      .call_inplace_start("engine->createExecutionContext")
-      .call_inplace_end()
-      .call_end("auto context");
+      .func_call("TRTPTr<IExecutionContext>", GetAssignTo("context", "auto"))
+      .func_call("createExecutionContext", NullOpt, GetPtrCaller("engine"))
+      .nest_end();
   ReturnOnFail("context", "Failed to create the context");
   // prepare variables
   stack_.declare("size_t", "cnt", 0, false)
@@ -133,11 +129,10 @@ void TensorRTCodeGen::CodeGenClassDefine() {
       .declare("bool", "pass", 0, false)
       .declare_arg("true")
       .declare("cudaStream_t", "stream")
-      .call_start("ICHECK")
-      .call_inplace_start("cudaStreamCreate")
+      .func_call("ICHECK")
+      .func_call("cudaStreamCreate")
       .call_arg("&stream")
-      .call_inplace_end()
-      .call_end();
+      .nest_end();
   // malloc buffers
   size_t binding_num = graph()->input_names.size() + graph()->output_names.size();
   stack_.comment("Malloc and copy the buffers")
@@ -157,63 +152,55 @@ void TensorRTCodeGen::CodeGenClassDefine() {
       .comment("Memcopy inputs host to device");
   // copy inputs
   for (const auto& i : graph()->GetInputs()) {
-    stack_.call_start("CHECK")
-        .call_inplace_start("cudaMemcpyAsync")
+    stack_.func_call("CHECK")
+        .func_call("cudaMemcpyAsync")
         .call_arg("gpu_buffers[idx_" + i->alias + "]")
         .call_arg("cpu_buffers[idx_" + i->alias + "]")
         .call_arg(GetTensorBytes(i))
         .call_arg("cudaMemcpyHostToDevice")
         .call_arg("stream")
-        .call_inplace_end()
-        .call_end();
+        .nest_end();
   }
   // enqueue
-  stack_.call_start("cudaStreamSynchronize")
+  stack_.func_call("cudaStreamSynchronize")
       .call_arg("stream")
-      .call_end()
       .comment("enquque with gpu buffers")
-      .call_start("context->enqueueV2")
+      .func_call("enqueueV2", NullOpt, GetPtrCaller("context"))
       .call_arg("gpu_buffers")
       .call_arg("stream")
       .call_arg("nullptr")
-      .call_end()
       .comment("Memcopy outputs device to host");
   // copy outputs
   for (const auto& o : graph()->GetOutputs()) {
-    stack_.call_start("CHECK")
-        .call_inplace_start("cudaMemcpyAsync")
+    stack_.func_call("CHECK")
+        .func_call("cudaMemcpyAsync")
         .call_arg("output_" + o->alias)
         .call_arg("gpu_buffers[idx_" + o->alias + "]")
         .call_arg(GetTensorBytes(o))
         .call_arg("cudaMemcpyDeviceToHost")
         .call_arg("stream")
-        .call_inplace_end()
-        .call_end();
+        .nest_end();
   }
-  stack_.call_start("cudaStreamSynchronize").call_arg("stream").call_end();
+  stack_.func_call("cudaStreamSynchronize").call_arg("stream");
   // compare outputs
   for (const auto& o : graph()->GetOutputs()) {
-    stack_.call_start("CompareBuffers")
+    stack_.func_call("CompareBuffers", "pass")
         .call_arg("(" + CppDType(o->dtype) + "*)cpu_buffers[idx_" + o->alias + "]")
-        .call_arg("output_" + o->alias)
-        .call_end("pass");
+        .call_arg("output_" + o->alias);
     ReturnOnFail("pass", "Failed to test the output " + o->alias);
   }
   stack_.while_end();
   // clean up
   stack_.comment("Clean up the buffers and stream")
-      .call_start("cudaStreamDestory")
+      .func_call("cudaStreamDestory")
       .call_arg("stream")
-      .call_end()
       .for_start("i", 0, binding_num)
-      .call_start("CHECK")
-      .call_inplace_start("cudaFree")
+      .func_call("CHECK")
+      .func_call("cudaFree")
       .call_arg("gpu_buffers[i]")
-      .call_inplace_end()
-      .call_end()
-      .call_start("free")
+      .nest_end()
+      .func_call("free")
       .call_arg("cpu_buffers[i]")
-      .call_end()
       .for_end();
   // end define test method
   stack_.func_end("true");
@@ -233,7 +220,7 @@ void TensorRTCodeGen::CodeGenMain() {
       .func_arg("argv", "**char")
       .func_start()
       .declare("TRTLogger", "logger")
-      .call_start("logger.setLogServerity");
+      .func_call("logger.setLogServerity");
   if (config()->log_level == 0) {
     stack_.call_arg("ILogger::Serverity::kVERBOSE");
   } else if (config()->log_level == 1) {
@@ -241,7 +228,6 @@ void TensorRTCodeGen::CodeGenMain() {
   } else {
     stack_.call_arg("ILogger::Serverity::kWARNING");
   }
-  stack_.call_end();
   // prepare for build
   stack_.comment("Define arguments")
       .assign("pass", "true", "bool")
@@ -255,43 +241,39 @@ void TensorRTCodeGen::CodeGenMain() {
       .cond_if("!FileUtils::FileExist(\"" + graph()->name + ".trt\")");
   // create builder
   stack_.comment("Create TensorRT tools")
-      .call_start("TRTPtr<IBuilder>")
-      .call_inplace_start("createInferBuilder")
+      .func_call("TRTPtr<IBuilder>", GetAssignTo("builder", "auto"))
+      .func_call("createInferBuilder")
       .call_arg("logger")
-      .call_inplace_end()
-      .call_end("auto builder");
+      .nest_end();
   ReturnOnFail("builder", "Failed to create builder");
   // create network
   if (CompareVersion(6, 0, 0) >= 0) {
     stack_.assign("flags", "0", "uint32_t")
-        .call_start("TRTPtr<INetworkDefinition>")
-        .call_inplace_start("builder->createNetworkV2")
+        .func_call("TRTPtr<INetworkDefinition>", GetAssignTo("network", "auto"))
+        .func_call("createNetworkV2", NullOpt, GetPtrCaller("builder"))
         .call_arg("flags")
-        .call_inplace_end()
-        .call_end("auto network");
+        .nest_end();
   } else {
-    stack_.call_start("TRTPtr<INetworkDefinition>")
-        .call_inplace_start("builder->createNetwork")
-        .call_inplace_end()
-        .call_end("auto network");
+    stack_.func_call("TRTPtr<INetworkDefinition>", GetAssignTo("network", "auto"))
+        .func_call("createNetwork", NullOpt, GetPtrCaller("builder"))
+        .nest_end();
   }
   ReturnOnFail("network", "Failed to create network");
   // create config
-  stack_.call_start("TRTPtr<IBuilderConfig>")
-      .call_inplace_start("builder->createBuilderConfig")
-      .call_inplace_end()
-      .call_end("auto config");
+  stack_.func_call("TRTPtr<IBuilderConfig>", GetAssignTo("config", "auto"))
+      .func_call("createBuilderConfig", NullOpt, GetPtrCaller("builder"))
+      .nest_end();
   ReturnOnFail("config", "Failed to create config");
   // build model
   stack_.comment("Build model")
       .declare(graph()->name, "model")
-      .call_start("model.Build")
+      .func_call("model.Build", "pass")
       .call_arg("builder")
       .call_arg("network");
   if (CompareVersion(6, 0, 0) >= 0) {
     stack_.call_arg("config");
   }
-  stack_.call_arg("logger").call_end("pass");
+  stack_.call_arg("logger");
   ReturnOnFail("pass", "Failed to build model");
   // Set profile flag
   stack_.comment("Set profile flag")
@@ -305,42 +287,37 @@ void TensorRTCodeGen::CodeGenMain() {
       .assign("profile_level", "ProfilingVerbosity::kNONE")
       .cond_end()
       .cond_end()
-      .call_start("config->setProfilingVerbosity")
-      .call_arg("profile_verbose")
-      .call_end();
+      .func_call("setProfilingVerbosity", NullOpt, GetPtrCaller("config"))
+      .call_arg("profile_verbose");
   // Serialize engine
   stack_.comment("Serialize engine")
-      .call_start("TRTUtils::SerializeEngineToFile")
+      .func_call("TRTUtils::SerializeEngineToFile", "pass")
       .call_arg(DocUtils::ToStrDoc(graph()->name + ".trt"))
       .call_arg("builder")
       .call_arg("network");
   if (CompareVersion(6, 0, 0) >= 0) {
     stack_.call_arg("config");
   }
-  stack_.call_arg("logger").call_end("pass");
+  stack_.call_arg("logger");
   ReturnOnFail("pass", "Failed to serialize the engine");
-  // end build the engine
-  stack_.cond_end();
   // deserialize the engine
   stack_.comment("Deserialize engine")
       .declare("std::shared_ptr<ICudaEngine>", "engine")
-      .call_start("DeserializeEngineFromFile")
+      .func_call("DeserializeEngineFromFile", "pass")
       .call_arg(DocUtils::ToStrDoc(graph()->name + ".trt"))
       .call_arg("engine")
-      .call_arg("logger")
-      .call_end("pass");
+      .call_arg("logger");
   ReturnOnFail("pass", "Failed to deserialize the engine");
   // start profile the engine
   stack_.cond_if("profile_level > 0");
   // dump info by inspector
   stack_.comment("Dump info by inspector")
-      .call_start("TRTPtr<IEngineInspector>")
-      .call_inplace_start("engine->createEngineInspector")
-      .call_inplace_end()
-      .call_end("auto inspector")
-      .call_start("inspector->getEngineInformation")
+      .func_call("TRTPtr<IEngineInspector>", GetAssignTo("inspector", "auto"))
+      .func_call("createEngineInspector", NullOpt, GetPtrCaller("engine"))
+      .nest_end()
+      .func_call("getEngineInformation", GetAssignTo("result", "std::string"),
+                 GetPtrCaller("inspector"))
       .call_arg("LayerInformation::kJSON")
-      .call_end("std::string result")
       .declare("std::ofstream", "os")
       .declare_arg(DocUtils::ToStrDoc(graph()->name + "_info.json"))
       .declare_arg("std::ofstream::trunc")
@@ -353,12 +330,11 @@ void TensorRTCodeGen::CodeGenMain() {
         .declare("DatasetReader", "reader")
         .declare_arg(DocUtils::ToStrDoc(config()->dataset));
     stack_.comment("Test engine by datas")
-        .call_start("model.Test")
+        .func_call("model.Test", "pass")
         .call_arg("engine")
         .call_arg("reader")
         .call_arg(config()->test_iter)
-        .call_arg("logger")
-        .call_end("pass");
+        .call_arg("logger");
   }
   ReturnOnFail("pass", "Failed to test the engine");
   stack_.func_end("pass ? 0 : 1");
@@ -406,13 +382,20 @@ const String TensorRTCodeGen::GetTensorBytes(const MSCTensor& tensor) {
 
 void TensorRTCodeGen::ReturnOnFail(const String& flag, const String& err) {
   stack_.cond_if("!" + flag)
-      .call_start("logger.log")
+      .func_call("logger.log")
       .call_arg("ILogger::Serverity::kERROR")
       .call_arg(DocUtils::ToStrDoc(err))
-      .call_end()
       .line("return -1;")
       .cond_end();
 };
+
+const AssignDoc TensorRTCodeGen::GetAssignTo(const String& assign_to, const String& type) {
+  return DocUtils::ToAssignDoc(assign_to, "", type);
+}
+
+const PtrAttrAccessDoc TensorRTCodeGen::GetPtrCaller(const String& caller) {
+  return DocUtils::ToPtrAttrAccessDoc(caller, "");
+}
 
 const Array<Doc> TensorRTCodeGen::GetOpCodes(const MSCJoint& node) {
   const auto& ops_map = GetTensorRTOpCodes();

@@ -18,11 +18,13 @@
 """tvm.contrib.msc.framework.tensorrt.transform.pattern"""
 
 from typing import Mapping, Tuple, List, Union, Callable
+from functools import wraps
 
 from tvm import relax
 from tvm.relax.dpl import pattern
 from tvm.relax.transform import PatternCheckContext, FusionPattern
 from tvm.relax.backend.pattern_registry import register_patterns
+from tvm.contrib.msc.core.transform import pattern as msc_pattern
 
 
 def basic_pattern(
@@ -63,29 +65,6 @@ def basic_pattern(
     return out, annotations
 
 
-def conv2d_bias_pattern() -> Tuple[pattern.DFPattern, Mapping[str, pattern.DFPattern]]:
-    """Create patterns for an conv2d fused with bias.
-
-    Returns
-    -------
-    out: tvm.relax.dpl.pattern.DFPattern
-        The resulting pattern describing a conv_bias operation.
-
-    annotations: Mapping[str, tvm.relax.dpl.pattern.DFPattern]
-        A mapping from name to sub pattern. It can be used to extract
-        important expressions from match result, to power the partition
-        check function and codegen.
-    """
-
-    data = pattern.wildcard()
-    weight = pattern.is_const()
-    conv = pattern.is_op("relax.nn.conv2d")(data, weight)
-    bias = pattern.is_const()
-    out = pattern.is_op("relax.add")(conv, bias)
-    annotations = {"data": data, "weight": weight, "bias": bias, "conv": conv, "out": out}
-    return out, annotations
-
-
 def _basic_check(context: PatternCheckContext) -> bool:
     """Check if the basic pattern is correct.
 
@@ -121,21 +100,24 @@ def _elemwise_check(context: PatternCheckContext) -> bool:
     return ndim_a == ndim_b
 
 
-def _conv2d_bias_check(context: PatternCheckContext) -> bool:
-    """Check if the conv2d_bias pattern is correct.
+def wrap_basic_check(
+    func: Callable[[PatternCheckContext], bool]
+) -> Callable[[PatternCheckContext], bool]:
+    """Wrapper a checker with basic check
 
     Returns
     -------
-    pass: bool
-        Whether the pattern is correct.
+    checker: PatternCheckContext
+        The wrapped checker.
     """
 
-    if not _basic_check(context):
-        return False
-    ndim_conv = len(context.annotated_expr["conv"].struct_info.shape.values)
-    ndim_bias = len(context.annotated_expr["bias"].struct_info.shape.values)
-    ndim_out = len(context.annotated_expr["out"].struct_info.shape.values)
-    return ndim_conv == ndim_bias and ndim_bias == ndim_out
+    @wraps(func)
+    def wrapper(context):
+        if not _basic_check(context):
+            return False
+        return func(context)
+
+    return wrapper
 
 
 CheckFunc = Callable[[Mapping[pattern.DFPattern, relax.Expr], relax.Expr], bool]
@@ -161,7 +143,11 @@ def get_patterns(target) -> List[Pattern]:
         The patterns
     """
 
-    basic_ops = {"nn.conv2d": ["input", "constant"], "reshape": ["input", "input"]}
+    basic_ops = {
+        "nn.conv2d": ["input", "constant"],
+        "reshape": ["input", "input"],
+        "matmul": ["input", "input"],
+    }
     elemwise_ops = {
         "add": ["input", "input"],
         "divide": ["input", "input"],
@@ -178,7 +164,25 @@ def get_patterns(target) -> List[Pattern]:
             (target + "." + op, *basic_pattern("relax." + op, in_types), _elemwise_check)
         )
     # fusable ops
-    patterns.extend([(target + ".msc.conv2d_bias", *conv2d_bias_pattern(), _conv2d_bias_check)])
+    patterns.extend(
+        [
+            (
+                target + ".msc.conv2d_bias",
+                *msc_pattern.make_opt_relax_conv_bias_pattern("relax.nn.conv2d"),
+                wrap_basic_check(msc_pattern._check_opt_relax_conv_bias),
+            ),
+            (
+                target + ".msc.linear",
+                *msc_pattern.make_opt_relax_linear_pattern(),
+                wrap_basic_check(msc_pattern._check_opt_relax_linear),
+            ),
+            (
+                target + ".msc.linear_bias",
+                *msc_pattern.make_opt_relax_linear_bias_pattern(),
+                wrap_basic_check(msc_pattern._check_opt_relax_linear_bias),
+            ),
+        ]
+    )
     return patterns
 
 

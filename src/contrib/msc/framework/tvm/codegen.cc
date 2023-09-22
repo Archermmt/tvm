@@ -40,27 +40,25 @@ void RelaxCodeGen::CodeGenGraph() {
     stack_.func_arg(idx_input, "relax.Var");
     idx_inputs.push_back(idx_input);
   }
-  stack_.func_start().assign_list("inputs", idx_inputs);
+  stack_.func_start().assign("inputs", DocUtils::ToListDoc(idx_inputs, true));
   // define weights
   stack_.comment("Define the weights and constant");
   for (const auto& n : graph()->node_names) {
     const auto& node = graph()->FindNode(n);
     for (const auto& pair : node->weights) {
       const auto& idx_weight = IdxWeightBase(node, pair.first);
-      stack_.call_start("relax.Var")
-          .call_str_arg(pair.second->name)
-          .call_inplace_start("relax.TensorStructInfo")
-          .call_list_arg(pair.second->shape, "", true)
-          .call_str_arg(pair.second->DTypeName())
-          .call_inplace_end()
-          .call_end(idx_weight)
-          .call_start("inputs.append")
-          .call_arg(idx_weight)
-          .call_end();
+      stack_.func_call("relax.Var", idx_weight)
+          .call_arg(DocUtils::ToStrDoc(pair.second->name))
+          .func_call("relax.TensorStructInfo")
+          .call_arg(DocUtils::ToListDoc(pair.second->shape, true), "")
+          .call_arg(DocUtils::ToStrDoc(pair.second->DTypeName()))
+          .nest_end()
+          .func_call("inputs.append")
+          .call_arg(idx_weight);
     }
     if (node->optype == "constant") {
       CodeGenNode(node);
-      stack_.call_start("inputs.append").call_arg(IdxNodeBase(node)).call_end();
+      stack_.func_call("inputs.append").call_arg(IdxNodeBase(node));
     }
   }
   stack_.comment("Define the module");
@@ -93,35 +91,33 @@ void RelaxCodeGen::CodeGenGraph() {
   Array<String> idx_exits;
   for (const auto& e : graph()->GetExits()) {
     const auto& idx_exit = IdxNodeBase(e, false);
-    stack_.call_start("block_builder.emit_output").call_arg(idx_exit).call_end(idx_exit);
+    stack_.func_call("block_builder.emit_output", idx_exit).call_arg(idx_exit);
     idx_exits.push_back(idx_exit);
   }
-  stack_.scope_end().call_start("block_builder.emit_func_output");
+  stack_.scope_end().func_call("block_builder.emit_func_output");
   if (idx_exits.size() == 1) {
     stack_.call_arg(idx_exits[0]);
   } else {
-    stack_.call_list_arg(idx_exits);
+    stack_.call_arg(DocUtils::ToListDoc(idx_exits));
   }
-  stack_.call_end().scope_end().assign("mod", "block_builder.get()").func_end("mod");
+  stack_.scope_end().assign("mod", "block_builder.get()").func_end("mod");
 }
 
 void RelaxCodeGen::CodeGenInference() {
   for (const auto& i : graph()->GetInputs()) {
     const auto& producer = graph()->FindProducer(i);
-    stack_.call_start("relax.Var")
-        .call_str_arg(i->alias)
-        .call_inplace_start("relax.TensorStructInfo")
-        .call_list_arg(i->shape)
-        .call_str_arg(i->DTypeName())
-        .call_inplace_end()
-        .call_end(IdxNodeBase(producer));
+    stack_.func_call("relax.Var", IdxNodeBase(producer))
+        .call_arg(DocUtils::ToStrDoc(i->alias))
+        .func_call("relax.TensorStructInfo")
+        .call_arg(DocUtils::ToListDoc(i->shape))
+        .call_arg(DocUtils::ToStrDoc(i->DTypeName()))
+        .nest_end();
   }
-  stack_.comment("Build Module").call_start(graph()->name);
+  stack_.comment("Build Module").func_call(graph()->name, "mod");
   for (const auto& i : graph()->GetInputs()) {
     const auto& producer = graph()->FindProducer(i);
     stack_.call_arg(IdxNodeBase(producer));
   }
-  stack_.call_end("mod");
   String target, device;
   if (config()->test_device == "cpu") {
     target = "llvm";
@@ -132,38 +128,30 @@ void RelaxCodeGen::CodeGenInference() {
   }
   stack_.comment("Load weights")
       .scope_start("open(\"" + graph()->name + "_params.bin\", \"rb\")", "f")
-      .call_start("tvm.runtime.load_param_dict")
+      .func_call("tvm.runtime.load_param_dict", "params")
       .call_arg("f.read()")
-      .call_end("params")
       .scope_end()
-      .call_start("tvm.relax.transform.BindParams")
-      .call_str_arg("main")
+      .func_call("tvm.relax.transform.BindParams", "bind_params")
+      .call_arg(DocUtils::ToStrDoc("main"))
       .call_arg("params")
-      .call_end("bind_params")
-      .call_start("bind_params")
+      .func_call("bind_params", "mod")
       .call_arg("mod")
-      .call_end("mod")
-      .call_start("tvm.target.Target")
-      .call_str_arg(target)
-      .call_end("target")
-      .call_start("tvm.relax.transform.LegalizeOps()")
+      .func_call("tvm.target.Target", "target")
+      .call_arg(DocUtils::ToStrDoc(target))
+      .func_call("tvm.relax.transform.LegalizeOps()", "mod")
       .call_arg("mod")
-      .call_end("mod")
       .scope_start("tvm.transform.PassContext(opt_level=3)")
-      .call_start("relax.build")
+      .func_call("relax.build", "ex")
       .call_arg("mod")
       .call_arg("target")
-      .call_end("ex")
-      .call_start("relax.VirtualMachine")
+      .func_call("relax.VirtualMachine", "vm")
       .call_arg("ex")
       .call_arg(device)
-      .call_end("vm")
       .scope_end()
-      .call_start("vm[\"main\"]");
+      .func_call("vm[\"main\"]", "outputs");
   for (const auto& i : graph()->GetInputs()) {
     stack_.call_arg("inputs[\"" + i->alias + "\"]");
   }
-  stack_.call_end("outputs");
 }
 
 const Array<Doc> RelaxCodeGen::GetOpCodes(const MSCJoint& node) {

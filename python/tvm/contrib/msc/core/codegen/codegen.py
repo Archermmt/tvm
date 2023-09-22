@@ -16,6 +16,8 @@
 # under the License.
 """tvm.contrib.msc.core.codegen.codegen"""
 
+import os
+import subprocess
 from typing import Dict, List, Optional, Any, Callable
 
 import tvm
@@ -40,8 +42,8 @@ class CodeGen(object):
         The config to print code.
     build_folder: MSCDirectory
         The codegen folder.
-    output_folder: MSCDirectory
-        The output folder.
+    coda_format: str
+        The code format cpp| python.
     """
 
     def __init__(
@@ -51,7 +53,6 @@ class CodeGen(object):
         codegen_config: Optional[Dict[str, str]] = None,
         print_config: Optional[Dict[str, str]] = None,
         build_folder: msc_utils.MSCDirectory = None,
-        output_folder: msc_utils.MSCDirectory = None,
         code_format: str = "python",
     ):
         self._graph = graph
@@ -59,15 +60,13 @@ class CodeGen(object):
         self._codegen_config = msc_utils.dump_dict(codegen_config)
         self._print_config = msc_utils.dump_dict(print_config)
         self._build_folder = build_folder or msc_utils.msc_dir(keep_history=False, cleanup=True)
-        self._output_folder = output_folder or msc_utils.msc_dir(
-            "msc_output", keep_history=False, cleanup=False
-        )
         self._code_format = code_format
 
     def load(
         self,
         inputs: Optional[List[Any]] = None,
-        weights_binder: Optional[Callable[[MSCGraph, Any, msc_utils.MSCDirectory], Any]] = None,
+        pre_load: Optional[Callable[[msc_utils.MSCDirectory], Any]] = None,
+        post_load: Optional[Callable[[Any, msc_utils.MSCDirectory], Any]] = None,
     ) -> Any:
         """Generate source and load the model
 
@@ -75,10 +74,10 @@ class CodeGen(object):
         -------
         inputs: list<any>
             The inputs to build the model.
-        weights_binder: Callable
-            The method for binding weights to the model.
-        as_cpp: bool
-            Whether load the model in cpp format
+        pre_load: Callable
+            The pre processing method before load.
+        post_load: Callable
+            The post processing method after load.
 
         Returns
         -------
@@ -89,24 +88,30 @@ class CodeGen(object):
         sources = self._source_getter(self._graph, self._codegen_config, self._print_config)
         inputs = inputs or []
         with self._build_folder as folder:
+            # pre processing
+            if pre_load:
+                pre_load(folder)
             for name, source in sources.items():
                 folder.add_file(name, source)
             if self._code_format == "cpp":
-                # load weights
-                if weights_binder:
-                    obj = weights_binder(None, folder)
-                print("should make the cpp file!!")
-                raise Exception("stop here!!")
+                with folder.create_dir("build"):
+                    command = "cmake ../ && make && mv {} ../".format(self._graph.name)
+                    process = subprocess.Popen(command, shell=True)
+                    process.wait()
+                    assert process.returncode == 0, "Failed to build {} under {}".format(
+                        self._graph.name, os.getcwd()
+                    )
+                obj = self._graph.name
             elif self._code_format == "python":
                 builder = msc_utils.load_callable(self._graph.name + ".py:" + self._graph.name)
                 obj = builder(*inputs)
-                # load weights
-                if weights_binder:
-                    obj = weights_binder(obj, folder)
             else:
                 raise NotImplementedError(
                     "Code format {} is not supported".format(self._code_format)
                 )
+            # post processing
+            if post_load:
+                obj = post_load(obj, folder)
         return obj
 
 
@@ -156,4 +161,4 @@ def relay_to_relax(
     def _bind_weights(mod: tvm.IRModule, folder: msc_utils.MSCDirectory) -> tvm.IRModule:
         return BindParams("main", weights)(mod)
 
-    return codegen.load(inputs, _bind_weights)
+    return codegen.load(inputs, post_load=_bind_weights)

@@ -20,6 +20,7 @@ from typing import Dict, Optional, Tuple, List
 
 import tvm
 from tvm.relax.transform import BindParams
+from tvm.relax import PyExprVisitor
 from tvm.relax.backend.pattern_registry import get_patterns_with_prefix
 from tvm.relay.expr_functor import ExprVisitor
 from tvm.relay.build_module import bind_params_by_name
@@ -58,7 +59,7 @@ def normalize_weights(
             ref_layout, weight_layout = ref_t.layout.name, weight_t.layout.name
             if ref_layout != weight_layout:
                 assert all(
-                    l.name in ref_layout for l in weight_layout
+                    l in ref_layout for l in weight_layout
                 ), "layout mismatch {} compare to {}".format(ref_t, weight_t)
                 permute = [ref_layout.index(l) for l in weight_layout]
                 return tvm.nd.array(data.asnumpy().transpose(*permute))
@@ -73,6 +74,7 @@ def from_relax(
     params: Optional[Dict[str, tvm.nd.array]] = None,
     trans_config: Optional[Dict[str, str]] = None,
     build_config: Optional[Dict[str, str]] = None,
+    opt_config: Optional[Dict[str, str]] = None,
 ) -> Tuple[MSCGraph, Dict[str, tvm.nd.array]]:
     """Change IRModule to MSCGraph.
 
@@ -86,6 +88,8 @@ def from_relax(
         The config for transfrorm IRModule.
     build_config: dict
         The config for build MSCGraph.
+    opt_config: dict
+        The config for optimize the relax before translate.
 
     Returns
     -------
@@ -97,10 +101,17 @@ def from_relax(
 
     trans_config = trans_config or {}
     build_config = build_config or {}
+    opt_config = opt_config or {}
     entry = trans_config.get("entry", "main")
-    # TODO(tong.meng): optimize before translate?
     if params:
         mod = BindParams("main", params)(mod)
+    opt_level = opt_config.get("opt_level", 1)
+    if opt_level > 0:
+        mod = tvm.transform.Sequential(
+            [
+                tvm.relax.transform.FoldConstant(),
+            ]
+        )(mod)
     patterns = get_patterns_with_prefix("msc")
     passes = [
         tvm.relax.transform.FuseOpsByPattern(
@@ -204,10 +215,9 @@ def from_relay(
     opt_config = opt_config or {}
     # TODO(tong.meng): optimize before translate?
     opt_level = opt_config.get("opt_level", 0)
-    if opt_level == 0:
-        if params:
-            mod["main"] = bind_params_by_name(mod["main"], params)
-    else:
+    if params:
+        mod["main"] = bind_params_by_name(mod["main"], params)
+    if opt_level > 0:
         target = opt_config.get("target", "llvm")
         disabled_pass = opt_config.get("disabled_pass", []) + [
             "SimplifyInference",
@@ -229,12 +239,38 @@ def from_relay(
     return graph, normalize_weights(t_weights, graph)
 
 
+@tvm.relax.expr_functor.visitor
+class BYOCChecker(PyExprVisitor):
+    """Checker to check if any non-target ops exist"""
+
+    def check(self, func_names, expr):
+        self._func_names = func_names
+        self._non_target_exprs = []
+        if isinstance(expr, tvm.relax.Expr):
+            self.visit_expr(expr)
+        elif isinstance(expr, tvm.relax.BindingBlock):
+            self.visit_binding_block(expr)
+        assert len(self._non_target_exprs) == 0, "Exprs not on target {}".format(
+            self._non_target_exprs
+        )
+
+    def visit_var_binding_(self, binding) -> None:
+        super().visit_var_binding_(binding)
+        if isinstance(binding.value, tvm.relax.Call):
+            if isinstance(binding.value.op, tvm.relax.GlobalVar):
+                if binding.value.op.name_hint not in self._func_names:
+                    self._non_target_exprs.append(binding.value)
+            else:
+                self._non_target_exprs.append(binding.value)
+
+
 def byoc_partition(
     target: str,
     mod: tvm.IRModule,
     params: Optional[Dict[str, tvm.nd.array]] = None,
     trans_config: Optional[Dict[str, str]] = None,
     build_config: Optional[Dict[str, str]] = None,
+    allow_incomplete: bool = True,
 ) -> Tuple[tvm.IRModule, List[Tuple[str, MSCGraph, Dict[str, tvm.nd.array]]]]:
     """Partition module to target sub functions.
 
@@ -250,6 +286,9 @@ def byoc_partition(
         The parameters of the IRModule.
     build_config: dict
         The config for build MSCGraph.
+    allow_incomplete: bool
+        Whether allow some ops not on tensorrt
+
 
     Returns
     -------
@@ -284,6 +323,10 @@ def byoc_partition(
         return func.attrs["Codegen"] == target
 
     func_names = [var.name_hint for var, func in mod.functions.items() if _is_target_func(func)]
+
+    if not allow_incomplete:
+        BYOCChecker().check(func_names, mod[entry])
+
     graphs_info, all_weights = [], _ffi_api.GetRelaxWeights(mod, entry)
     for idx, name in enumerate(func_names):
         build_config["graph_name"] = target + "_" + str(idx)

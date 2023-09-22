@@ -173,6 +173,16 @@ class MSCBasePrinter {
   /*! \brief Virtual method to print a DeclareDoc*/
   virtual void PrintTypedDoc(const DeclareDoc& doc) { LOG(FATAL) << "Declare is not implemented"; }
 
+  /*! \brief Virtual method to print a StrictListDoc*/
+  virtual void PrintTypedDoc(const StrictListDoc& doc) {
+    LOG(FATAL) << "StrictList is not implemented";
+  }
+
+  /*! \brief Virtual method to print a PtrAttrAccessDoc*/
+  virtual void PrintTypedDoc(const PtrAttrAccessDoc& doc) {
+    LOG(FATAL) << "PtrAttrAccess is not implemented";
+  }
+
   /*! \brief Print docs to joined doc */
   template <typename DocType>
   void PrintJoinedDocs(const Array<DocType>& docs, const String& separator = ", ") {

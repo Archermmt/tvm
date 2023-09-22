@@ -105,12 +105,11 @@ class TFV1ArgMaxMinCodeGen : public TFV1OpCode {
 
  protected:
   void CodeGenBuild() final {
-    stack_.op_start()
+    stack_.op_call()
         .op_input_arg()
         .op_arg<int>("axis")
-        .call_dtype_arg(node()->OutputAt(0)->dtype, "output_type")
-        .op_name_arg()
-        .op_end();
+        .op_dtype_arg(node()->OutputAt(0)->dtype, "output_type")
+        .op_name_arg();
   }
 };
 
@@ -120,13 +119,9 @@ class TFV1AstypeCodeGen : public TFV1OpCode {
  protected:
   void CodeGenBuild() final {
     if (node()->InputAt(0)->dtype == node()->OutputAt(0)->dtype) {
-      stack_.op_start("tf_v1.identity").op_input_arg().op_name_arg().op_end();
+      stack_.op_call("tf_v1.identity").op_input_arg().op_name_arg();
     } else {
-      stack_.op_start()
-          .op_input_arg()
-          .call_dtype_arg(node()->OutputAt(0)->dtype)
-          .op_name_arg()
-          .op_end();
+      stack_.op_call().op_input_arg().op_dtype_arg(node()->OutputAt(0)->dtype).op_name_arg();
     }
   }
 };
@@ -140,7 +135,7 @@ class TFV1AxesCodeGen : public TFV1OpCode {
  protected:
   void CodeGenBuild() final {
     const String& key = node()->HasAttr("axes") ? "axes" : "axis";
-    stack_.op_start().op_input_arg().op_list_arg<int>(key, attr_name_).op_name_arg().op_end();
+    stack_.op_call().op_input_arg().op_list_arg<int>(key, attr_name_).op_name_arg();
   }
 
  private:
@@ -155,7 +150,7 @@ class TFV1AxisCodeGen : public TFV1OpCode {
 
  protected:
   void CodeGenBuild() final {
-    stack_.op_start().op_input_arg().op_arg<int>("axis", attr_name_).op_name_arg().op_end();
+    stack_.op_call().op_input_arg().op_arg<int>("axis", attr_name_).op_name_arg();
   }
 
  private:
@@ -167,7 +162,7 @@ class TFV1BroadcastToCodeGen : public TFV1OpCode {
 
  protected:
   void CodeGenBuild() final {
-    stack_.op_start().op_input_arg().op_list_arg<int>("shape").op_name_arg().op_end();
+    stack_.op_call().op_input_arg().op_list_arg<int>("shape").op_name_arg();
   }
 };
 
@@ -175,9 +170,7 @@ class TFV1ConcatCodeGen : public TFV1OpCode {
   TFV1_OP_CODEGEN_METHODS(TFV1ConcatCodeGen)
 
  protected:
-  void CodeGenBuild() final {
-    stack_.op_start().op_inputs_arg().op_arg<int>("axis").op_name_arg().op_end();
-  }
+  void CodeGenBuild() final { stack_.op_call().op_inputs_arg().op_arg<int>("axis").op_name_arg(); }
 };
 
 class TFV1ConstantCodeGen : public TFV1OpCode {
@@ -185,12 +178,11 @@ class TFV1ConstantCodeGen : public TFV1OpCode {
 
  protected:
   void CodeGenBuild() final {
-    stack_.op_start()
-        .call_str_arg(node()->name)
-        .call_list_arg(node()->OutputAt(0)->shape, "", true)
-        .call_str_arg(node()->OutputAt(0)->DTypeName())
-        .call_arg("weights")
-        .op_end();
+    stack_.op_call()
+        .op_name_arg("")
+        .call_arg(DocUtils::ToListDoc(node()->OutputAt(0)->shape, true))
+        .call_arg(DocUtils::ToStrDoc(node()->OutputAt(0)->DTypeName()))
+        .call_arg("weights");
   }
 };
 
@@ -218,31 +210,30 @@ class TFV1ConvCodeGen : public TFV1OpCode {
       LOG_FATAL << "Unexpected layout for padding node" << node();
     }
     if (groups == 1) {
-      stack_.op_start();
+      stack_.op_call();
     } else if (groups == node()->InputAt(0)->DimAt("C")->value) {
-      stack_.op_start("ops.nn_ops.depthwise_conv2d_native");
+      stack_.op_call("ops.nn_ops.depthwise_conv2d_native");
     } else {
       LOG_FATAL << "Unexpected conv with groups " << node();
     }
     stack_.op_input_arg()
         .op_weight_arg("weight")
-        .call_list_arg(strides, "strides")
-        .call_list_arg(dilation, "dilations")
+        .call_arg(DocUtils::ToListDoc(strides), "strides")
+        .call_arg(DocUtils::ToListDoc(dilation), "dilations")
         .op_str_arg("data_layout", "data_format");
     if (pair.first.size() > 0) {
-      stack_.call_str_arg(pair.first, "padding");
+      stack_.call_arg(DocUtils::ToStrDoc(pair.first), "padding");
     } else if (pair.second.size() > 0) {
-      stack_.call_list_arg(pair.second, "padding");
+      stack_.call_arg(DocUtils::ToListDoc(pair.second), "padding");
     } else {
       LOG_FATAL << "Can not parse padding for " << node();
     }
-    stack_.op_name_arg().op_end();
+    stack_.op_name_arg();
     if (use_bias_) {
-      stack_.op_start("ops.nn_ops.bias_add")
+      stack_.op_call("ops.nn_ops.bias_add")
           .op_output_arg()
           .op_weight_arg("bias")
-          .call_str_arg(node()->name + "_bias", "name")
-          .op_end();
+          .op_name_arg("name", node()->name + "_bias");
     }
   }
 
@@ -254,9 +245,7 @@ class TFV1CreateLikeCodeGen : public TFV1OpCode {
   TFV1_OP_CODEGEN_METHODS(TFV1CreateLikeCodeGen)
 
  protected:
-  void CodeGenBuild() final {
-    stack_.op_start().op_input_arg().op_str_arg("dtype").op_name_arg().op_end();
-  }
+  void CodeGenBuild() final { stack_.op_call().op_input_arg().op_str_arg("dtype").op_name_arg(); }
 };
 
 class TFV1EinsumCodeGen : public TFV1OpCode {
@@ -265,13 +254,13 @@ class TFV1EinsumCodeGen : public TFV1OpCode {
  protected:
   void CodeGenBuild() final {
     const auto& producer = node()->ProducerOf(0);
-    stack_.op_start().op_str_arg("subscripts", "");
+    stack_.op_call().op_str_arg("subscripts", "");
     if (node()->inputs.size() == 1 && producer->optype == "tuple") {
-      stack_.call_index_arg(IdxInput(), std::vector<int>{0});
+      stack_.call_arg(DocUtils::ToIndexDoc(IdxInput(), std::vector<int>{0}));
     } else {
       stack_.op_inputs_arg(false);
     }
-    stack_.op_name_arg().op_end();
+    stack_.op_name_arg();
   }
 };
 
@@ -280,7 +269,7 @@ class TFV1FullCodeGen : public TFV1OpCode {
 
  protected:
   void CodeGenBuild() final {
-    stack_.op_start().op_list_arg<int>("shape", "").op_input_arg(0, "value").op_name_arg().op_end();
+    stack_.op_call().op_list_arg<int>("shape", "").op_input_arg(0, "value").op_name_arg();
   }
 };
 
@@ -315,13 +304,12 @@ class TFV1PadCodeGen : public TFV1OpCode {
     }
     const auto& val_producer = node()->ProducerOf(1);
     ICHECK(val_producer->optype == "constant" && val_producer->HasAttr("scalar"));
-    stack_.op_start()
+    stack_.op_call()
         .op_input_arg()
-        .call_list_arg(pad_width, "paddings")
-        .call_str_arg(mode, "mode")
+        .call_arg(DocUtils::ToListDoc(pad_width), "paddings")
+        .call_arg(DocUtils::ToStrDoc(mode), "mode")
         .call_arg(val_producer->GetTypeAttr<float>("scalar"), "constant_values")
-        .op_name_arg()
-        .op_end();
+        .op_name_arg();
   }
 };
 
@@ -339,20 +327,20 @@ class TFV1Pool2dCodeGen : public TFV1OpCode {
       LOG_FATAL << "Unexpected pool2d node " << node();
     }
     const auto& pair = GetPadding("strides", "pool_size");
-    stack_.op_start()
+    stack_.op_call()
         .op_input_arg()
         .op_list_arg<int>("pool_size", "window_shape")
-        .call_str_arg(pooling_type, "pooling_type")
+        .call_arg(DocUtils::ToStrDoc(pooling_type), "pooling_type")
         .op_list_arg<int>("dilation", "dilation_rate")
         .op_list_arg<int>("strides");
     if (pair.first.size() > 0) {
-      stack_.call_str_arg(pair.first, "padding");
+      stack_.call_arg(DocUtils::ToStrDoc(pair.first), "padding");
     } else if (pair.second.size() > 0) {
-      stack_.call_list_arg(pair.second, "padding");
+      stack_.call_arg(DocUtils::ToListDoc(pair.second), "padding");
     } else {
       LOG_FATAL << "Can not parse padding for " << node();
     }
-    stack_.op_name_arg().op_end();
+    stack_.op_name_arg();
   }
 };
 
@@ -367,7 +355,7 @@ class TFV1PermuteDimsCodeGen : public TFV1OpCode {
         axes.push_back(i - 1);
       }
     }
-    stack_.op_start().op_input_arg().call_list_arg(axes).op_name_arg().op_end();
+    stack_.op_call().op_input_arg().call_arg(DocUtils::ToListDoc(axes)).op_name_arg();
   }
 };
 
@@ -376,12 +364,7 @@ class TFV1ReduceAxisCodeGen : public TFV1OpCode {
 
  protected:
   void CodeGenBuild() final {
-    stack_.op_start()
-        .op_input_arg()
-        .op_list_arg<int>("axis")
-        .op_arg<bool>("keepdims")
-        .op_name_arg()
-        .op_end();
+    stack_.op_call().op_input_arg().op_list_arg<int>("axis").op_arg<bool>("keepdims").op_name_arg();
   }
 };
 
@@ -390,7 +373,7 @@ class TFV1ReshapeCodeGen : public TFV1OpCode {
 
  protected:
   void CodeGenBuild() final {
-    stack_.op_start().op_input_arg().op_list_arg<int>("shape").op_name_arg().op_end();
+    stack_.op_call().op_input_arg().op_list_arg<int>("shape").op_name_arg();
   }
 };
 
@@ -411,12 +394,11 @@ class TFV1Resize2dCodeGen : public TFV1OpCode {
     } else {
       LOG_FATAL << "Unexpected resize with method " << node();
     }
-    stack_.op_start(func_name)
+    stack_.op_call(func_name)
         .op_input_arg()
         .op_list_arg<int>("size")
         .call_arg(align_corners, "align_corners")
-        .op_name_arg()
-        .op_end();
+        .op_name_arg();
   }
 };
 
@@ -424,7 +406,7 @@ class TFV1SimpleCodeGen : public TFV1OpCode {
   TFV1_OP_CODEGEN_METHODS(TFV1SimpleCodeGen)
 
  protected:
-  void CodeGenBuild() final { stack_.op_start().op_inputs_arg(false).op_name_arg().op_end(); }
+  void CodeGenBuild() final { stack_.op_call().op_inputs_arg(false).op_name_arg(); }
 };
 
 class TFV1SplitCodeGen : public TFV1OpCode {
@@ -432,13 +414,15 @@ class TFV1SplitCodeGen : public TFV1OpCode {
 
  protected:
   void CodeGenBuild() final {
-    stack_.op_start().op_input_arg();
+    stack_.op_call().op_input_arg();
     std::vector<int64_t> indices;
     int axis = node()->GetTypeAttr<int>("axis");
     for (size_t i = 0; i < node()->outputs.size(); i++) {
       indices.push_back(node()->OutputAt(i)->DimAt(axis)->value);
     }
-    stack_.call_list_arg(indices, "num_or_size_splits").op_arg<int>("axis").op_name_arg().op_end();
+    stack_.call_arg(DocUtils::ToListDoc(indices), "num_or_size_splits")
+        .op_arg<int>("axis")
+        .op_name_arg();
   }
 };
 
@@ -453,13 +437,12 @@ class TFV1StridedSliceCodeGen : public TFV1OpCode {
         axes.push_back(i);
       }
     }
-    stack_.op_start()
+    stack_.op_call()
         .op_input_arg()
         .op_list_arg<int>("begin")
         .op_list_arg<int>("end")
         .op_list_arg<int>("strides")
-        .op_name_arg()
-        .op_end();
+        .op_name_arg();
   }
 };
 
@@ -468,7 +451,7 @@ class TFV1TakeCodeGen : public TFV1OpCode {
 
  protected:
   void CodeGenBuild() final {
-    stack_.op_start().op_inputs_arg(false).op_arg<int>("axis").op_name_arg().op_end();
+    stack_.op_call().op_inputs_arg(false).op_arg<int>("axis").op_name_arg();
   }
 };
 
@@ -477,11 +460,7 @@ class TFV1TileCodeGen : public TFV1OpCode {
 
  protected:
   void CodeGenBuild() final {
-    stack_.op_start()
-        .op_input_arg()
-        .op_list_arg<int>("repeats", "multiples")
-        .op_name_arg()
-        .op_end();
+    stack_.op_call().op_input_arg().op_list_arg<int>("repeats", "multiples").op_name_arg();
   }
 };
 
@@ -489,7 +468,7 @@ class TFV1TupleCodeGen : public TFV1OpCode {
   TFV1_OP_CODEGEN_METHODS(TFV1TupleCodeGen)
 
  protected:
-  void CodeGenBuild() final { stack_.op_start().op_inputs_arg().op_end(); }
+  void CodeGenBuild() final { stack_.op_call().op_inputs_arg(); }
 };
 
 const std::shared_ptr<std::unordered_map<String, std::shared_ptr<TFV1OpCode>>> GetTFV1OpCodes() {

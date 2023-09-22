@@ -54,7 +54,7 @@ void CppPrinter::PrintTypedDoc(const IndexDoc& doc) {
 
 void CppPrinter::PrintTypedDoc(const AttrAccessDoc& doc) {
   PrintDoc(doc->value, false);
-  output_ << "->" << doc->name;
+  output_ << "." << doc->name;
 }
 
 void CppPrinter::PrintTypedDoc(const CallDoc& doc) {
@@ -213,6 +213,11 @@ void CppPrinter::PrintTypedDoc(const DeclareDoc& doc) {
     }
   }
   Endline();
+}
+
+void CppPrinter::PrintTypedDoc(const PtrAttrAccessDoc& doc) {
+  PrintDoc(doc->value, false);
+  output_ << "->" << doc->name;
 }
 
 void CppPrinter::PrintIndentedBlock(const Array<StmtDoc>& docs) {

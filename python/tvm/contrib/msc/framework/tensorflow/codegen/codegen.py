@@ -66,4 +66,4 @@ def to_tensorflow(
     codegen = CodeGen(
         graph, _ffi_api.GetTensorflowSources, codegen_config, print_config, build_folder
     )
-    return codegen.load(inputs + [weights], _bind_weights)
+    return codegen.load(inputs + [weights], post_load=_bind_weights)

@@ -65,7 +65,7 @@ class DeclareDocNode : public ExprDocNode {
 /*!
  * \brief Reference type of DeclareDocNode.
  *
- * \sa DeclareDoc
+ * \sa DeclareDocNode
  */
 class DeclareDoc : public ExprDoc {
  public:
@@ -79,6 +79,82 @@ class DeclareDoc : public ExprDoc {
   explicit DeclareDoc(ExprDoc type, ExprDoc variable, Array<ExprDoc> init_args,
                       bool use_constructor);
   TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(DeclareDoc, ExprDoc, DeclareDocNode);
+};
+
+/*!
+ * \brief Doc that build a strict list, which check the empty.
+ *
+ * \sa StrictListDoc
+ */
+class StrictListDocNode : public ExprDocNode {
+ public:
+  /*! \brief The inner list doc */
+  ListDoc list;
+  /*! \brief Whether to allow empty */
+  bool allow_empty{true};
+
+  void VisitAttrs(AttrVisitor* v) {
+    ExprDocNode::VisitAttrs(v);
+    v->Visit("list", &list);
+    v->Visit("allow_empty", &allow_empty);
+  }
+
+  static constexpr const char* _type_key = "script.printer.StrictListDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(StrictListDocNode, ExprDocNode);
+};
+
+/*!
+ * \brief Reference type of StrictListDocNode.
+ *
+ * \sa StrictListDocNode
+ */
+class StrictListDoc : public ExprDoc {
+ public:
+  /*!
+   * \brief Constructor of StrictListDoc.
+   * \param list The inner list doc.
+   * \param allow_empty Whether to allow empty.
+   */
+  explicit StrictListDoc(ListDoc list, bool allow_empty);
+  TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(StrictListDoc, ExprDoc, StrictListDocNode);
+};
+
+/*!
+ * \brief Doc that represents attribute access on another expression, visit via pointer.
+ *
+ * \sa PtrAttrAccessDoc
+ */
+class PtrAttrAccessDocNode : public ExprDocNode {
+ public:
+  /*! \brief The target expression to be accessed */
+  ExprDoc value{nullptr};
+  /*! \brief The attribute to be accessed */
+  String name;
+
+  void VisitAttrs(AttrVisitor* v) {
+    ExprDocNode::VisitAttrs(v);
+    v->Visit("value", &value);
+    v->Visit("name", &name);
+  }
+
+  static constexpr const char* _type_key = "script.printer.PtrAttrAccessDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(PtrAttrAccessDocNode, ExprDocNode);
+};
+
+/*!
+ * \brief Reference type of PtrAttrAccessDocNode.
+ *
+ * \sa PtrAttrAccessDocNode
+ */
+class PtrAttrAccessDoc : public ExprDoc {
+ public:
+  /*!
+   * \brief Constructor of PtrAttrAccessDoc
+   * \param value The target expression of attribute access.
+   * \param name The name of attribute to access.
+   */
+  explicit PtrAttrAccessDoc(ExprDoc value, String name);
+  TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(PtrAttrAccessDoc, ExprDoc, PtrAttrAccessDocNode);
 };
 
 }  // namespace msc

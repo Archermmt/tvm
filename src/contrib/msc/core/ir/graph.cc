@@ -1074,6 +1074,11 @@ TVM_REGISTER_GLOBAL("msc.core.MSCJointOutputAt")
       return node->OutputAt(index);
     });
 
+TVM_REGISTER_GLOBAL("msc.core.MSCJointWeightAt")
+    .set_body_typed([](const MSCJoint& node, const String& wtype) -> MSCTensor {
+      return node->WeightAt(wtype);
+    });
+
 TVM_REGISTER_GLOBAL("msc.core.MSCJointGetInputs")
     .set_body_typed([](const MSCJoint& node) -> Array<MSCTensor> { return node->GetInputs(); });
 

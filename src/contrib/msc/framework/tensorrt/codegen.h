@@ -69,6 +69,12 @@ class TensorRTCodeGen : public CppCodeGen<TensorRTCodeGenConfig> {
 
   /*! \brief Generate describe for tensor bytes*/
   const String GetTensorBytes(const MSCTensor& tensor);
+
+  /*! \brief Generate assign_to for func call*/
+  const AssignDoc GetAssignTo(const String& assign_to, const String& type);
+
+  /*! \brief Generate caller for func call*/
+  const PtrAttrAccessDoc GetPtrCaller(const String& caller);
 };
 
 }  // namespace msc

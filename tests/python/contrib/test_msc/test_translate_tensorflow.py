@@ -872,7 +872,7 @@ def _test_fill(in_shape):
         tf.ones(shape=in_shape, dtype="float32")
         io_info = {"in_data": in_shape, "in_name": [], "out_name": "ones:0"}
         graph_def, golden = get_graph_def(**io_info)
-    verify_model(graph_def, golden, **io_info)
+    verify_model(graph_def, golden, **io_info, use_out_name=False)
 
 
 def test_fill():

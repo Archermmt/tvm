@@ -35,6 +35,10 @@ const Array<Doc> TensorRTOpCode::GetDocs() {
   return stack_.GetDocs();
 }
 
+const PtrAttrAccessDoc TensorRTOpCode::GetPtrCaller(const String& caller) {
+  return DocUtils::ToPtrAttrAccessDoc(caller, "");
+}
+
 const String TensorRTOpCode::DType(const DataType& dtype) {
   const String& dtype_name = BaseOpCode<TensorRTCodeGenConfig>::DType(dtype);
   String dtype_enum;
@@ -78,28 +82,31 @@ const String TensorRTOpCode::AttrToDims(const String& key, bool use_ndim) {
 
 template <typename T>
 void TensorRTOpCode::SetLayerByAttr(const String& method, const String& key) {
-  stack_.call_start(IdxNode() + "->set" + method).op_arg<T>(key).call_end();
+  stack_.func_call("set" + method, NullOpt, GetPtrCaller(IdxNode())).op_arg<T>(key);
 }
 
 template <typename T>
 void TensorRTOpCode::SetLayerByValue(const String& method, const T& value) {
-  stack_.call_start(IdxNode() + "->set" + method).call_arg(value).call_end();
+  stack_.func_call("set" + method, NullOpt, GetPtrCaller(IdxNode())).call_arg(value);
 }
 
 template <typename T>
 void TensorRTOpCode::SetLayerByDimsAttr(const String& method, const String& key, bool use_ndim) {
-  stack_.call_start(IdxNode() + "->set" + method).call_arg(AttrToDims(key, use_ndim)).call_end();
+  stack_.func_call("set" + method, NullOpt, GetPtrCaller(IdxNode()))
+      .call_arg(AttrToDims(key, use_ndim));
 }
 
 template <typename T>
 void TensorRTOpCode::SetLayerByDimsValue(const String& method, const std::vector<T>& value,
                                          bool use_ndim) {
-  stack_.call_start(IdxNode() + "->set" + method).call_arg(ToDims(value, use_ndim)).call_end();
+  stack_.func_call("set" + method, NullOpt, GetPtrCaller(IdxNode()))
+      .call_arg(ToDims(value, use_ndim));
 }
 
 void TensorRTOpCode::SetLayerByDimsValue(const String& method, const Array<Integer>& value,
                                          bool use_ndim) {
-  stack_.call_start(IdxNode() + "->set" + method).call_arg(ToDims(value, use_ndim)).call_end();
+  stack_.func_call("set" + method, NullOpt, GetPtrCaller(IdxNode()))
+      .call_arg(ToDims(value, use_ndim));
 }
 
 #define TENSORRT_OP_CODEGEN_METHODS(TypeName) \
@@ -122,7 +129,7 @@ class TensorRTConvCodeGen : public TensorRTOpCode {
       }
       kernel_size.push_back(weight->DimAt(i)->value);
     }
-    stack_.op_start()
+    stack_.op_call()
         .op_input_arg()
         .call_arg(weight->DimAt("O"))
         .call_arg(ToDims(kernel_size, false))
@@ -131,8 +138,7 @@ class TensorRTConvCodeGen : public TensorRTOpCode {
       stack_.op_weight_arg("bias");
     } else {
       stack_.call_arg("mWeights[\"" + node()->name + ".bias\"]");
-    }
-    stack_.op_end();
+    };
     SetLayerByDimsAttr<int>("Stride", "strides", false);
     SetLayerByDimsAttr<int>("Dilation", "dilation", false);
     SetLayerByAttr<int>("NbGroups", "groups");
@@ -149,11 +155,10 @@ class TensorRTInputCodeGen : public TensorRTOpCode {
  protected:
   void CodeGenBuild() final {
     const auto& output = node()->OutputAt(0);
-    stack_.op_start()
+    stack_.op_call()
         .call_arg(DocUtils::ToStrDoc(output->alias))
-        .call_dtype_arg(output->dtype)
-        .call_arg(ToDims(output->shape))
-        .op_end();
+        .op_dtype_arg(output->dtype)
+        .call_arg(ToDims(output->shape));
   }
 };
 
@@ -164,7 +169,7 @@ class TensorRTReshapeCodeGen : public TensorRTOpCode {
  protected:
   void CodeGenBuild() final {
     const auto& output = node()->OutputAt(0);
-    stack_.op_start().op_input_arg().op_end();
+    stack_.op_call().op_input_arg();
     SetLayerByDimsValue("ReshapeDimensions", output->shape);
   }
 };

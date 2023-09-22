@@ -78,6 +78,9 @@ class PythonPrinter : public MSCBasePrinter {
   /*! * \brief Print a CommentDoc to python format*/
   void PrintTypedDoc(const CommentDoc& doc) final;
 
+  /*! \brief Virtual method to print a StrictListDoc*/
+  void PrintTypedDoc(const StrictListDoc& doc) final;
+
  private:
   /*! \brief Print block with indent*/
   void PrintIndentedBlock(const Array<StmtDoc>& docs);

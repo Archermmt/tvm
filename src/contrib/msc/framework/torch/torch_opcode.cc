@@ -42,15 +42,15 @@ const Array<Doc> TorchOpCode::GetDocs() {
 
 void TorchOpCode::CodeGenInit() {
   if (module_name().size() > 0) {
-    stack_.op_start().op_end();
+    stack_.op_call();
   } else {
     stack_.comment("passby: implement by " + func_name());
   }
 }
 
-void TorchOpCode::CodeGenForward() { stack_.op_start().op_inputs_arg(false).op_end(); }
+void TorchOpCode::CodeGenForward() { stack_.op_call().op_inputs_arg(false); }
 
-const std::vector<int> TorchOpCode::GetPadding(const String& key) {
+const StrictListDoc TorchOpCode::GetPadding(const String& key) {
   std::vector<int> padding, src_padding;
   ICHECK(node()->GetAttr(key, &src_padding));
   if (node()->optype == "nn.conv1d" || node()->optype == "msc.conv1d_bias") {
@@ -73,7 +73,7 @@ const std::vector<int> TorchOpCode::GetPadding(const String& key) {
   } else {
     LOG_FATAL << "Unexpected padding node" << node();
   }
-  return padding;
+  return DocUtils::ToListDoc(padding);
 }
 
 #define TORCH_OP_CODEGEN_METHODS(TypeName)                     \
@@ -85,7 +85,7 @@ class TorchAdaptivePoolCodeGen : public TorchOpCode {
   TORCH_OP_CODEGEN_METHODS(TorchAdaptivePoolCodeGen);
 
  protected:
-  void CodeGenInit() final { stack_.op_start().op_list_arg<int>("output_size").op_end(); }
+  void CodeGenInit() final { stack_.op_call().op_list_arg<int>("output_size"); }
 };
 
 class TorchAstypeCodeGen : public TorchOpCode {
@@ -95,7 +95,7 @@ class TorchAstypeCodeGen : public TorchOpCode {
   void CodeGenForward() final {
     stack_.assign(IdxNode(), IdxInput())
         .inplace_start("to")
-        .call_dtype_arg(node()->OutputAt(0)->dtype)
+        .op_dtype_arg(node()->OutputAt(0)->dtype)
         .inplace_end();
   }
 };
@@ -106,13 +106,12 @@ class TorchAttentionCodeGen : public TorchOpCode {
  protected:
   void CodeGenForward() final {
     std::string causal_mask;
-    stack_.op_start().op_inputs_arg(false);
+    stack_.op_call().op_inputs_arg(false);
     if (node()->GetAttr("causal_mask", &causal_mask)) {
       if (causal_mask.size() > 0) {
         stack_.call_arg(true, "is_causal");
       }
     }
-    stack_.op_end();
   }
 };
 
@@ -123,7 +122,7 @@ class TorchAxesCodeGen : public TorchOpCode {
   void CodeGenInit() final {
     if (module_name().size() > 0) {
       const String& key = node()->HasAttr("axes") ? "axes" : "axis";
-      stack_.op_start().op_list_arg<int>(key, "").op_end();
+      stack_.op_call().op_list_arg<int>(key, "");
     } else {
       TorchOpCode::CodeGenInit();
     }
@@ -134,7 +133,7 @@ class TorchAxesCodeGen : public TorchOpCode {
       TorchOpCode::CodeGenForward();
     } else {
       const String& key = node()->HasAttr("axes") ? "axes" : "axis";
-      stack_.op_start().op_input_arg().op_list_arg<int>(key, "").op_end();
+      stack_.op_call().op_input_arg().op_list_arg<int>(key, "");
     }
   }
 };
@@ -145,7 +144,7 @@ class TorchAxisCodeGen : public TorchOpCode {
  protected:
   void CodeGenInit() final {
     if (module_name().size() > 0) {
-      stack_.op_start().op_arg<int>("axis", "dim").op_end();
+      stack_.op_call().op_arg<int>("axis", "dim");
     } else {
       TorchOpCode::CodeGenInit();
     }
@@ -155,7 +154,7 @@ class TorchAxisCodeGen : public TorchOpCode {
     if (module_name().size() > 0) {
       TorchOpCode::CodeGenForward();
     } else {
-      stack_.op_start().op_input_arg().op_arg<int>("axis", "dim").op_end();
+      stack_.op_call().op_input_arg().op_arg<int>("axis", "dim");
     }
   }
 };
@@ -168,10 +167,7 @@ class TorchBatchNormCodeGen : public TorchOpCode {
     ICHECK(node()->GetTypeAttr<bool>("center") && node()->GetTypeAttr<bool>("scale"))
         << "Only support center and scale batchnorm, get " << node();
     const auto& gamma = node()->WeightAt("gamma");
-    stack_.op_start()
-        .call_arg(gamma->DimAt(0), "num_features")
-        .op_arg<float>("epsilon", "eps")
-        .op_end();
+    stack_.op_call().call_arg(gamma->DimAt(0), "num_features").op_arg<float>("epsilon", "eps");
   }
 };
 
@@ -182,7 +178,7 @@ class TorchBroadcastToCodeGen : public TorchOpCode {
   void CodeGenForward() final {
     stack_.assign(IdxNode(), IdxInput())
         .inplace_start("expand")
-        .call_list_arg(node()->GetTypeArrayAttr<int>("shape"), "", false, true)
+        .op_list_arg<int>("shape", "")
         .inplace_end();
   }
 };
@@ -192,7 +188,7 @@ class TorchClipCodeGen : public TorchOpCode {
 
  protected:
   void CodeGenForward() final {
-    stack_.op_start().op_input_arg().op_arg<float>("min").op_arg<float>("max").op_end();
+    stack_.op_call().op_input_arg().op_arg<float>("min").op_arg<float>("max");
   }
 };
 
@@ -210,12 +206,10 @@ class TorchConstantCodeGen : public TorchOpCode {
         stack_.assign(module_ref(), node()->GetTypeAttr<float>("scalar"));
       }
     } else {
-      stack_.call_start("torch.Tensor")
-          .call_list_arg(node()->OutputAt(0)->shape, "", false, false)
-          .call_end("data")
-          .op_start()
-          .call_arg("data")
-          .op_end();
+      stack_.func_call("torch.Tensor", "data")
+          .call_arg(DocUtils::ToDocList(node()->OutputAt(0)->shape))
+          .op_call()
+          .call_arg("data");
     }
   }
 
@@ -237,16 +231,15 @@ class TorchConvCodeGen : public TorchOpCode {
       }
       kernel_size.push_back(weight->DimAt(i)->value);
     }
-    stack_.op_start()
+    stack_.op_call()
         .call_arg(weight->DimAt("I"), "in_channels")
         .call_arg(weight->DimAt("O"), "out_channels")
-        .call_list_arg(kernel_size, "kernel_size")
+        .call_arg(DocUtils::ToListDoc(kernel_size), "kernel_size")
         .op_list_arg<int>("strides", "stride")
-        .call_list_arg(GetPadding(), "padding")
+        .call_arg(GetPadding(), "padding")
         .op_list_arg<int>("dilation")
         .op_arg<int>("groups")
-        .call_arg(use_bias_, "bias")
-        .op_end();
+        .call_arg(use_bias_, "bias");
   }
 
  private:
@@ -258,11 +251,10 @@ class TorchCumsumCodeGen : public TorchOpCode {
 
  protected:
   void CodeGenForward() final {
-    stack_.op_start()
+    stack_.op_call()
         .op_input_arg()
         .op_arg<int>("axis", "dim")
-        .call_dtype_arg(node()->OutputAt(0)->dtype, "dtype")
-        .op_end();
+        .op_dtype_arg(node()->OutputAt(0)->dtype, "dtype");
   }
 };
 
@@ -272,10 +264,9 @@ class TorchEmbeddingCodeGen : public TorchOpCode {
  protected:
   void CodeGenInit() final {
     const auto& weight = node()->WeightAt("weight");
-    stack_.op_start()
+    stack_.op_call()
         .call_arg(weight->DimAt("W"), "num_embeddings")
-        .call_arg(weight->DimAt("E"), "embedding_dim")
-        .op_end();
+        .call_arg(weight->DimAt("E"), "embedding_dim");
   }
 };
 
@@ -291,7 +282,7 @@ class TorchExpandDimsCodeGen : public TorchOpCode {
       if (i < axes.size() - 1) {
         idx_out = idx_out + "_" + std::to_string(i);
       }
-      stack_.op_start().call_arg(idx_input).call_arg(axes[i], "dim").op_end();
+      stack_.op_call().call_arg(idx_input).call_arg(axes[i], "dim");
       idx_input = idx_out;
     }
   }
@@ -302,11 +293,10 @@ class TorchFullCodeGen : public TorchOpCode {
 
  protected:
   void CodeGenForward() final {
-    stack_.op_start()
+    stack_.op_call()
         .op_list_arg<int>("shape", "size")
         .op_input_arg(0, "fill_value")
-        .call_dtype_arg(node()->OutputAt(0)->dtype, "dtype")
-        .op_end();
+        .op_dtype_arg(node()->OutputAt(0)->dtype, "dtype");
   }
 };
 
@@ -327,11 +317,10 @@ class TorchGroupNormCodeGen : public TorchOpCode {
     ICHECK(node()->GetTypeAttr<bool>("center") && node()->GetTypeAttr<bool>("scale"))
         << "Only support center and scale batchnorm, get " << node();
     int channel_axis = node()->GetTypeAttr<int>("channel_axis");
-    stack_.op_start()
+    stack_.op_call()
         .op_arg<int>("num_groups")
         .call_arg(node()->InputAt(0)->DimAt(channel_axis), "num_channels")
-        .op_arg<float>("epsilon", "eps")
-        .op_end();
+        .op_arg<float>("epsilon", "eps");
   }
 };
 
@@ -348,10 +337,9 @@ class TorchLayerNormCodeGen : public TorchOpCode {
     for (const auto& a : axes) {
       normalized_shape.push_back(node()->InputAt(0)->DimAt(a));
     }
-    stack_.op_start()
-        .call_list_arg(normalized_shape, "normalized_shape")
-        .op_arg<float>("epsilon", "eps")
-        .op_end();
+    stack_.op_call()
+        .call_arg(DocUtils::ToListDoc(normalized_shape), "normalized_shape")
+        .op_arg<float>("epsilon", "eps");
   }
 };
 
@@ -363,11 +351,10 @@ class TorchLinearCodeGen : public TorchOpCode {
  protected:
   void CodeGenInit() final {
     const auto& weight = node()->WeightAt("weight");
-    stack_.op_start()
+    stack_.op_call()
         .call_arg(weight->DimAt("I"), "in_features")
         .call_arg(weight->DimAt("O"), "out_features")
-        .call_arg(use_bias_, "bias")
-        .op_end();
+        .call_arg(use_bias_, "bias");
   }
 
  private:
@@ -379,11 +366,7 @@ class TorchNllLossCodeGen : public TorchOpCode {
 
  protected:
   void CodeGenForward() final {
-    stack_.op_start()
-        .op_inputs_arg(false)
-        .op_str_arg("reduction")
-        .op_arg<int>("ignore_index")
-        .op_end();
+    stack_.op_call().op_inputs_arg(false).op_str_arg("reduction").op_arg<int>("ignore_index");
   }
 };
 
@@ -392,15 +375,14 @@ class TorchPoolCodeGen : public TorchOpCode {
 
  protected:
   void CodeGenInit() final {
-    stack_.op_start()
+    stack_.op_call()
         .op_list_arg<int>("pool_size", "kernel_size")
         .op_list_arg<int>("strides", "stride")
-        .call_list_arg(GetPadding(), "padding")
+        .call_arg(GetPadding(), "padding")
         .op_arg<bool>("ceil_mode");
     if (node()->optype == "nn.max_pool2d") {
       stack_.op_list_arg<int>("dilation");
     }
-    stack_.op_end();
   }
 };
 
@@ -415,7 +397,7 @@ class TorchPermuteDimsCodeGen : public TorchOpCode {
         axes.push_back(i - 1);
       }
     }
-    stack_.op_start().op_input_arg().call_list_arg(axes).op_end();
+    stack_.op_call().op_input_arg().call_arg(DocUtils::ToListDoc(axes));
   }
 };
 
@@ -426,13 +408,13 @@ class TorchReduceAxisCodeGen : public TorchOpCode {
 
  protected:
   void CodeGenForward() final {
-    stack_.op_start().op_input_arg();
+    stack_.op_call().op_input_arg();
     if (as_list_) {
       stack_.op_list_arg<int>("axis", "dim");
     } else {
       stack_.op_arg<int>("axis", "dim");
     }
-    stack_.op_arg<bool>("keepdims", "keepdim").op_end();
+    stack_.op_arg<bool>("keepdims", "keepdim");
   }
 
  private:
@@ -456,7 +438,7 @@ class TorchRepeatCodeGen : public TorchOpCode {
     }
     stack_.assign(IdxNode(), IdxInput())
         .inplace_start("repeat")
-        .call_list_arg(repeats, "", false, true)
+        .call_arg(DocUtils::ToListDoc(repeats), "")
         .inplace_end();
   }
 };
@@ -474,7 +456,7 @@ class TorchReshapeCodeGen : public TorchOpCode {
         shape[batch_dim] = -1;
       }
     }
-    stack_.op_start().op_input_arg().call_list_arg(shape).op_end();
+    stack_.op_call().op_input_arg().call_arg(DocUtils::ToListDoc(shape));
   }
 };
 
@@ -490,11 +472,8 @@ class TorchResize2dCodeGen : public TorchOpCode {
     } else {
       LOG(FATAL) << "Unexpected resize2d method " << method;
     }
-    stack_.op_start()
-        .op_input_arg()
-        .op_list_arg<int>("size")
-        .call_str_arg(v_method, "mode")
-        .op_end();
+    stack_.op_call().op_input_arg().op_list_arg<int>("size").call_arg(DocUtils::ToStrDoc(v_method),
+                                                                      "mode");
   }
 };
 
@@ -504,7 +483,7 @@ class TorchShapeCodeGen : public TorchOpCode {
  protected:
   void CodeGenForward() final {
     if (node()->inputs.size() == 0) {
-      stack_.op_start().op_list_arg<int>("shape", "").op_end();
+      stack_.op_call().op_list_arg<int>("shape", "");
     } else {
       stack_.assign(IdxNode(), IdxInput()).inplace_start("size").inplace_end();
     }
@@ -520,13 +499,14 @@ class TorchSplitCodeGen : public TorchOpCode {
 
  protected:
   void CodeGenForward() final {
-    stack_.op_start().op_input_arg();
+    stack_.op_call().op_input_arg();
     std::vector<int64_t> indices;
     int axis = node()->GetTypeAttr<int>("axis");
     for (size_t i = 0; i < node()->outputs.size(); i++) {
       indices.push_back(node()->OutputAt(i)->DimAt(axis)->value);
     }
-    stack_.call_list_arg(indices, "split_size_or_sections").op_arg<int>("axis", "dim").op_end();
+    stack_.call_arg(DocUtils::ToListDoc(indices), "split_size_or_sections")
+        .op_arg<int>("axis", "dim");
   }
 };
 
@@ -553,7 +533,7 @@ class TorchStridedSliceCodeGen : public TorchOpCode {
         slice.push_back(":");
       }
     }
-    stack_.assign_index(IdxNode(), IdxInput(), slice);
+    stack_.assign(IdxNode(), DocUtils::ToIndexDoc(IdxInput(), slice));
   }
 };
 
@@ -561,16 +541,14 @@ class TorchTriCodeGen : public TorchOpCode {
   TORCH_OP_CODEGEN_METHODS(TorchTriCodeGen)
 
  protected:
-  void CodeGenForward() final {
-    stack_.op_start().op_input_arg().op_arg<int>("k", "diagonal").op_end();
-  }
+  void CodeGenForward() final { stack_.op_call().op_input_arg().op_arg<int>("k", "diagonal"); }
 };
 
 class TorchTupleCodeGen : public TorchOpCode {
   TORCH_OP_CODEGEN_METHODS(TorchTupleCodeGen)
 
  protected:
-  void CodeGenForward() final { stack_.op_start().op_inputs_arg().op_end(); }
+  void CodeGenForward() final { stack_.op_call().op_inputs_arg(); }
 };
 
 const std::shared_ptr<std::unordered_map<String, std::shared_ptr<TorchOpCode>>> GetTorchOpCodes() {

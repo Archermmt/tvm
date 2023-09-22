@@ -32,20 +32,20 @@ def verify_model(torch_model, input_info):
     graph_model = fx.symbolic_trace(torch_model)
     with torch.no_grad():
         mod = from_fx(graph_model, input_info)
-    mod, graph_infos = translate.partition_for_tensorrt(mod)
+    mod, graph_infos = translate.partition_for_tensorrt(mod, allow_incomplete=False)
     print("[TMINFO] partitioned " + str(mod))
 
     build_folder = msc_utils.msc_dir("msc_test")
     output_folder = msc_utils.msc_dir("msc_output")
 
+    engine_files = {}
     for name, graph, weights in graph_infos:
         print("has graph({}):{}".format(name, graph))
-        engine = codegen.to_tensorrt(
+        engine_files[name] = codegen.to_tensorrt(
             graph, weights, build_folder=build_folder, output_folder=output_folder
         )
-        print("engine " + str(engine))
 
-    raise Exception("stop here!!")
+    print("engine_files " + str(engine_files))
     """
     mod = tvm.transform.Sequential(
         [
@@ -77,7 +77,7 @@ def test_conv1d():
 
     input_info = [([1, 3, 10], "float32")]
     verify_model(Conv1D1(), input_info)
-    # verify_model(Conv1D2(), input_info)
+    verify_model(Conv1D2(), input_info)
 
 
 def test_conv2d():
@@ -100,7 +100,7 @@ def test_conv2d():
             return self.conv(data)
 
     input_info = [([1, 3, 10, 10], "float32")]
-    # verify_model(Conv2D1(), input_info)
+    verify_model(Conv2D1(), input_info)
     verify_model(Conv2D2(), input_info)
 
 
@@ -129,8 +129,8 @@ def test_linear():
 
     input_info = [([1, 3, 10, 10], "float32")]
     verify_model(Dense1(), input_info)
-    verify_model(Dense2(), input_info)
-    verify_model(MatMul1(), [([10, 10], "float32"), ([10, 10], "float32")])
+    # verify_model(Dense2(), input_info)
+    # verify_model(MatMul1(), [([10, 10], "float32"), ([10, 10], "float32")])
 
 
 def test_bmm():

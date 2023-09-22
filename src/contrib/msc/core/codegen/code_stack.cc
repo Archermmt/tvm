@@ -46,15 +46,6 @@ void BaseStack::AssignBase(const String& lhs, const ExprDoc& rhs, const String& 
   }
 }
 
-void BaseStack::AssignIndexBase(const String& lhs, const String& rhs, const Array<ExprDoc>& indices,
-                                const String& annotation) {
-  Array<Doc> doc_indices;
-  for (const auto& i : indices) {
-    doc_indices.push_back(i);
-  }
-  AssignBase(lhs, IndexDoc(IdDoc(rhs), doc_indices), annotation);
-}
-
 void BaseStack::Declare(const String& type, const String& variable, size_t len,
                         bool use_constructor) {
   if (len == 0) {
@@ -71,20 +62,6 @@ void BaseStack::DeclareArgBase(const ExprDoc& value) {
   Array<ExprDoc> init_args = declare->init_args;
   init_args.push_back(value);
   PushDoc(DeclareDoc(declare->type, declare->variable, init_args, declare->use_constructor));
-}
-
-void BaseStack::AttrAccess(const String& attr) {
-  const auto& host = PopDoc();
-  if (host.as<AssignDoc>()) {
-    const auto& assign = Downcast<AssignDoc>(host);
-    ICHECK(assign->rhs.defined()) << "AttrAccess with assign missing rhs";
-    const auto& access = AttrAccessDoc(assign->rhs.value(), attr);
-    PushDoc(AssignDoc(assign->lhs, access, assign->annotation));
-  } else if (host.as<ExprDocNode>()) {
-    PushDoc(AttrAccessDoc(Downcast<ExprDoc>(host), attr));
-  } else {
-    LOG(FATAL) << "Unexpected attr access host " << host->GetTypeKey();
-  }
 }
 
 void BaseStack::FuncDef(const String& func_name, const String& ret_type) {
@@ -161,20 +138,100 @@ void BaseStack::ClassEnd() {
   PushDoc(ClassDoc(class_doc->name, class_doc->decorators, body));
 }
 
-void BaseStack::CallStart(const String& callee) {
-  PushDoc(CallDoc(IdDoc(callee), Array<ExprDoc>(), Array<String>(), Array<ExprDoc>()));
+void BaseStack::FuncCall(const String& callee, const String& assign_to, const String& caller) {
+  if (caller.size() == 0) {
+    const auto& call = CallDoc(IdDoc(callee), Array<ExprDoc>(), Array<String>(), Array<ExprDoc>());
+    PushDoc(call);
+  } else if (caller == "msc::last") {
+    const auto& access = AttrAccessDoc(PopCheckedDoc<ExprDoc, ExprDocNode>(), callee);
+    const auto& call = CallDoc(access, Array<ExprDoc>(), Array<String>(), Array<ExprDoc>());
+    PushDoc(call);
+  } else {
+    const auto& access = AttrAccessDoc(IdDoc(caller), callee);
+    const auto& call = CallDoc(access, Array<ExprDoc>(), Array<String>(), Array<ExprDoc>());
+    PushDoc(call);
+  }
+  if (assign_to.size() > 0) {
+    const auto& last_call = PopCheckedDoc<CallDoc, CallDocNode>();
+    PushDoc(AssignDoc(IdDoc(assign_to), last_call, NullOpt));
+  }
 }
 
-void BaseStack::CallEnd(const String& assign) {
-  if (assign.size() > 0) {
+void BaseStack::FuncCall(const String& callee, Optional<AssignDoc> assign_to,
+                         Optional<ExprDoc> caller) {
+  if (!caller.defined()) {
+    PushDoc(CallDoc(IdDoc(callee), Array<ExprDoc>(), Array<String>(), Array<ExprDoc>()));
+  } else if (caller.value()->IsInstance<AttrAccessDocNode>()) {
+    const auto& access = Downcast<AttrAccessDoc>(caller.value());
+    const auto& new_access = AttrAccessDoc(access->value, callee);
+    PushDoc(CallDoc(new_access, Array<ExprDoc>(), Array<String>(), Array<ExprDoc>()));
+  } else if (caller.value()->IsInstance<PtrAttrAccessDocNode>()) {
+    const auto& access = Downcast<PtrAttrAccessDoc>(caller.value());
+    const auto& new_access = PtrAttrAccessDoc(access->value, callee);
+    PushDoc(CallDoc(new_access, Array<ExprDoc>(), Array<String>(), Array<ExprDoc>()));
+  } else {
+    LOG(FATAL) << "Unexpected caller type " << caller.value()->GetTypeKey();
+  }
+  if (assign_to.defined()) {
     const auto& last_call = PopCheckedDoc<CallDoc, CallDocNode>();
-    PushDoc(AssignDoc(IdDoc(assign), last_call, NullOpt));
+    const auto& assign = Downcast<AssignDoc>(assign_to.value());
+    PushDoc(AssignDoc(assign->lhs, last_call, assign->annotation));
+  }
+}
+
+void BaseStack::NestEnd(const String& key) {
+  const auto& last = PopDoc();
+  if (last->IsInstance<CallDocNode>()) {
+    CallArgBase(Downcast<CallDoc>(last), key);
+  } else {
+    LOG(FATAL) << "Unexpected nest type " << last->GetTypeKey();
+  }
+}
+
+void BaseStack::CallArgBase(const ExprDoc& value, const String& key) {
+  const auto& last = PopDoc();
+  Array<ExprDoc> args;
+  Array<String> kwargs_keys;
+  Array<ExprDoc> kwargs_values;
+  // get args and kwargs
+  if (last->IsInstance<CallDocNode>()) {
+    const auto& call = Downcast<CallDoc>(last);
+    args = call->args;
+    kwargs_keys = call->kwargs_keys;
+    kwargs_values = call->kwargs_values;
+  } else if (last->IsInstance<AssignDocNode>()) {
+    const auto& call = Downcast<CallDoc>(Downcast<AssignDoc>(last)->rhs);
+    args = call->args;
+    kwargs_keys = call->kwargs_keys;
+    kwargs_values = call->kwargs_values;
+  } else {
+    LOG(FATAL) << "Unexpected last type for call arg " << last->GetTypeKey();
+  }
+  // push args or kwargs
+  if (key.size() == 0) {
+    ICHECK(kwargs_keys.size() == 0) << "kwargs followed by args " << value;
+    args.push_back(value);
+  } else {
+    kwargs_keys.push_back(key);
+    kwargs_values.push_back(value);
+  }
+  // push doc
+  if (last->IsInstance<CallDocNode>()) {
+    const auto& call = Downcast<CallDoc>(last);
+    PushDoc(CallDoc(call->callee, args, kwargs_keys, kwargs_values));
+  } else if (last->IsInstance<AssignDocNode>()) {
+    const auto& assign = Downcast<AssignDoc>(last);
+    const auto& call = Downcast<CallDoc>(assign->rhs);
+    const auto& new_call = CallDoc(call->callee, args, kwargs_keys, kwargs_values);
+    PushDoc(AssignDoc(assign->lhs, new_call, assign->annotation));
+  } else {
+    LOG(FATAL) << "Unexpected last type for call arg " << last->GetTypeKey();
   }
 }
 
 void BaseStack::InplaceStart(const String& callee) {
   const auto& host = PopDoc();
-  if (host.as<ExprDocNode>()) {
+  if (host->IsInstance<ExprDocNode>()) {
     const auto& call = AttrAccessDoc(Downcast<ExprDoc>(host), callee);
     PushDoc(CallDoc(call, Array<ExprDoc>(), Array<String>(), Array<ExprDoc>()));
   } else if (const auto* a_node = host.as<AssignDocNode>()) {
@@ -198,57 +255,6 @@ void BaseStack::InplaceEnd() {
   } else {
     PushDoc(call);
   }
-}
-
-void BaseStack::CallArgBase(const ExprDoc& value, const String& key) {
-  const auto& call = PopCheckedDoc<CallDoc, CallDocNode>();
-  if (key.size() == 0) {
-    ICHECK(call->kwargs_keys.size() == 0) << "kwargs followed by args " << value;
-    Array<ExprDoc> args = call->args;
-    args.push_back(value);
-    PushDoc(CallDoc(call->callee, args, call->kwargs_keys, call->kwargs_values));
-  } else {
-    Array<String> kwargs_keys = call->kwargs_keys;
-    Array<ExprDoc> kwargs_values = call->kwargs_values;
-    kwargs_keys.push_back(key);
-    kwargs_values.push_back(value);
-    PushDoc(CallDoc(call->callee, call->args, kwargs_keys, kwargs_values));
-  }
-}
-
-void BaseStack::CallIndexArgBase(const ExprDoc& value, const Array<ExprDoc>& indices,
-                                 const String& key) {
-  Array<Doc> doc_indices;
-  for (const auto& i : indices) {
-    doc_indices.push_back(i);
-  }
-  CallArgBase(IndexDoc(value, doc_indices), key);
-}
-
-void BaseStack::CallStrArg(const String& value, const String& key) {
-  if (value.size() > 0) {
-    CallArgBase(DocUtils::ToStrDoc(value), key);
-  }
-}
-
-void BaseStack::CallListArgBase(const Array<ExprDoc>& values, const String& key, bool allow_empty,
-                                bool as_list) {
-  if (values.size() > 0 || allow_empty) {
-    if (as_list) {
-      CallArgBase(ListDoc(values), key);
-    } else {
-      for (const auto& v : values) {
-        CallArgBase(v);
-      }
-    }
-  }
-}
-
-void BaseStack::CallInplaceStart(const String& callee) { CallStart(callee); }
-
-void BaseStack::CallInplaceEnd(const String& key) {
-  const auto& inplace = PopCheckedDoc<CallDoc, CallDocNode>();
-  CallArgBase(inplace, key);
 }
 
 void BaseStack::ConditionIf(const String& predicate) {

@@ -299,13 +299,8 @@ const Array<String> ExprUtils::GetInputTypes(const String& optype, size_t inputs
     input_types.push_back("gamma");
     input_types.push_back("beta");
   } else if (optype == "msc.linear") {
-    if (as_relax) {
-      input_types.push_back("weight");
-      input_types.push_back("input");
-    } else {
-      input_types.push_back("input");
-      input_types.push_back("weight");
-    }
+    input_types.push_back("input");
+    input_types.push_back("weight");
   } else if (optype == "msc.conv1d_bias" || optype == "msc.conv2d_bias") {
     input_types.push_back("input");
     input_types.push_back("weight");
@@ -314,13 +309,8 @@ const Array<String> ExprUtils::GetInputTypes(const String& optype, size_t inputs
       input_types.push_back("expand_bias");
     }
   } else if (optype == "msc.linear_bias") {
-    if (as_relax) {
-      input_types.push_back("weight");
-      input_types.push_back("input");
-    } else {
-      input_types.push_back("input");
-      input_types.push_back("weight");
-    }
+    input_types.push_back("input");
+    input_types.push_back("weight");
     input_types.push_back("bias");
   } else if (optype == "msc.embedding" && inputs_num == 2) {
     input_types.push_back("input");

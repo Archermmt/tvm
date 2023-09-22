@@ -28,6 +28,8 @@
 
 #include <vector>
 
+#include "msc_doc.h"
+
 namespace tvm {
 namespace contrib {
 namespace msc {
@@ -54,6 +56,7 @@ class DocUtils {
   TVM_DLL static const ExprDoc ToDoc(const char* val);
   TVM_DLL static const ExprDoc ToDoc(const String& val);
   TVM_DLL static const ExprDoc ToDoc(bool val);
+  TVM_DLL static const ExprDoc ToDoc(const ExprDoc& val);
   TVM_DLL static const ExprDoc ToStrDoc(const String& val);
 
   /*!
@@ -82,18 +85,19 @@ class DocUtils {
    * \return The ListDoc.
    */
   template <typename T>
-  TVM_DLL static const ListDoc ToListDoc(const std::vector<T>& values, bool allow_empty = false) {
+  TVM_DLL static const StrictListDoc ToListDoc(const std::vector<T>& values,
+                                               bool allow_empty = false) {
     if (values.size() > 0 || allow_empty) {
-      return ListDoc(ToDocList(values));
+      return StrictListDoc(ListDoc(ToDocList(values)), allow_empty);
     }
-    return ListDoc();
+    return StrictListDoc(ListDoc(), false);
   }
   template <typename T>
-  TVM_DLL static const ListDoc ToListDoc(const Array<T>& values, bool allow_empty = false) {
+  TVM_DLL static const StrictListDoc ToListDoc(const Array<T>& values, bool allow_empty = false) {
     if (values.size() > 0 || allow_empty) {
-      return ListDoc(ToDocList(values));
+      return StrictListDoc(ListDoc(ToDocList(values)), allow_empty);
     }
-    return ListDoc();
+    return StrictListDoc(ListDoc(), false);
   }
 
   /*!
@@ -117,6 +121,19 @@ class DocUtils {
     return IndexDoc(IdDoc(value), doc_indices);
   }
 
+  /*!
+   * \brief Change object to AssignDoc.
+   * \return The AssignDoc.
+   */
+  TVM_DLL static const AssignDoc ToAssignDoc(const String& lhs, const String& rhs, const String& annotation="");
+
+  /*!
+   * \brief Change object to AttrAccessDoc/PtrAttrAccessDoc.
+   * \return The AttrAccessDoc/PtrAttrAccessDoc.
+   */
+  TVM_DLL static const AttrAccessDoc ToAttrAccessDoc(const String& value, const String& name);
+  TVM_DLL static const PtrAttrAccessDoc ToPtrAttrAccessDoc(const String& value, const String& name);
+  
   /*!
    * \brief Convert the docs to Stmts.
    * \return The Stmts.

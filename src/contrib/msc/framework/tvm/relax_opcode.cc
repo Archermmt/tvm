@@ -47,19 +47,18 @@ const Array<Doc> RelaxOpCode::GetDocs() {
 }
 
 void RelaxOpCode::BuilderEmit(const String& ret, const String& name) {
-  stack_.call_start("block_builder.emit").call_arg(ret);
+  stack_.func_call("block_builder.emit", ret).call_arg(ret);
   if (name.size() > 0) {
-    stack_.call_str_arg(name, "name_hint");
+    stack_.call_arg(DocUtils::ToStrDoc(name), "name_hint");
   }
-  stack_.call_end(ret);
 }
 
-const std::string RelaxOpCode::GetOutDtype(const String& key) {
+const ExprDoc RelaxOpCode::GetOutDtype(const String& key) {
   std::string out_dtype;
   if (!node()->GetAttr(key, &out_dtype) && config()->from_relay) {
-    return node()->OutputAt(0)->DTypeName();
+    return DocUtils::ToStrDoc(node()->OutputAt(0)->DTypeName());
   }
-  return out_dtype;
+  return DocUtils::ToStrDoc(out_dtype);
 }
 
 const std::vector<int> RelaxOpCode::GetAxes(const String& key) {
@@ -80,12 +79,11 @@ class RelaxAdaptivePool2dCodeGen : public RelaxOpCode {
 
  protected:
   void CodeGenBuild() final {
-    stack_.op_start()
+    stack_.op_call()
         .op_input_arg()
         .op_list_arg<int>("output_size")
         .op_str_arg("layout")
-        .op_str_arg("out_layout")
-        .op_end();
+        .op_str_arg("out_layout");
   }
 };
 
@@ -93,7 +91,7 @@ class RelaxAstypeCodeGen : public RelaxOpCode {
   RELAX_OP_CODEGEN_METHODS(RelaxAstypeCodeGen)
 
  protected:
-  void CodeGenBuild() final { stack_.op_start().op_input_arg().op_str_arg("dtype").op_end(); }
+  void CodeGenBuild() final { stack_.op_call().op_input_arg().op_str_arg("dtype"); }
 };
 
 class RelaxAttentionCodeGen : public RelaxOpCode {
@@ -103,16 +101,11 @@ class RelaxAttentionCodeGen : public RelaxOpCode {
   void CodeGenBuild() final {
     for (size_t i = 0; i < 3; i++) {
       const String& axes_key = i == 0 ? "axes" : "axes_" + std::to_string(i);
-      stack_.op_start("relax.op.permute_dims")
+      stack_.op_call("relax.op.permute_dims", IdxInput(i))
           .op_input_arg(i)
-          .op_list_arg<int>(axes_key, "axes")
-          .op_end(IdxInput(i));
+          .op_list_arg<int>(axes_key, "axes");
     }
-    stack_.op_start()
-        .op_inputs_arg(false)
-        .op_arg<float>("scale")
-        .op_str_arg("causal_mask")
-        .op_end();
+    stack_.op_call().op_inputs_arg(false).op_arg<float>("scale").op_str_arg("causal_mask");
   }
 };
 
@@ -122,11 +115,10 @@ class RelaxAxisCodeGen : public RelaxOpCode {
  protected:
   void CodeGenBuild() final {
     std::vector<int> axes = GetAxes("axis");
-    stack_.op_start().op_input_arg();
+    stack_.op_call().op_input_arg();
     if (axes.size() > 0) {
       stack_.call_arg(axes[0], "axis");
     }
-    stack_.op_end();
   }
 };
 
@@ -136,7 +128,7 @@ class RelaxAxesCodeGen : public RelaxOpCode {
  protected:
   void CodeGenBuild() final {
     const String& key = node()->HasAttr("axes") ? "axes" : "axis";
-    stack_.op_start().op_input_arg().call_list_arg(GetAxes(key), key).op_end();
+    stack_.op_call().op_input_arg().call_arg(DocUtils::ToListDoc(GetAxes(key)), key);
   }
 };
 
@@ -148,7 +140,7 @@ class RelaxBatchMatmulCodeGen : public RelaxOpCode {
     bool transpose_a = node()->GetTypeAttr<bool>("transpose_a");
     bool transpose_b = node()->GetTypeAttr<bool>("transpose_b");
     if (!transpose_a && !transpose_b) {
-      stack_.op_start().op_inputs_arg(false).op_str_arg("out_dtype").op_end();
+      stack_.op_call().op_inputs_arg(false).op_str_arg("out_dtype");
     } else if (transpose_a && !transpose_b) {
       std::vector<size_t> axes;
       for (size_t i = 0; i < node()->InputAt(0)->Ndim() - 2; i++) {
@@ -156,12 +148,11 @@ class RelaxBatchMatmulCodeGen : public RelaxOpCode {
       }
       axes.push_back(node()->InputAt(0)->Ndim() - 1);
       axes.push_back(node()->InputAt(0)->Ndim() - 2);
-      stack_.op_start("relax.op.permute_dims")
+      stack_.op_call("relax.op.permute_dims", IdxInput(0))
           .op_input_arg()
-          .call_list_arg(axes)
-          .call_end(IdxInput(0));
+          .call_arg(DocUtils::ToListDoc(axes));
       BuilderEmit(IdxInput(0));
-      stack_.op_start().op_inputs_arg(false).op_str_arg("out_dtype").op_end();
+      stack_.op_call().op_inputs_arg(false).op_str_arg("out_dtype");
     } else if (!transpose_a && transpose_b) {
       std::vector<size_t> axes;
       for (size_t i = 0; i < node()->InputAt(1)->Ndim() - 2; i++) {
@@ -169,12 +160,11 @@ class RelaxBatchMatmulCodeGen : public RelaxOpCode {
       }
       axes.push_back(node()->InputAt(1)->Ndim() - 1);
       axes.push_back(node()->InputAt(1)->Ndim() - 2);
-      stack_.op_start("relax.op.permute_dims")
+      stack_.op_call("relax.op.permute_dims", IdxInput(1))
           .op_input_arg(1)
-          .call_list_arg(axes)
-          .call_end(IdxInput(1));
+          .call_arg(DocUtils::ToListDoc(axes));
       BuilderEmit(IdxInput(1));
-      stack_.op_start().op_inputs_arg(false).op_str_arg("out_dtype").op_end();
+      stack_.op_call().op_inputs_arg(false).op_str_arg("out_dtype");
     } else {
       for (size_t idx = 0; idx < 2; idx++) {
         std::vector<size_t> axes;
@@ -183,13 +173,12 @@ class RelaxBatchMatmulCodeGen : public RelaxOpCode {
         }
         axes.push_back(node()->InputAt(idx)->Ndim() - 1);
         axes.push_back(node()->InputAt(idx)->Ndim() - 2);
-        stack_.op_start("relax.op.permute_dims")
+        stack_.op_call("relax.op.permute_dims", IdxInput(idx))
             .op_input_arg(idx)
-            .call_list_arg(axes)
-            .call_end(IdxInput(idx));
+            .call_arg(DocUtils::ToListDoc(axes));
         BuilderEmit(IdxInput(idx));
       }
-      stack_.op_start().op_inputs_arg(false).op_str_arg("out_dtype").op_end();
+      stack_.op_call().op_inputs_arg(false).op_str_arg("out_dtype");
     }
   }
 };
@@ -199,7 +188,7 @@ class RelaxBatchNormCodeGen : public RelaxOpCode {
 
  protected:
   void CodeGenBuild() final {
-    stack_.op_start()
+    stack_.op_call()
         .op_input_arg()
         .op_weight_arg("gamma")
         .op_weight_arg("beta")
@@ -209,8 +198,7 @@ class RelaxBatchNormCodeGen : public RelaxOpCode {
         .op_arg<float>("epsilon")
         .op_arg<bool>("center")
         .op_arg<bool>("scale")
-        .op_arg<float>("momentum")
-        .op_end();
+        .op_arg<float>("momentum");
   }
 };
 
@@ -228,12 +216,11 @@ class RelaxBiasAddCodeGen : public RelaxOpCode {
         expand_shape.push_back(Integer(1));
       }
     }
-    stack_.op_start("relax.op.reshape")
+    stack_.op_call("relax.op.reshape", IdxInput(1))
         .op_input_arg(1)
-        .call_list_arg(expand_shape, "shape")
-        .call_end(IdxInput(1));
+        .call_arg(DocUtils::ToListDoc(expand_shape), "shape");
     BuilderEmit(IdxInput(1));
-    stack_.op_start().op_inputs_arg(false).op_end();
+    stack_.op_call().op_inputs_arg(false);
   }
 };
 
@@ -241,7 +228,7 @@ class RelaxBroadcastToCodeGen : public RelaxOpCode {
   RELAX_OP_CODEGEN_METHODS(RelaxBroadcastToCodeGen)
 
  protected:
-  void CodeGenBuild() final { stack_.op_start().op_input_arg().op_list_arg<int>("shape").op_end(); }
+  void CodeGenBuild() final { stack_.op_call().op_input_arg().op_list_arg<int>("shape"); }
 };
 
 class RelaxClipCodeGen : public RelaxOpCode {
@@ -249,13 +236,12 @@ class RelaxClipCodeGen : public RelaxOpCode {
 
  protected:
   void CodeGenBuild() final {
-    stack_.op_start().op_input_arg();
+    stack_.op_call().op_input_arg();
     if (config()->from_relay) {
       stack_.op_arg<float>("a_min", "min").op_arg<float>("a_max", "max");
     } else {
       stack_.op_arg<float>("min").op_arg<float>("max");
     }
-    stack_.op_end();
   }
 };
 
@@ -263,7 +249,7 @@ class RelaxConcatCodeGen : public RelaxOpCode {
   RELAX_OP_CODEGEN_METHODS(RelaxConcatCodeGen)
 
  protected:
-  void CodeGenBuild() final { stack_.op_start().op_inputs_arg().op_arg<int>("axis").op_end(); }
+  void CodeGenBuild() final { stack_.op_call().op_inputs_arg().op_arg<int>("axis"); }
 };
 
 class RelaxConstantCodeGen : public RelaxOpCode {
@@ -271,14 +257,12 @@ class RelaxConstantCodeGen : public RelaxOpCode {
 
  protected:
   void CodeGenBuild() final {
-    stack_.op_start()
-        .call_str_arg(node()->name)
-        .call_inplace_start("relax.TensorStructInfo")
-        .call_list_arg(node()->OutputAt(0)->shape, "", true)
-        .call_str_arg(node()->OutputAt(0)->DTypeName())
-        .call_inplace_end()
-        .call_end()
-        .op_end();
+    stack_.op_call()
+        .op_name_arg("")
+        .func_call("relax.TensorStructInfo")
+        .call_arg(DocUtils::ToListDoc(node()->OutputAt(0)->shape, true), "")
+        .call_arg(DocUtils::ToStrDoc(node()->OutputAt(0)->DTypeName()))
+        .nest_end();
   }
 };
 
@@ -289,7 +273,7 @@ class RelaxConvCodeGen : public RelaxOpCode {
 
  protected:
   void CodeGenBuild() final {
-    stack_.op_start()
+    stack_.op_call()
         .op_input_arg()
         .op_weight_arg("weight")
         .op_list_arg<int>("strides")
@@ -299,8 +283,7 @@ class RelaxConvCodeGen : public RelaxOpCode {
         .op_str_arg("data_layout")
         .op_str_arg("kernel_layout")
         .op_str_arg("out_layout")
-        .call_str_arg(GetOutDtype(), "out_dtype")
-        .op_end();
+        .call_arg(GetOutDtype(), "out_dtype");
     if (use_bias_) {
       std::string out_layout_str;
       if (!node()->GetAttr("out_layout", &out_layout_str)) {
@@ -317,15 +300,11 @@ class RelaxConvCodeGen : public RelaxOpCode {
         }
       }
       BuilderEmit(IdxNode());
-      stack_.call_start("relax.op.reshape")
+      stack_.func_call("relax.op.reshape", "expand_bias")
           .op_weight_arg("bias")
-          .call_list_arg(expand_shape, "shape")
-          .call_end("expand_bias");
+          .call_arg(DocUtils::ToListDoc(expand_shape), "shape");
       BuilderEmit("expand_bias");
-      stack_.call_start("relax.op.add")
-          .call_arg(IdxNode())
-          .call_arg("expand_bias")
-          .call_end(IdxNode());
+      stack_.func_call("relax.op.add", IdxNode()).call_arg(IdxNode()).call_arg("expand_bias");
     }
   }
 
@@ -337,16 +316,14 @@ class RelaxCreateCodeGen : public RelaxOpCode {
   RELAX_OP_CODEGEN_METHODS(RelaxCreateCodeGen)
 
  protected:
-  void CodeGenBuild() final {
-    stack_.op_start().op_list_arg<int>("shape").op_str_arg("dtype").op_end();
-  }
+  void CodeGenBuild() final { stack_.op_call().op_list_arg<int>("shape").op_str_arg("dtype"); }
 };
 
 class RelaxCreateLikeCodeGen : public RelaxOpCode {
   RELAX_OP_CODEGEN_METHODS(RelaxCreateLikeCodeGen)
 
  protected:
-  void CodeGenBuild() final { stack_.op_start().op_input_arg().op_str_arg("dtype").op_end(); }
+  void CodeGenBuild() final { stack_.op_call().op_input_arg().op_str_arg("dtype"); }
 };
 
 class RelaxCumsumCodeGen : public RelaxOpCode {
@@ -354,7 +331,7 @@ class RelaxCumsumCodeGen : public RelaxOpCode {
 
  protected:
   void CodeGenBuild() final {
-    stack_.op_start().op_input_arg().op_arg<int>("axis").op_str_arg("dtype").op_end();
+    stack_.op_call().op_input_arg().op_arg<int>("axis").op_str_arg("dtype");
   }
 };
 
@@ -365,13 +342,13 @@ class RelaxEinsumCodeGen : public RelaxOpCode {
   void CodeGenBuild() final {
     const String& key = config()->from_relay ? "equation" : "subscripts";
     const auto& producer = node()->ProducerOf(0);
-    stack_.op_start();
+    stack_.op_call();
     if (node()->inputs.size() == 1 && producer->optype == "tuple") {
       stack_.op_input_arg();
     } else {
       stack_.op_inputs_arg();
     }
-    stack_.op_str_arg(key, "subscripts").op_end();
+    stack_.op_str_arg(key, "subscripts");
   }
 };
 
@@ -386,13 +363,12 @@ class RelaxStridedSliceCodeGen : public RelaxOpCode {
         axes.push_back(i);
       }
     }
-    stack_.op_start()
+    stack_.op_call()
         .op_input_arg()
-        .call_list_arg(axes, "axes")
+        .call_arg(DocUtils::ToListDoc(axes), "axes")
         .op_list_arg<int>("begin")
         .op_list_arg<int>("end")
-        .op_list_arg<int>("strides")
-        .op_end();
+        .op_list_arg<int>("strides");
   }
 };
 
@@ -403,23 +379,23 @@ class RelaxEmbeddingCodeGen : public RelaxOpCode {
   void CodeGenBuild() final {
     const auto& input = node()->InputAt(0);
     if (input->DTypeName() != "int32") {
-      stack_.op_start("relax.op.astype").op_input_arg().call_str_arg("int32").op_end(IdxInput());
+      stack_.op_call("relax.op.astype", IdxInput())
+          .op_input_arg()
+          .call_arg(DocUtils::ToStrDoc("int32"));
       BuilderEmit(IdxInput());
     }
     if (input->Ndim() > 1) {
-      stack_.op_start("relax.op.reshape")
+      stack_.op_call("relax.op.reshape", IdxInput())
           .op_input_arg()
-          .call_list_arg(std::vector<int>{-1}, "shape")
-          .op_end(IdxInput());
+          .call_arg(DocUtils::ToListDoc(std::vector<int>{-1}), "shape");
       BuilderEmit(IdxInput());
     }
-    stack_.op_start().op_weight_arg("weight").op_input_arg().op_arg<int>("axis").op_end();
+    stack_.op_call().op_weight_arg("weight").op_input_arg().op_arg<int>("axis");
     if (input->Ndim() > 1) {
       BuilderEmit(IdxNode());
-      stack_.op_start("relax.op.reshape")
+      stack_.op_call("relax.op.reshape")
           .op_output_arg()
-          .call_list_arg(node()->OutputAt(0)->shape)
-          .op_end();
+          .call_arg(DocUtils::ToListDoc(node()->OutputAt(0)->shape));
     }
   }
 };
@@ -429,11 +405,7 @@ class RelaxFullCodeGen : public RelaxOpCode {
 
  protected:
   void CodeGenBuild() final {
-    stack_.op_start()
-        .op_list_arg<int>("shape")
-        .op_input_arg(0, "fill_value")
-        .op_str_arg("dtype")
-        .op_end();
+    stack_.op_call().op_list_arg<int>("shape").op_input_arg(0, "fill_value").op_str_arg("dtype");
   }
 };
 
@@ -443,7 +415,7 @@ class RelaxGetItemCodeGen : public RelaxOpCode {
  protected:
   void CodeGenBuild() final {
     const auto& producer = node()->ProducerOf(0);
-    stack_.op_start().call_arg(IdxNodeBase(producer)).op_arg<int>("index").call_end(IdxNode());
+    stack_.op_call("msc::auto", IdxNode()).call_arg(IdxNodeBase(producer)).op_arg<int>("index");
   }
 };
 
@@ -452,18 +424,18 @@ class RelaxGroupNormCodeGen : public RelaxOpCode {
 
  protected:
   void CodeGenBuild() final {
-    stack_.op_start().op_input_arg().op_weight_arg("gamma").op_weight_arg("beta").op_arg<int>(
+    stack_.op_call().op_input_arg().op_weight_arg("gamma").op_weight_arg("beta").op_arg<int>(
         "num_groups");
     if (config()->from_relay) {
       std::vector<size_t> axes;
       for (size_t i = 2; i < node()->InputAt(0)->Ndim(); i++) {
         axes.push_back(i);
       }
-      stack_.op_arg<int>("axis", "channel_axis").call_list_arg(axes, "axes");
+      stack_.op_arg<int>("axis", "channel_axis").call_arg(DocUtils::ToListDoc(axes), "axes");
     } else {
       stack_.op_arg<int>("channel_axis").op_list_arg<int>("axes");
     }
-    stack_.op_arg<float>("epsilon").op_arg<bool>("center").op_arg<bool>("scale").op_end();
+    stack_.op_arg<float>("epsilon").op_arg<bool>("center").op_arg<bool>("scale");
   }
 };
 
@@ -472,13 +444,13 @@ class RelaxLayerNormCodeGen : public RelaxOpCode {
 
  protected:
   void CodeGenBuild() final {
-    stack_.op_start().op_input_arg().op_weight_arg("gamma").op_weight_arg("beta");
+    stack_.op_call().op_input_arg().op_weight_arg("gamma").op_weight_arg("beta");
     if (config()->from_relay) {
       stack_.op_arg<int>("axis", "axes");
     } else {
       stack_.op_list_arg<int>("axes");
     }
-    stack_.op_arg<float>("epsilon").op_arg<bool>("center").op_arg<bool>("scale").op_end();
+    stack_.op_arg<float>("epsilon").op_arg<bool>("center").op_arg<bool>("scale");
   }
 };
 
@@ -487,13 +459,13 @@ class RelaxLinearCodeGen : public RelaxOpCode {
 
  protected:
   void CodeGenBuild() final {
-    stack_.op_start();
+    stack_.op_call();
     if (node()->inputs.size() == 1) {
       stack_.op_input_arg().op_weight_arg("weight").op_weight_arg("bias");
     } else {
       stack_.op_inputs_arg(false);
     }
-    stack_.call_str_arg(GetOutDtype(), "out_dtype").op_end();
+    stack_.call_arg(GetOutDtype(), "out_dtype");
   }
 };
 
@@ -502,7 +474,7 @@ class RelaxMatmulCodeGen : public RelaxOpCode {
 
  protected:
   void CodeGenBuild() final {
-    stack_.op_start().op_inputs_arg(false).call_str_arg(GetOutDtype(), "out_dtype").op_end();
+    stack_.op_call().op_inputs_arg(false).call_arg(GetOutDtype(), "out_dtype");
   }
 };
 
@@ -511,11 +483,7 @@ class RelaxNllLossCodeGen : public RelaxOpCode {
 
  protected:
   void CodeGenBuild() final {
-    stack_.op_start()
-        .op_inputs_arg(false)
-        .op_str_arg("reduction")
-        .op_arg<int>("ignore_index")
-        .op_end();
+    stack_.op_call().op_inputs_arg(false).op_str_arg("reduction").op_arg<int>("ignore_index");
   }
 };
 
@@ -532,12 +500,11 @@ class RelaxPadCodeGen : public RelaxOpCode {
                               std::to_string(attr_pad_width[i + 1]) + "]";
       pad_width.push_back(cur_pad);
     }
-    stack_.op_start()
+    stack_.op_call()
         .op_input_arg()
         .op_list_arg<int>("pad_width")
         .op_input_arg(1, "pad_value")
-        .op_str_arg("pad_mode")
-        .op_end();
+        .op_str_arg("pad_mode");
   }
 };
 
@@ -546,7 +513,7 @@ class RelaxPool2dCodeGen : public RelaxOpCode {
 
  protected:
   void CodeGenBuild() final {
-    stack_.op_start()
+    stack_.op_call()
         .op_input_arg()
         .op_list_arg<int>("pool_size")
         .op_list_arg<int>("strides")
@@ -554,8 +521,7 @@ class RelaxPool2dCodeGen : public RelaxOpCode {
         .op_list_arg<int>("dilation")
         .op_arg<bool>("ceil_mode")
         .op_str_arg("layout")
-        .op_str_arg("out_layout")
-        .op_end();
+        .op_str_arg("out_layout");
   }
 };
 
@@ -570,7 +536,7 @@ class RelaxPermuteDimsCodeGen : public RelaxOpCode {
         axes.push_back(i - 1);
       }
     }
-    stack_.op_start().op_input_arg().call_list_arg(axes, "axes").op_end();
+    stack_.op_call().op_input_arg().call_arg(DocUtils::ToListDoc(axes), "axes");
   }
 };
 
@@ -581,14 +547,14 @@ class RelaxReduceAxisCodeGen : public RelaxOpCode {
 
  protected:
   void CodeGenBuild() final {
-    stack_.op_start().op_input_arg();
+    stack_.op_call().op_input_arg();
     std::vector<int> axes = GetAxes("axis");
     if (as_list_) {
-      stack_.call_list_arg(axes, "axis");
+      stack_.call_arg(DocUtils::ToListDoc(axes), "axis");
     } else if (axes.size() > 0) {
       stack_.call_arg(axes[0], "axis");
     }
-    stack_.op_arg<bool>("keepdims").op_end();
+    stack_.op_arg<bool>("keepdims");
   }
 
  private:
@@ -600,7 +566,7 @@ class RelaxRepeatCodeGen : public RelaxOpCode {
 
  protected:
   void CodeGenBuild() final {
-    stack_.op_start().op_input_arg().op_arg<int>("repeats").op_arg<int>("axis").op_end();
+    stack_.op_call().op_input_arg().op_arg<int>("repeats").op_arg<int>("axis");
   }
 };
 
@@ -609,13 +575,12 @@ class RelaxReshapeCodeGen : public RelaxOpCode {
 
  protected:
   void CodeGenBuild() final {
-    stack_.op_start().op_input_arg();
+    stack_.op_call().op_input_arg();
     if (config()->from_relay) {
       stack_.op_list_arg<int>("newshape", "shape");
     } else {
       stack_.op_list_arg<int>("shape");
     }
-    stack_.op_end();
   }
 };
 
@@ -630,12 +595,12 @@ class RelaxResize2dCodeGen : public RelaxOpCode {
     for (const auto& r : roi) {
       roi_list.push_back("float(" + std::to_string(r) + ")");
     }
-    stack_.op_start()
+    stack_.op_call()
         .op_input_arg()
-        .call_inplace_start("relax.ShapeExpr")
+        .func_call("relax.ShapeExpr")
         .op_list_arg<int>("size", "values")
-        .call_inplace_end()
-        .call_list_arg(roi_list)
+        .nest_end()
+        .call_arg(DocUtils::ToListDoc(roi_list))
         .op_str_arg("layout")
         .op_str_arg("method")
         .op_str_arg("coordinate_transformation_mode")
@@ -643,8 +608,7 @@ class RelaxResize2dCodeGen : public RelaxOpCode {
         .op_arg<float>("cubic_alpha")
         .op_arg<int>("cubic_exclude")
         .op_arg<float>("extrapolation_value")
-        .op_str_arg("out_dtype")
-        .op_end();
+        .op_str_arg("out_dtype");
   }
 };
 
@@ -652,14 +616,14 @@ class RelaxShapeCodeGen : public RelaxOpCode {
   RELAX_OP_CODEGEN_METHODS(RelaxShapeCodeGen)
 
  protected:
-  void CodeGenBuild() final { stack_.op_start().op_list_arg<int>("shape", "values").op_end(); }
+  void CodeGenBuild() final { stack_.op_call().op_list_arg<int>("shape", "values"); }
 };
 
 class RelaxSimpleCodeGen : public RelaxOpCode {
   RELAX_OP_CODEGEN_METHODS(RelaxSimpleCodeGen)
 
  protected:
-  void CodeGenBuild() final { stack_.op_start().op_inputs_arg(false).op_end(); }
+  void CodeGenBuild() final { stack_.op_call().op_inputs_arg(false); }
 };
 
 class RelaxSplitCodeGen : public RelaxOpCode {
@@ -667,14 +631,14 @@ class RelaxSplitCodeGen : public RelaxOpCode {
 
  protected:
   void CodeGenBuild() final {
-    stack_.op_start().op_input_arg();
+    stack_.op_call().op_input_arg();
     int sections;
     if (node()->GetAttr("indices_or_sections", &sections)) {
       stack_.op_arg<int>("indices_or_sections");
     } else {
       stack_.op_list_arg<int>("indices_or_sections");
     }
-    stack_.op_arg<int>("axis").op_end();
+    stack_.op_arg<int>("axis");
   }
 };
 
@@ -682,7 +646,7 @@ class RelaxTakeCodeGen : public RelaxOpCode {
   RELAX_OP_CODEGEN_METHODS(RelaxTakeCodeGen)
 
  protected:
-  void CodeGenBuild() final { stack_.op_start().op_inputs_arg(false).op_arg<int>("axis").op_end(); }
+  void CodeGenBuild() final { stack_.op_call().op_inputs_arg(false).op_arg<int>("axis"); }
 };
 
 class RelaxTileCodeGen : public RelaxOpCode {
@@ -691,7 +655,7 @@ class RelaxTileCodeGen : public RelaxOpCode {
  protected:
   void CodeGenBuild() final {
     const String& key = config()->from_relay ? "reps" : "repeats";
-    stack_.op_start().op_input_arg().op_list_arg<int>(key, "repeats").op_end();
+    stack_.op_call().op_input_arg().op_list_arg<int>(key, "repeats");
   }
 };
 
@@ -699,7 +663,7 @@ class RelaxTupleCodeGen : public RelaxOpCode {
   RELAX_OP_CODEGEN_METHODS(RelaxTupleCodeGen)
 
  protected:
-  void CodeGenBuild() final { stack_.op_start().op_inputs_arg().op_end(); }
+  void CodeGenBuild() final { stack_.op_call().op_inputs_arg(); }
 };
 
 class RelaxTriCodeGen : public RelaxOpCode {
@@ -710,9 +674,9 @@ class RelaxTriCodeGen : public RelaxOpCode {
     if (node()->optype == "trilu") {
       const String& func_name =
           node()->GetTypeAttr<bool>("upper") ? "relax.op.triu" : "relax.op.tril";
-      stack_.op_start(func_name).op_input_arg().op_arg<int>("k").op_end();
+      stack_.op_call(func_name).op_input_arg().op_arg<int>("k");
     } else {
-      stack_.op_start().op_input_arg().op_arg<int>("k").op_end();
+      stack_.op_call().op_input_arg().op_arg<int>("k");
     }
   }
 };

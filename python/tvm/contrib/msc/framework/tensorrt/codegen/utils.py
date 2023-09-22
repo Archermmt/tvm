@@ -16,6 +16,7 @@
 # under the License.
 """tvm.contrib.msc.framework.tensorrt.codegen.utils"""
 
+import io
 import struct
 import numpy as np
 
@@ -77,3 +78,21 @@ def array_to_hex(array: np.ndarray) -> str:
     """
 
     return " ".join([float_to_hex(float(f))[2:] for f in array.flatten()])
+
+
+def write_weight(name: str, weight: np.ndarray, f_handler: io.TextIOWrapper):
+    """Write array to file in TensorRT format.
+
+    Parameters
+    ----------
+    name: str
+        The array name
+    weight: np.ndarray
+        The weight data.
+    f_handler: io.TextIOWrapper
+        The file handler
+    """
+
+    f_handler.write(
+        "{} {} {} {}\n".format(name, enum_dtype(weight), weight.size, array_to_hex(weight))
+    )

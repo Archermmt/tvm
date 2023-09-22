@@ -22,7 +22,6 @@
  */
 
 #include "graph_builder.h"
-
 namespace tvm {
 namespace contrib {
 namespace msc {
@@ -260,6 +259,15 @@ const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>
           MSCTensor weight;
           if (input_types[i] == "bias") {
             weight = MSCTensor(weight_name, ref->dtype, "O", Array<Integer>{ref->GetSize()});
+          } else if (input_types[i] == "weight" &&
+                     (optype == "msc.linear" || optype == "msc.linear_bias")) {
+            if (ref->layout.name() == "IO") {
+              String valid_layout = ref->layout[1].name() + ref->layout[0].name();
+              const auto& valid_shape = Array<Integer>({ref->shape[1], ref->shape[0]});
+              weight = MSCTensor(weight_name, ref->dtype, valid_layout, valid_shape);
+            } else {
+              weight = MSCTensor(weight_name, ref->dtype, ref->layout.name(), ref->shape);
+            }
           } else {
             weight = MSCTensor(weight_name, ref->dtype, ref->layout.name(), ref->shape);
           }

@@ -50,7 +50,25 @@ const ExprDoc DocUtils::ToDoc(const String& val) { return IdDoc(val); }
 
 const ExprDoc DocUtils::ToDoc(bool val) { return LiteralDoc::Boolean(val, NullOpt); }
 
+const ExprDoc DocUtils::ToDoc(const ExprDoc& val) { return val; }
+
 const ExprDoc DocUtils::ToStrDoc(const String& val) { return LiteralDoc::Str(val, NullOpt); }
+
+const AssignDoc DocUtils::ToAssignDoc(const String& lhs, const String& rhs,
+                                      const String& annotation) {
+  if (annotation.size() == 0) {
+    return AssignDoc(IdDoc(lhs), IdDoc(rhs), NullOpt);
+  }
+  return AssignDoc(IdDoc(lhs), IdDoc(rhs), IdDoc(annotation));
+}
+
+const AttrAccessDoc DocUtils::ToAttrAccessDoc(const String& value, const String& name) {
+  return AttrAccessDoc(IdDoc(value), name);
+}
+
+const PtrAttrAccessDoc DocUtils::ToPtrAttrAccessDoc(const String& value, const String& name) {
+  return PtrAttrAccessDoc(IdDoc(value), name);
+}
 
 const Array<StmtDoc> DocUtils::ToStmts(const Array<Doc>& docs) {
   Array<StmtDoc> stmts;

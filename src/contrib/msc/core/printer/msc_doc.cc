@@ -40,6 +40,20 @@ DeclareDoc::DeclareDoc(ExprDoc type, ExprDoc variable, Array<ExprDoc> init_args,
   this->data_ = std::move(n);
 }
 
+StrictListDoc::StrictListDoc(ListDoc list, bool allow_empty) {
+  ObjectPtr<StrictListDocNode> n = make_object<StrictListDocNode>();
+  n->list = list;
+  n->allow_empty = allow_empty;
+  this->data_ = std::move(n);
+}
+
+PtrAttrAccessDoc::PtrAttrAccessDoc(ExprDoc value, String name) {
+  ObjectPtr<PtrAttrAccessDocNode> n = make_object<PtrAttrAccessDocNode>();
+  n->value = value;
+  n->name = name;
+  this->data_ = std::move(n);
+}
+
 }  // namespace msc
 }  // namespace contrib
 }  // namespace tvm

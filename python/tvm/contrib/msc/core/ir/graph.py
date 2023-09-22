@@ -210,6 +210,22 @@ class MSCJoint(BaseJoint):
 
         return _ffi_api.MSCJointOutputAt(self, idx)
 
+    def weight_at(self, wtype: str) -> MSCTensor:
+        """Get weight from reference.
+
+        Parameters
+        ----------
+        wtype: str
+            The type of weight.
+
+        Returns
+        -------
+        weight: MSCTensor
+            The weight Tensor.
+        """
+
+        return _ffi_api.MSCJointWeightAt(self, wtype)
+
     def get_inputs(self) -> List[MSCTensor]:
         """Get all the inputs.
 
@@ -242,7 +258,7 @@ class MSCJoint(BaseJoint):
         """
 
         src_weights = _ffi_api.MSCJointGetWeights(self)
-        return {ref: src_weights[ref] for ref in src_weights}
+        return {wtype: src_weights[wtype] for wtype in src_weights}
 
     def get_attrs(self) -> Dict[str, str]:
         """Get all the attributes from node

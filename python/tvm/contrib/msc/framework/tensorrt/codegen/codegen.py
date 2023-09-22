@@ -16,12 +16,15 @@
 # under the License.
 """tvm.contrib.msc.framework.tensorrt.codegen.codegen"""
 
+import os
+import subprocess
 from typing import Dict, Optional
 
 import tvm
 from tvm.contrib.msc.core.ir import MSCGraph
 from tvm.contrib.msc.core.codegen import CodeGen
 from tvm.contrib.msc.core import utils as msc_utils
+from tvm.contrib.msc.core.utils import MSCFramework
 from tvm.contrib.msc.framework.tensorrt import _ffi_api
 from .sources import get_trt_sources
 from .utils import *
@@ -58,24 +61,33 @@ def to_tensorrt(
         The engine file.
     """
 
+    codegen_config = codegen_config or {}
+    codegen_config["version"] = msc_utils.get_version(MSCFramework.TENSORRT)
     build_folder = build_folder or msc_utils.msc_dir(keep_history=False, cleanup=True)
+    output_folder = output_folder or msc_utils.msc_dir("msc_output")
 
-    def _bind_weights(model: str, folder: msc_utils.MSCDirectory) -> str:
+    def _create_depends(folder: msc_utils.MSCDirectory) -> str:
         if weights:
             with open(folder.relpath(graph.name + ".wts"), "w") as f:
                 for name, data in weights.items():
-                    array = data.asnumpy()
-                    f.write(
-                        "{} {} {} {}\n".format(
-                            name, enum_dtype(array), array.size, array_to_hex(array)
-                        )
-                    )
+                    write_weight(name, data.asnumpy(), f)
+                # create fake bias
+                for node in graph.get_nodes():
+                    if node.optype == "nn.conv2d":
+                        weight = node.weight_at("weight")
+                        bias = np.zeros([weight.dim_at("O")], dtype=weight.dtype_name)
+                        write_weight(name, bias, f)
             with folder.create_dir("utils") as utils_folder:
                 for name, source in get_trt_sources().items():
-                    with open(utils_folder.relpath(name), "w") as f:
-                        f.write(source)
-            raise Exception("stop here!!")
-        return model
+                    utils_folder.add_file(name, source)
+
+    def _build_engine(engine_name: str, folder: msc_utils.MSCDirectory) -> str:
+        process = subprocess.Popen("./" + engine_name, shell=True)
+        process.wait()
+        assert process.returncode == 0, "Failed to build {} under {}".format(
+            engine_name, os.getcwd()
+        )
+        return folder.move_file(engine_name + ".trt", output_folder.create_dir(graph.name))
 
     codegen = CodeGen(
         graph,
@@ -83,7 +95,6 @@ def to_tensorrt(
         codegen_config,
         print_config,
         build_folder.create_dir(graph.name),
-        output_folder,
         code_format="cpp",
     )
-    return codegen.load([], _bind_weights)
+    return codegen.load([], pre_load=_create_depends, post_load=_build_engine)
