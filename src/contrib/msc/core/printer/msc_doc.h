@@ -42,7 +42,7 @@ using namespace tvm::script::printer;
 class DeclareDocNode : public ExprDocNode {
  public:
   /*! \brief The type of the variable */
-  ExprDoc type{nullptr};
+  Optional<ExprDoc> type;
   /*! \brief The variable */
   ExprDoc variable{nullptr};
   /*! \brief The init arguments for the variable. */
@@ -76,7 +76,7 @@ class DeclareDoc : public ExprDoc {
    * \param init_args The init arguments of the variable.
    * \param use_constructor Whether to use constructor(otherwise initializer).
    */
-  explicit DeclareDoc(ExprDoc type, ExprDoc variable, Array<ExprDoc> init_args,
+  explicit DeclareDoc(Optional<ExprDoc> type, ExprDoc variable, Array<ExprDoc> init_args,
                       bool use_constructor);
   TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(DeclareDoc, ExprDoc, DeclareDocNode);
 };
@@ -120,41 +120,37 @@ class StrictListDoc : public ExprDoc {
 };
 
 /*!
- * \brief Doc that represents attribute access on another expression, visit via pointer.
+ * \brief Doc that represents pointer.
  *
- * \sa PtrAttrAccessDoc
+ * \sa PointerDoc
  */
-class PtrAttrAccessDocNode : public ExprDocNode {
+class PointerDocNode : public ExprDocNode {
  public:
-  /*! \brief The target expression to be accessed */
-  ExprDoc value{nullptr};
-  /*! \brief The attribute to be accessed */
+  /*! \brief The name of the identifier */
   String name;
 
   void VisitAttrs(AttrVisitor* v) {
     ExprDocNode::VisitAttrs(v);
-    v->Visit("value", &value);
     v->Visit("name", &name);
   }
 
-  static constexpr const char* _type_key = "script.printer.PtrAttrAccessDoc";
-  TVM_DECLARE_FINAL_OBJECT_INFO(PtrAttrAccessDocNode, ExprDocNode);
+  static constexpr const char* _type_key = "script.printer.PointerDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(PointerDocNode, ExprDocNode);
 };
 
 /*!
- * \brief Reference type of PtrAttrAccessDocNode.
+ * \brief Reference type of PointerDocNode.
  *
- * \sa PtrAttrAccessDocNode
+ * \sa PointerDocNode
  */
-class PtrAttrAccessDoc : public ExprDoc {
+class PointerDoc : public ExprDoc {
  public:
   /*!
-   * \brief Constructor of PtrAttrAccessDoc
-   * \param value The target expression of attribute access.
-   * \param name The name of attribute to access.
+   * \brief Constructor of PointerDoc.
+   * \param name The name of identifier.
    */
-  explicit PtrAttrAccessDoc(ExprDoc value, String name);
-  TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(PtrAttrAccessDoc, ExprDoc, PtrAttrAccessDocNode);
+  explicit PointerDoc(String name);
+  TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(PointerDoc, ExprDoc, PointerDocNode);
 };
 
 }  // namespace msc

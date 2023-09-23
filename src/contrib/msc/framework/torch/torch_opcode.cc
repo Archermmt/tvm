@@ -93,10 +93,7 @@ class TorchAstypeCodeGen : public TorchOpCode {
 
  protected:
   void CodeGenForward() final {
-    stack_.assign(IdxNode(), IdxInput())
-        .inplace_start("to")
-        .op_dtype_arg(node()->OutputAt(0)->dtype)
-        .inplace_end();
+    stack_.assign(IdxNode(), IdxInput()).method_call("to").op_dtype_arg(node()->OutputAt(0)->dtype);
   }
 };
 
@@ -176,10 +173,7 @@ class TorchBroadcastToCodeGen : public TorchOpCode {
 
  protected:
   void CodeGenForward() final {
-    stack_.assign(IdxNode(), IdxInput())
-        .inplace_start("expand")
-        .op_list_arg<int>("shape", "")
-        .inplace_end();
+    stack_.assign(IdxNode(), IdxInput()).method_call("expand").op_list_arg<int>("shape", "");
   }
 };
 
@@ -437,9 +431,8 @@ class TorchRepeatCodeGen : public TorchOpCode {
       }
     }
     stack_.assign(IdxNode(), IdxInput())
-        .inplace_start("repeat")
-        .call_arg(DocUtils::ToListDoc(repeats), "")
-        .inplace_end();
+        .method_call("repeat")
+        .call_arg(DocUtils::ToListDoc(repeats), "");
   }
 };
 
@@ -485,7 +478,7 @@ class TorchShapeCodeGen : public TorchOpCode {
     if (node()->inputs.size() == 0) {
       stack_.op_call().op_list_arg<int>("shape", "");
     } else {
-      stack_.assign(IdxNode(), IdxInput()).inplace_start("size").inplace_end();
+      stack_.assign(IdxNode(), IdxInput()).method_call("size");
     }
   }
 };

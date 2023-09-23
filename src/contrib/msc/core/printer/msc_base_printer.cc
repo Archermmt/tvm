@@ -80,7 +80,7 @@ void MSCBasePrinter::PrintDoc(const Doc& doc, bool new_line) {
     PrintTypedDoc(doc_node.value());
   } else if (auto doc_node = doc.as<StrictListDoc>()) {
     PrintTypedDoc(doc_node.value());
-  } else if (auto doc_node = doc.as<PtrAttrAccessDoc>()) {
+  } else if (auto doc_node = doc.as<PointerDoc>()) {
     PrintTypedDoc(doc_node.value());
   } else {
     LOG(FATAL) << "Do not know how to print " << doc->GetTypeKey();

@@ -178,9 +178,9 @@ class MSCBasePrinter {
     LOG(FATAL) << "StrictList is not implemented";
   }
 
-  /*! \brief Virtual method to print a PtrAttrAccessDoc*/
-  virtual void PrintTypedDoc(const PtrAttrAccessDoc& doc) {
-    LOG(FATAL) << "PtrAttrAccess is not implemented";
+  /*! \brief Virtual method to print a PointerDoc*/
+  virtual void PrintTypedDoc(const PointerDoc& doc) {
+    LOG(FATAL) << "PointerDoc is not implemented";
   }
 
   /*! \brief Print docs to joined doc */

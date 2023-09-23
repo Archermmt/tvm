@@ -35,10 +35,6 @@ const Array<Doc> TensorRTOpCode::GetDocs() {
   return stack_.GetDocs();
 }
 
-const PtrAttrAccessDoc TensorRTOpCode::GetPtrCaller(const String& caller) {
-  return DocUtils::ToPtrAttrAccessDoc(caller, "");
-}
-
 const String TensorRTOpCode::DType(const DataType& dtype) {
   const String& dtype_name = BaseOpCode<TensorRTCodeGenConfig>::DType(dtype);
   String dtype_enum;
@@ -82,30 +78,30 @@ const String TensorRTOpCode::AttrToDims(const String& key, bool use_ndim) {
 
 template <typename T>
 void TensorRTOpCode::SetLayerByAttr(const String& method, const String& key) {
-  stack_.func_call("set" + method, NullOpt, GetPtrCaller(IdxNode())).op_arg<T>(key);
+  stack_.func_call("set" + method, NullOpt, DocUtils::ToPtrDoc(IdxNode())).op_arg<T>(key);
 }
 
 template <typename T>
 void TensorRTOpCode::SetLayerByValue(const String& method, const T& value) {
-  stack_.func_call("set" + method, NullOpt, GetPtrCaller(IdxNode())).call_arg(value);
+  stack_.func_call("set" + method, NullOpt, DocUtils::ToPtrDoc(IdxNode())).call_arg(value);
 }
 
 template <typename T>
 void TensorRTOpCode::SetLayerByDimsAttr(const String& method, const String& key, bool use_ndim) {
-  stack_.func_call("set" + method, NullOpt, GetPtrCaller(IdxNode()))
+  stack_.func_call("set" + method, NullOpt, DocUtils::ToPtrDoc(IdxNode()))
       .call_arg(AttrToDims(key, use_ndim));
 }
 
 template <typename T>
 void TensorRTOpCode::SetLayerByDimsValue(const String& method, const std::vector<T>& value,
                                          bool use_ndim) {
-  stack_.func_call("set" + method, NullOpt, GetPtrCaller(IdxNode()))
+  stack_.func_call("set" + method, NullOpt, DocUtils::ToPtrDoc(IdxNode()))
       .call_arg(ToDims(value, use_ndim));
 }
 
 void TensorRTOpCode::SetLayerByDimsValue(const String& method, const Array<Integer>& value,
                                          bool use_ndim) {
-  stack_.func_call("set" + method, NullOpt, GetPtrCaller(IdxNode()))
+  stack_.func_call("set" + method, NullOpt, DocUtils::ToPtrDoc(IdxNode()))
       .call_arg(ToDims(value, use_ndim));
 }
 

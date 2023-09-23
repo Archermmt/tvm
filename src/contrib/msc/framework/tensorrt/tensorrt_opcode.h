@@ -90,9 +90,6 @@ class TensorRTOpCode : public BaseOpCode<TensorRTCodeGenConfig> {
   /*! \brief Convert op build*/
   virtual void CodeGenBuild() = 0;
 
-  /*! \brief Generate caller for func call*/
-  const PtrAttrAccessDoc GetPtrCaller(const String& caller);
-
   /*! \brief Get the tensorrt dims from dims*/
   template <typename T>
   const String ToDims(const std::vector<T>& dims, bool use_ndim = true);

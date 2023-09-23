@@ -89,8 +89,8 @@ class CppPrinter : public MSCBasePrinter {
   /*! \brief Virtual method to print a DeclareDoc*/
   void PrintTypedDoc(const DeclareDoc& doc) final;
 
-  /*! \brief Virtual method to print a PtrAttrAccessDoc*/
-  void PrintTypedDoc(const PtrAttrAccessDoc& doc) final;
+  /*! \brief Virtual method to print a PointerDoc*/
+  void PrintTypedDoc(const PointerDoc& doc) final;
 
  private:
   /*! \brief endline scopes*/

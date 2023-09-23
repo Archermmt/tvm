@@ -32,14 +32,7 @@ def verify_model(torch_model, input_info, opt_config=None):
     with torch.no_grad():
         expected = from_fx(graph_model, input_info)
     graph, weights = translate.from_relax(expected, opt_config=opt_config)
-    # print("graph " + str(graph))
-    # from tvm.contrib.msc.core import utils as msc_utils
-
-    # build_folder = msc_utils.msc_dir("msc_test")
-    build_folder = None
-    mod = tvm_codegen.to_relax(
-        graph, weights, codegen_config={"explicit_name": False}, build_folder=build_folder
-    )
+    mod = tvm_codegen.to_relax(graph, weights, codegen_config={"explicit_name": False})
     tvm.ir.assert_structural_equal(mod, expected)
 
 

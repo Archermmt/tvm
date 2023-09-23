@@ -107,15 +107,13 @@ class PyCodeGen : public BaseCodeGen<ConfigType> {
           .func_call("np.fromfile", "data")
           .call_arg("path")
           .call_arg("dtype", "dtype")
-          .inplace_start("reshape")
+          .method_call("reshape")
           .call_arg("shape")
-          .inplace_end()
           .cond_else()
           .func_call("np.ones", "data")
           .call_arg("(shape)")
-          .inplace_start("astype")
+          .method_call("astype")
           .call_arg("dtype")
-          .inplace_end()
           .cond_end()
           .func_end("data");
     }

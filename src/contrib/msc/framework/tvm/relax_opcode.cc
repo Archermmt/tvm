@@ -262,7 +262,7 @@ class RelaxConstantCodeGen : public RelaxOpCode {
         .func_call("relax.TensorStructInfo")
         .call_arg(DocUtils::ToListDoc(node()->OutputAt(0)->shape, true), "")
         .call_arg(DocUtils::ToStrDoc(node()->OutputAt(0)->DTypeName()))
-        .nest_end();
+        .pop_nest();
   }
 };
 
@@ -599,7 +599,7 @@ class RelaxResize2dCodeGen : public RelaxOpCode {
         .op_input_arg()
         .func_call("relax.ShapeExpr")
         .op_list_arg<int>("size", "values")
-        .nest_end()
+        .pop_nest()
         .call_arg(DocUtils::ToListDoc(roi_list))
         .op_str_arg("layout")
         .op_str_arg("method")

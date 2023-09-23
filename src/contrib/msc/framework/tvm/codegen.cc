@@ -52,7 +52,7 @@ void RelaxCodeGen::CodeGenGraph() {
           .func_call("relax.TensorStructInfo")
           .call_arg(DocUtils::ToListDoc(pair.second->shape, true), "")
           .call_arg(DocUtils::ToStrDoc(pair.second->DTypeName()))
-          .nest_end()
+          .pop_nest()
           .func_call("inputs.append")
           .call_arg(idx_weight);
     }
@@ -111,7 +111,7 @@ void RelaxCodeGen::CodeGenInference() {
         .func_call("relax.TensorStructInfo")
         .call_arg(DocUtils::ToListDoc(i->shape))
         .call_arg(DocUtils::ToStrDoc(i->DTypeName()))
-        .nest_end();
+        .pop_nest();
   }
   stack_.comment("Build Module").func_call(graph()->name, "mod");
   for (const auto& i : graph()->GetInputs()) {

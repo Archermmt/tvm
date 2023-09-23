@@ -123,14 +123,17 @@ class BaseStack {
   void FuncEnd(const String& ret_val = "");
 
   /*! \brief Push call and maybe assign Doc*/
-  void FuncCall(const String& callee, const String& assign_to = "", const String& caller = "");
-
-  /*! \brief Push call and maybe assign Doc*/
-  void FuncCall(const String& callee, Optional<AssignDoc> assign_to,
+  void FuncCall(const String& callee, Optional<DeclareDoc> assign_to,
                 Optional<ExprDoc> caller = NullOpt);
 
+  /*! \brief Push call and maybe assign Doc*/
+  void FuncCall(const String& callee, const String& assign_to = "", const String& caller = "");
+
+  /*! \brief Push method call Doc*/
+  void MethodCall(const String& callee);
+
   /*! \brief Push nested expr to last Doc*/
-  void NestEnd(const String& key = "");
+  void PopNest(const String& key = "");
 
   /*! \brief Cache call typed argument*/
   void CallArgBase(const ExprDoc& value, const String& key = "");
@@ -150,12 +153,6 @@ class BaseStack {
       }
     }
   }
-
-  /*! \brief Cache inplace call Doc*/
-  void InplaceStart(const String& callee);
-
-  /*! \brief Push inplace call or/and assign Doc*/
-  void InplaceEnd();
 
   /*! \brief Push if to cache and start if block*/
   void ConditionIf(const String& predicate);
@@ -251,20 +248,20 @@ class BaseStack {
     DeclareArg(value);                                                                          \
     return *this;                                                                               \
   }                                                                                             \
-  Stack& block_start() {                                                                        \
-    BlockStart();                                                                               \
+  Stack& class_def(const String& class_name) {                                                  \
+    ClassDef(class_name);                                                                       \
     return *this;                                                                               \
   }                                                                                             \
-  Stack& block_end(bool block_docs = true) {                                                    \
-    BlockEnd(block_docs);                                                                       \
+  Stack& class_decorator(const String& decorator) {                                             \
+    ClassDecorator(decorator);                                                                  \
     return *this;                                                                               \
   }                                                                                             \
-  Stack& scope_start(const String& scope_def, const String& scope_ref = "") {                   \
-    ScopeStart(scope_def, scope_ref);                                                           \
+  Stack& class_start() {                                                                        \
+    ClassStart();                                                                               \
     return *this;                                                                               \
   }                                                                                             \
-  Stack& scope_end() {                                                                          \
-    ScopeEnd();                                                                                 \
+  Stack& class_end() {                                                                          \
+    ClassEnd();                                                                                 \
     return *this;                                                                               \
   }                                                                                             \
   Stack& func_def(const String& func_name, const String& ret_type = "") {                       \
@@ -287,20 +284,9 @@ class BaseStack {
     FuncEnd(ret_val);                                                                           \
     return *this;                                                                               \
   }                                                                                             \
-  Stack& class_def(const String& class_name) {                                                  \
-    ClassDef(class_name);                                                                       \
-    return *this;                                                                               \
-  }                                                                                             \
-  Stack& class_decorator(const String& decorator) {                                             \
-    ClassDecorator(decorator);                                                                  \
-    return *this;                                                                               \
-  }                                                                                             \
-  Stack& class_start() {                                                                        \
-    ClassStart();                                                                               \
-    return *this;                                                                               \
-  }                                                                                             \
-  Stack& class_end() {                                                                          \
-    ClassEnd();                                                                                 \
+  Stack& func_call(const String& callee, Optional<DeclareDoc> assign_to,                        \
+                   Optional<ExprDoc> caller = NullOpt) {                                        \
+    FuncCall(callee, assign_to, caller);                                                        \
     return *this;                                                                               \
   }                                                                                             \
   Stack& func_call(const String& callee, const String& assign_to = "",                          \
@@ -308,25 +294,12 @@ class BaseStack {
     FuncCall(callee, assign_to, caller);                                                        \
     return *this;                                                                               \
   }                                                                                             \
-  Stack& func_call(const String& callee, Optional<AssignDoc> assign_to,                         \
-                   Optional<ExprDoc> caller = NullOpt) {                                        \
-    FuncCall(callee, assign_to, caller);                                                        \
-    return *this;                                                                               \
-  }                                                                                             \
   Stack& method_call(const String& callee) {                                                    \
-    FuncCall(callee, "", "msc::auto");                                                          \
+    MethodCall(callee);                                                                         \
     return *this;                                                                               \
   }                                                                                             \
-  Stack& nest_end(const String& key = "") {                                                     \
-    NestEnd(key);                                                                               \
-    return *this;                                                                               \
-  }                                                                                             \
-  Stack& inplace_start(const String& callee) {                                                  \
-    InplaceStart(callee);                                                                       \
-    return *this;                                                                               \
-  }                                                                                             \
-  Stack& inplace_end() {                                                                        \
-    InplaceEnd();                                                                               \
+  Stack& pop_nest(const String& key = "") {                                                     \
+    PopNest(key);                                                                               \
     return *this;                                                                               \
   }                                                                                             \
   template <typename T>                                                                         \
@@ -373,6 +346,22 @@ class BaseStack {
   Stack& while_end() {                                                                          \
     WhileEnd();                                                                                 \
     return *this;                                                                               \
+  }                                                                                             \
+  Stack& block_start() {                                                                        \
+    BlockStart();                                                                               \
+    return *this;                                                                               \
+  }                                                                                             \
+  Stack& block_end(bool block_docs = true) {                                                    \
+    BlockEnd(block_docs);                                                                       \
+    return *this;                                                                               \
+  }                                                                                             \
+  Stack& scope_start(const String& scope_def, const String& scope_ref = "") {                   \
+    ScopeStart(scope_def, scope_ref);                                                           \
+    return *this;                                                                               \
+  }                                                                                             \
+  Stack& scope_end() {                                                                          \
+    ScopeEnd();                                                                                 \
+    return *this;                                                                               \
   }
 
 /*!
@@ -409,7 +398,7 @@ class OpCodeStack : public BaseStack {
 
   COMMON_WRAPPERS(OpCodeStack<OpCodeGenType>)
 
-  /*! \brief Cache op_call Doc*/
+  /*! \brief Push op_call Doc*/
   OpCodeStack<OpCodeGenType>& op_call(const String& callee = "msc::auto",
                                       const String& assign_to = "msc::auto") {
     const String& v_callee = callee == "msc::auto" ? codegen_->callee_name() : callee;
@@ -423,7 +412,7 @@ class OpCodeStack : public BaseStack {
     return comment(v_comment);
   }
 
-  /*! \brief Cache attribute as argument*/
+  /*! \brief Cache typed attribute as argument*/
   template <typename T>
   OpCodeStack<OpCodeGenType>& op_arg(const String& attr_key, const String& key = "msc::auto") {
     T attr_val;
@@ -434,6 +423,7 @@ class OpCodeStack : public BaseStack {
     return *this;
   }
 
+  /*! \brief Cache str attribute as argument*/
   OpCodeStack<OpCodeGenType>& op_str_arg(const String& attr_key, const String& key = "msc::auto") {
     std::string attr_val;
     if (codegen_->node()->GetAttr(attr_key, &attr_val)) {

@@ -54,7 +54,10 @@ void CppPrinter::PrintTypedDoc(const IndexDoc& doc) {
 
 void CppPrinter::PrintTypedDoc(const AttrAccessDoc& doc) {
   PrintDoc(doc->value, false);
-  output_ << "." << doc->name;
+  if (!doc->value->IsInstance<PointerDocNode>()) {
+    output_ << ".";
+  }
+  output_ << doc->name;
 }
 
 void CppPrinter::PrintTypedDoc(const CallDoc& doc) {
@@ -198,8 +201,10 @@ void CppPrinter::PrintTypedDoc(const CommentDoc& doc) {
 }
 
 void CppPrinter::PrintTypedDoc(const DeclareDoc& doc) {
-  PrintDoc(doc->type, false);
-  output_ << " ";
+  if (doc->type.defined()) {
+    PrintDoc(doc->type.value(), false);
+    output_ << " ";
+  }
   PrintDoc(doc->variable, false);
   if (doc->init_args.size() > 0) {
     if (doc->use_constructor) {
@@ -215,10 +220,7 @@ void CppPrinter::PrintTypedDoc(const DeclareDoc& doc) {
   Endline();
 }
 
-void CppPrinter::PrintTypedDoc(const PtrAttrAccessDoc& doc) {
-  PrintDoc(doc->value, false);
-  output_ << "->" << doc->name;
-}
+void CppPrinter::PrintTypedDoc(const PointerDoc& doc) { output_ << doc->name << "->"; }
 
 void CppPrinter::PrintIndentedBlock(const Array<StmtDoc>& docs) {
   IncreaseIndent();

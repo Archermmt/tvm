@@ -58,6 +58,20 @@ class DocUtils {
   TVM_DLL static const ExprDoc ToDoc(bool val);
   TVM_DLL static const ExprDoc ToDoc(const ExprDoc& val);
   TVM_DLL static const ExprDoc ToStrDoc(const String& val);
+  TVM_DLL static const PointerDoc ToPtrDoc(const String& val);
+
+  /*!
+   * \brief Change object to DeclareDoc.
+   * \return The DeclareDoc.
+   */
+  TVM_DLL static const DeclareDoc ToDeclareDoc(const String& type, const String& variable,
+                                               size_t len = 0, bool use_constructor = true);
+
+  /*!
+   * \brief Change object to AttrAccessDoc.
+   * \return The AttrAccessDoc.
+   */
+  TVM_DLL static const AttrAccessDoc ToAttrAccessDoc(const String& value, const String& name);
 
   /*!
    * \brief Change object to List of Docs.
@@ -125,15 +139,15 @@ class DocUtils {
    * \brief Change object to AssignDoc.
    * \return The AssignDoc.
    */
-  TVM_DLL static const AssignDoc ToAssignDoc(const String& lhs, const String& rhs, const String& annotation="");
+  template <typename T>
+  TVM_DLL static const AssignDoc ToAssignDoc(const String& lhs, const T& rhs,
+                                             const String& annotation = "") {
+    if (annotation.size() == 0) {
+      return AssignDoc(IdDoc(lhs), ToDoc(rhs), NullOpt);
+    }
+    return AssignDoc(IdDoc(lhs), ToDoc(rhs), IdDoc(annotation));
+  }
 
-  /*!
-   * \brief Change object to AttrAccessDoc/PtrAttrAccessDoc.
-   * \return The AttrAccessDoc/PtrAttrAccessDoc.
-   */
-  TVM_DLL static const AttrAccessDoc ToAttrAccessDoc(const String& value, const String& name);
-  TVM_DLL static const PtrAttrAccessDoc ToPtrAttrAccessDoc(const String& value, const String& name);
-  
   /*!
    * \brief Convert the docs to Stmts.
    * \return The Stmts.

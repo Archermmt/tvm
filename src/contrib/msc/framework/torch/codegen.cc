@@ -42,11 +42,7 @@ void TorchCodeGen::CodeGenGraph() {
   stack_.func_def("__init__", "torch.nn.Module");
   stack_.func_arg("self", "torch.nn.Module");
   stack_.func_start();
-  stack_.func_call("super")
-      .call_arg(graph()->name)
-      .call_arg("self")
-      .inplace_start("__init__")
-      .inplace_end();
+  stack_.func_call("super").call_arg(graph()->name).call_arg("self").method_call("__init__");
   for (const auto& n : graph()->node_names) {
     const auto& node = graph()->FindNode(n);
     if (node->optype == "input") {
@@ -95,7 +91,7 @@ void TorchCodeGen::CodeGenInference() {
       .func_call("model.load_state_dict")
       .call_arg("weights");
   if (config()->test_device == "gpu") {
-    stack_.func_call("model.to").func_call("torch.device").call_arg("cuda").nest_end();
+    stack_.func_call("model.to").func_call("torch.device").call_arg("cuda").pop_nest();
   }
   for (const auto& i : graph()->GetInputs()) {
     const auto& producer = graph()->FindProducer(i);
@@ -107,7 +103,7 @@ void TorchCodeGen::CodeGenInference() {
     const auto& producer = graph()->FindProducer(i);
     stack_.call_arg(IdxNodeBase(producer));
     if (config()->test_device == "gpu") {
-      stack_.inplace_start("to").func_call("torch.device").call_arg("cuda").inplace_end();
+      stack_.method_call("to").func_call("torch.device").call_arg("cuda");
     }
   }
 }

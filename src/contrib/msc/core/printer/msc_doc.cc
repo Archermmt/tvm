@@ -27,11 +27,8 @@ namespace tvm {
 namespace contrib {
 namespace msc {
 
-DeclareDoc::DeclareDoc(ExprDoc type, ExprDoc variable, Array<ExprDoc> init_args,
+DeclareDoc::DeclareDoc(Optional<ExprDoc> type, ExprDoc variable, Array<ExprDoc> init_args,
                        bool use_constructor) {
-  CHECK(type.defined() && variable.defined())
-      << "ValueError: type and variable needs to be non-null for DeclareDoc.";
-
   ObjectPtr<DeclareDocNode> n = make_object<DeclareDocNode>();
   n->type = type;
   n->variable = variable;
@@ -47,9 +44,8 @@ StrictListDoc::StrictListDoc(ListDoc list, bool allow_empty) {
   this->data_ = std::move(n);
 }
 
-PtrAttrAccessDoc::PtrAttrAccessDoc(ExprDoc value, String name) {
-  ObjectPtr<PtrAttrAccessDocNode> n = make_object<PtrAttrAccessDocNode>();
-  n->value = value;
+PointerDoc::PointerDoc(String name) {
+  ObjectPtr<PointerDocNode> n = make_object<PointerDocNode>();
   n->name = name;
   this->data_ = std::move(n);
 }

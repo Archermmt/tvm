@@ -102,7 +102,7 @@ void TensorflowCodeGen::CodeGenInference() {
       .scope_start("open(\"" + graph()->name + "_params.bin\", \"rb\")", "f")
       .func_call("tvm.runtime.load_param_dict", "params")
       .func_call("f.read")
-      .nest_end()
+      .pop_nest()
       .scope_end()
       .comment("Build Graph")
       .scope_start("tf_v1.Graph().as_default()");
@@ -126,7 +126,7 @@ void TensorflowCodeGen::CodeGenInference() {
   stack_.scope_start("tf_v1.Session()", "sess")
       .func_call("sess.run")
       .func_call("ops.variables.global_variables_initializer")
-      .nest_end()
+      .pop_nest()
       .func_call("sess.run", "outputs")
       .call_arg("outs")
       .call_arg("feed_dict", "feed_dict")
