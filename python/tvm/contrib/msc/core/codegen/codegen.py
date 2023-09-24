@@ -67,6 +67,7 @@ class CodeGen(object):
         inputs: Optional[List[Any]] = None,
         pre_load: Optional[Callable[[msc_utils.MSCDirectory], Any]] = None,
         post_load: Optional[Callable[[Any, msc_utils.MSCDirectory], Any]] = None,
+        build_model: bool = True,
     ) -> Any:
         """Generate source and load the model
 
@@ -78,6 +79,8 @@ class CodeGen(object):
             The pre processing method before load.
         post_load: Callable
             The post processing method after load.
+        build_model: bool
+            Whether to build the model.
 
         Returns
         -------
@@ -93,25 +96,28 @@ class CodeGen(object):
                 pre_load(folder)
             for name, source in sources.items():
                 folder.add_file(name, source)
-            if self._code_format == "cpp":
-                with folder.create_dir("build"):
-                    command = "cmake ../ && make && mv {} ../".format(self._graph.name)
-                    process = subprocess.Popen(command, shell=True)
-                    process.wait()
-                    assert process.returncode == 0, "Failed to build {} under {}".format(
-                        self._graph.name, os.getcwd()
+            if build_model:
+                if self._code_format == "cpp":
+                    with folder.create_dir("build"):
+                        command = "cmake ../ && make && mv {} ../".format(self._graph.name)
+                        process = subprocess.Popen(command, shell=True)
+                        process.wait()
+                        assert process.returncode == 0, "Failed to build {} under {}".format(
+                            self._graph.name, os.getcwd()
+                        )
+                    obj = self._graph.name
+                elif self._code_format == "python":
+                    builder = msc_utils.load_callable(self._graph.name + ".py:" + self._graph.name)
+                    obj = builder(*inputs)
+                else:
+                    raise NotImplementedError(
+                        "Code format {} is not supported".format(self._code_format)
                     )
-                obj = self._graph.name
-            elif self._code_format == "python":
-                builder = msc_utils.load_callable(self._graph.name + ".py:" + self._graph.name)
-                obj = builder(*inputs)
+                # post processing
+                if post_load:
+                    obj = post_load(obj, folder)
             else:
-                raise NotImplementedError(
-                    "Code format {} is not supported".format(self._code_format)
-                )
-            # post processing
-            if post_load:
-                obj = post_load(obj, folder)
+                obj = None
         return obj
 
 

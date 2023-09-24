@@ -73,7 +73,7 @@ def to_tensorrt(
                     write_weight(name, data.asnumpy(), f)
                 # create fake bias
                 for node in graph.get_nodes():
-                    if node.optype == "nn.conv2d":
+                    if node.optype in ("nn.conv2d", "msc.linear"):
                         weight = node.weight_at("weight")
                         bias = np.zeros([weight.dim_at("O")], dtype=weight.dtype_name)
                         write_weight(name, bias, f)

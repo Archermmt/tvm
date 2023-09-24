@@ -75,7 +75,7 @@ class TensorRTOpCode : public BaseOpCode<TensorRTCodeGenConfig> {
 
   /*! \brief Get func_name for the default node*/
   const String callee_name() final {
-    return "network->" + BaseOpCode<TensorRTCodeGenConfig>::callee_name();
+    return "network->add" + BaseOpCode<TensorRTCodeGenConfig>::callee_name();
   }
 
   /*! \brief Get valid return name for the default node*/
@@ -90,6 +90,12 @@ class TensorRTOpCode : public BaseOpCode<TensorRTCodeGenConfig> {
   /*! \brief Convert op build*/
   virtual void CodeGenBuild() = 0;
 
+  /*! \brief Set padding for the layer*/
+  void SetPadding(const String& key = "padding");
+
+  /*! \brief Declare the inputs*/
+  const String DeclareInputs(bool simplify = true);
+
   /*! \brief Get the tensorrt dims from dims*/
   template <typename T>
   const String ToDims(const std::vector<T>& dims, bool use_ndim = true);
@@ -97,6 +103,15 @@ class TensorRTOpCode : public BaseOpCode<TensorRTCodeGenConfig> {
 
   /*! \brief Get the tensorrt dims from attribute*/
   const String AttrToDims(const String& key, bool use_ndim = true);
+
+  /*! \brief Get the tensorrt reduce axis from dims*/
+  const size_t ToReduceAxis(const std::vector<int>& axes, size_t ndim = 0);
+
+  /*! \brief Get the tensorrt reduce axis from attribute*/
+  const size_t AttrToReduceAxis(const String& key = "axis", size_t ndim = 0);
+
+  /*! \brief Get the attribute axis from attribute*/
+  const size_t AttrToAxis(const String& key = "axis", size_t ndim = 0);
 
   /*! \brief Set layer by attribute*/
   template <typename T>
@@ -107,7 +122,6 @@ class TensorRTOpCode : public BaseOpCode<TensorRTCodeGenConfig> {
   void SetLayerByValue(const String& method, const T& value);
 
   /*! \brief Set layer by dims attribute*/
-  template <typename T>
   void SetLayerByDimsAttr(const String& method, const String& key, bool use_ndim = true);
 
   /*! \brief Set layer by dims value*/
