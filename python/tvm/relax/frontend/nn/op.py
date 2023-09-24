@@ -416,6 +416,86 @@ def conv2d(
     return _wrap_nested(conv_out, name)
 
 
+def conv1d_transpose(
+    x: Tensor,
+    weight: Tensor,
+    bias: Optional[Tensor] = None,
+    stride: Optional[Union[int, Tuple[int]]] = 1,
+    padding: Optional[Union[int, Tuple[int, ...]]] = 0,
+    output_padding: Optional[Union[int, Tuple[int]]] = 0,
+    dilation: Optional[Union[int, Tuple]] = 1,
+    groups: Optional[int] = 1,
+    name: str = "conv1d_transpose",
+) -> Tensor:
+    """1D transposed convolution operator.
+
+    This operator can be seen as the gradient operator of conv1d.
+
+    The output shape can be explained in the simple case when `data_layout == "NCW"` and
+    `kernel_layout == "IOW"`. Suppose `data` has shape `(N, in_channel, in_w)`, `weight` has
+    shape `(in_channel, out_channel, weight_w)`, we need to assure that `in_channel % groups == 0`.
+    The shape of the output will be `(N, out_channel * groups, out_w)`, where
+
+    - `out_w = ((in_w - 1) * strides[0] + weight_w - 2 * padding[0] + output_padding[0])`
+
+    Parameters
+    ----------
+    data : Tensor
+        The input data to the operator.
+
+    weight : Tensor
+        The weight tensor.
+
+    strides : Union[int, Tuple[int]]
+        The strides of convolution. It is required to have length 1.
+
+    padding : Union[int, Tuple[int, ...]]
+        The padding of convolution on both sides of inputs before convolution.
+        It is required to have length either 1 or 2.
+
+    output_padding : Union[int, Tuple[int, ...]], optional
+        Used to disambiguate the output shape.
+
+    dilation : Union[int, Tuple[int]]
+        Specifies the dilation rate to be used for dilated convolution.
+        It is required to have length either 1.
+
+    groups : int
+        Number of groups to split the input into for grouped convolution.
+        The number of input and output channels should be divisible by the number of groups.
+
+    data_layout : str
+        Layout of the input.
+
+    kernel_layout : str
+        Layout of the weight.
+
+    out_layout : Optional[str]
+        Layout of the output. If not specified, it is the same as data_layout
+
+    out_dtype : Optional[Union[str, DataType]]
+        Specifies the output data type for mixed precision conv2d.
+
+    Returns
+    -------
+    result : Tensor
+        The computed result.
+    """
+    conv_out = _op.nn.conv1d_transpose(
+        data=x._expr,
+        weight=weight._expr,
+        strides=stride,
+        padding=padding,
+        output_padding=output_padding,
+        dilation=dilation,
+        groups=groups,
+    )
+    if bias is not None:
+        conv_out = _op.add(conv_out, _op.reshape(bias._expr, [1, -1, 1]))
+
+    return _wrap_nested(conv_out, name)
+
+
 def maximum(x1: Tensor, x2: Tensor, name: str = "maximum"):
     """Element-wise maximum
 
@@ -1140,19 +1220,21 @@ def get_timestep_embedding(
         [N x dim] Tensor of positional embeddings.
     """
     dtype = get_default_dtype()
-    timesteps = _op.astype(x._expr, dtype)
+
+    # Arithmetic should be done in float for precision.
+    timesteps = _op.astype(x._expr, "float32")
 
     half_dim = embedding_dim // 2
-    exponent = rx.const(-math.log(max_period), dtype) * _op.arange(
-        start=0, end=half_dim, dtype=dtype
+    exponent = rx.const(-math.log(max_period), "float32") * _op.arange(
+        start=0, end=half_dim, dtype="float32"
     )
-    exponent = exponent / (rx.const(half_dim - downscale_freq_shift, dtype))
+    exponent = exponent / (rx.const(half_dim - downscale_freq_shift, "float32"))
 
     emb = _op.exp(exponent)
     emb = _op.expand_dims(timesteps, 1) * _op.expand_dims(emb, 0)
     # Scale embeddings
     if scale != 1:
-        emb = rx.const(scale, dtype) * emb
+        emb = rx.const(scale, "float32") * emb
 
     # Concat sine and cosine embeddings.
     if flip_sin_to_cos:
@@ -1163,6 +1245,9 @@ def get_timestep_embedding(
     # Zero pad
     if embedding_dim % 2 == 1:
         emb = _op.nn.pad(emb, (0, 1, 0, 0))
+
+    # Cast to proper output type
+    emb = _op.astype(emb, dtype)
     return _wrap_nested(emb, name)
 
 

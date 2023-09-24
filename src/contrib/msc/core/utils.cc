@@ -68,7 +68,6 @@ bool StringUtils::StartsWith(const String& src_string, const String& sub_string)
   if (sub_string.size() == 0) {
     return false;
   }
-
   const std::string& src_cstring = src_string;
   const std::string& sub_cstring = sub_string;
   int pos = src_cstring.find(sub_cstring);
@@ -82,7 +81,6 @@ bool StringUtils::EndsWith(const String& src_string, const String& sub_string) {
   if (sub_string.size() == 0) {
     return false;
   }
-
   const std::string& src_cstring = src_string;
   const std::string& sub_cstring = sub_string;
   int pos = src_cstring.rfind(sub_cstring);

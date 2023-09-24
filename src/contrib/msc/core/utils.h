@@ -67,13 +67,13 @@ class StringUtils {
 
   /*!
    * \brief Check if the String starts with a substring.
-   * \return Whether substring is contained.
+   * \return Whether string starts with substring.
    */
   TVM_DLL static bool StartsWith(const String& src_string, const String& sub_string);
 
   /*!
    * \brief Check if the String ens with a substring.
-   * \return Whether substring is contained.
+   * \return Whether string endswith substring.
    */
   TVM_DLL static bool EndsWith(const String& src_string, const String& sub_string);
 
