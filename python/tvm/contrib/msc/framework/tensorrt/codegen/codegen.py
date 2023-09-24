@@ -19,6 +19,7 @@
 import os
 import subprocess
 from typing import Dict, Optional
+import numpy as np
 
 import tvm
 from tvm.contrib.msc.core.ir import MSCGraph
@@ -27,7 +28,7 @@ from tvm.contrib.msc.core import utils as msc_utils
 from tvm.contrib.msc.core.utils import MSCFramework
 from tvm.contrib.msc.framework.tensorrt import _ffi_api
 from .sources import get_trt_sources
-from .utils import *
+from .utils import write_weight
 
 
 def to_tensorrt(
@@ -76,7 +77,7 @@ def to_tensorrt(
                     if node.optype in ("nn.conv2d", "msc.linear"):
                         weight = node.weight_at("weight")
                         bias = np.zeros([weight.dim_at("O")], dtype=weight.dtype_name)
-                        write_weight(name, bias, f)
+                        write_weight(node.name + ".bias", bias, f)
             with folder.create_dir("utils") as utils_folder:
                 for name, source in get_trt_sources().items():
                     utils_folder.add_file(name, source)

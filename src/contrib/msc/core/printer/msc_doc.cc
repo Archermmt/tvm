@@ -23,6 +23,8 @@
 
 #include "msc_doc.h"
 
+#include <utility>
+
 namespace tvm {
 namespace contrib {
 namespace msc {

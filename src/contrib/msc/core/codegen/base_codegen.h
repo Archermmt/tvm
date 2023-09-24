@@ -30,6 +30,7 @@
 #include <memory>
 #include <stack>
 #include <string>
+#include <vector>
 
 #include "../ir/graph.h"
 #include "code_stack.h"

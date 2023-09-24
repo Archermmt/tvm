@@ -383,7 +383,7 @@ void TensorRTCodeGen::ReturnOnFail(const String& flag, const String& err) {
       .call_arg(DocUtils::ToStrDoc(err))
       .line("return -1;")
       .cond_end();
-};
+}
 
 const Array<Doc> TensorRTCodeGen::GetOpCodes(const MSCJoint& node) {
   const auto& ops_map = GetTensorRTOpCodes();

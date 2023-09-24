@@ -21,8 +21,8 @@
  * \file src/contrib/msc/framework/tensorrt/tensorrt_opcode.h
  * \brief TensorRT codegen for MSCJoint.
  */
-#ifndef TVM_CONTRIB_MSC_FRAMEWORK_TENOSRRT_TENSORRT_OPCODE_H_
-#define TVM_CONTRIB_MSC_FRAMEWORK_TENOSRRT_TENSORRT_OPCODE_H_
+#ifndef TVM_CONTRIB_MSC_FRAMEWORK_TENSORRT_TENSORRT_OPCODE_H_
+#define TVM_CONTRIB_MSC_FRAMEWORK_TENSORRT_TENSORRT_OPCODE_H_
 
 #include <memory>
 #include <string>
@@ -140,4 +140,4 @@ GetTensorRTOpCodes();
 }  // namespace msc
 }  // namespace contrib
 }  // namespace tvm
-#endif  // TVM_CONTRIB_MSC_FRAMEWORK_TENOSRRT_TENSORRT_OPCODE_H_
+#endif  // TVM_CONTRIB_MSC_FRAMEWORK_TENSORRT_TENSORRT_OPCODE_H_

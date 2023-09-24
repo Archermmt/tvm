@@ -645,7 +645,7 @@ const bool MSCGraphNode::HasTensor(const String& name) const {
   const String& tensor_name = tensor_alias.count(name) ? tensor_alias[name] : name;
   String host, index;
   std::tie(host, index) = StringUtils::SplitOnce(tensor_name, ":");
-  return bool(nodes.count(host));
+  return nodes.count(host) > 0 ? true : false;
 }
 
 const MSCTensor MSCGraphNode::FindTensor(const String& name) const {

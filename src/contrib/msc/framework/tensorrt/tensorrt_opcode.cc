@@ -300,7 +300,7 @@ class TensorRTConvCodeGen : public TensorRTOpCode {
       stack_.op_weight_arg("bias");
     } else {
       stack_.call_arg("mWeights[\"" + node()->name + ".bias\"]");
-    };
+    }
     SetLayerByDimsAttr("Stride", "strides", false);
     SetLayerByDimsAttr("Dilation", "dilation", false);
     SetLayerByAttr<int>("NbGroups", "groups");
@@ -349,7 +349,7 @@ class TensorRTLinearCodeGen : public TensorRTOpCode {
       stack_.op_weight_arg("bias");
     } else {
       stack_.call_arg("mWeights[\"" + node()->name + ".bias\"]");
-    };
+    }
   }
 
  private:

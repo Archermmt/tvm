@@ -32,6 +32,7 @@
 #include <tvm/runtime/ndarray.h>
 #include <tvm/tir/data_layout.h>
 
+#include <set>
 #include <stack>
 #include <string>
 #include <unordered_map>

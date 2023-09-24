@@ -22,6 +22,7 @@
  */
 
 #include "graph_builder.h"
+
 namespace tvm {
 namespace contrib {
 namespace msc {

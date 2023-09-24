@@ -132,7 +132,7 @@ def get_version(framework: str) -> List[int]:
             raw_version = ".".join(tvm.get_global_func("relax.get_tensorrt_version")())
         else:
             raw_version = "1.0.0"
-    except:
+    except:  # pylint: disable=bare-except
         raw_version = "1.0.0"
 
     return LooseVersion(raw_version).version

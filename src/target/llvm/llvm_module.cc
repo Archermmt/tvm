@@ -569,7 +569,7 @@ TVM_REGISTER_GLOBAL("target.llvm_x86_get_archlist")
 #if TVM_LLVM_VERSION < 110
       cpu_arches = llvm_compat_get_archlist("x86_64--");
 #else
-      llvm::SmallVector<llvm::StringRef> x86_arches;
+      llvm::SmallVector<llvm::StringRef, 1> x86_arches;
       llvm::X86::fillValidCPUArchList(x86_arches, only64bit);
       for (auto& arch : x86_arches) {
         cpu_arches.push_back(arch.str());
@@ -584,7 +584,7 @@ TVM_REGISTER_GLOBAL("target.llvm_x86_get_features")
 #if TVM_LLVM_VERSION < 110
       cpu_features = llvm_compat_get_features("x86_64--", cpu_name);
 #else
-      llvm::SmallVector<llvm::StringRef> x86_features;
+      llvm::SmallVector<llvm::StringRef, 1> x86_features;
       llvm::X86::getFeaturesForCPU(cpu_name, x86_features);
       for (auto& feat : x86_features) {
         cpu_features.push_back(feat.str());
@@ -624,7 +624,7 @@ TVM_REGISTER_GLOBAL("target.llvm_x86_has_feature")
       bool has_feature = std::any_of(cpu_features.begin(), cpu_features.end(),
                                      [&](const String& var) { return var == feature; });
 #else
-      llvm::SmallVector<llvm::StringRef> x86_arches;
+      llvm::SmallVector<llvm::StringRef, 1> x86_arches;
       llvm::X86::fillValidCPUArchList(x86_arches, false);
       // decline on invalid arch (avoid llvm assertion)
       if (!std::any_of(x86_arches.begin(), x86_arches.end(),
@@ -632,7 +632,7 @@ TVM_REGISTER_GLOBAL("target.llvm_x86_has_feature")
         return false;
       }
       // lookup in -mcpu llvm architecture flags
-      llvm::SmallVector<llvm::StringRef> x86_features;
+      llvm::SmallVector<llvm::StringRef, 1> x86_features;
       llvm::X86::getFeaturesForCPU(mcpu.value().c_str(), x86_features);
       bool has_feature =
           std::any_of(x86_features.begin(), x86_features.end(),

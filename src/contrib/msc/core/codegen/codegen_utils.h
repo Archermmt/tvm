@@ -28,6 +28,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "../ir/graph.h"
 #include "../utils.h"
