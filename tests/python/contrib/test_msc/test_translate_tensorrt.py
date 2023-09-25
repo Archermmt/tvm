@@ -47,9 +47,10 @@ def verify_model(torch_model, input_info):
 
     print("engine_files " + str(engine_files))
     """
+    target_options={"msc_tensorrt":engine_files}
     mod = tvm.transform.Sequential(
         [
-            relax.transform.RunCodegen(),
+            relax.transform.RunCodegen(target_options),
         ]
     )(mod)
     print("[TMINFO] compiled mod " + str(mod))
@@ -1126,4 +1127,4 @@ def test_attention():
 
 if __name__ == "__main__":
     # tvm.testing.main()
-    test_conv1d()
+    test_linear()

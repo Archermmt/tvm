@@ -411,9 +411,10 @@ TVM_REGISTER_GLOBAL("msc.framework.tensorrt.GetTensorRTSources")
  * \return Runtime modules.
  */
 Array<runtime::Module> TensorRTCompiler(Array<Function> functions,
-                                        Map<String, ObjectRef> /*unused*/,
+                                        Map<String, ObjectRef> target_option,
                                         Map<Constant, String> constant_names) {
   Array<runtime::Module> compiled_functions;
+  std::cout << "[TMINFO] target_option " << target_option << std::endl;
   for (const auto& func : functions) {
     std::cout << "[TMINFO] processing " << func << std::endl;
   }

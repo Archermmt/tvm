@@ -83,12 +83,15 @@ def to_tensorrt(
                     utils_folder.add_file(name, source)
 
     def _build_engine(engine_name: str, folder: msc_utils.MSCDirectory) -> str:
+        """
         process = subprocess.Popen("./" + engine_name, shell=True)
         process.wait()
         assert process.returncode == 0, "Failed to build {} under {}".format(
             engine_name, os.getcwd()
         )
         return folder.move_file(engine_name + ".trt", output_folder.create_dir(graph.name))
+        """
+        return None
 
     codegen = CodeGen(
         graph,
@@ -98,4 +101,4 @@ def to_tensorrt(
         build_folder.create_dir(graph.name),
         code_format="cpp",
     )
-    return codegen.load([], pre_load=_create_depends, post_load=_build_engine)
+    return codegen.load([], pre_load=_create_depends, post_load=_build_engine, build_model=False)
