@@ -33,7 +33,12 @@ def get_trt_common_h_code() -> str:
     return """#ifndef TVM_CONTRIB_MSC_UTILS_TRT_COMMON_H_
 #define TVM_CONTRIB_MSC_UTILS_TRT_COMMON_H_
 
+#include <fstream>
+#include <iostream>
+#include <map>
+#include <memory>
 #include <vector>
+#include <cassert>
 
 #include "NvInfer.h"
 
@@ -41,12 +46,18 @@ namespace tvm {
 namespace contrib {
 namespace msc {
 
-using namsespace nvinfer1;
+using namespace nvinfer1;
 
 #ifndef TRT_VERSION_GE
 #define TRT_VERSION_GE(major, minor, patch)                            \\
   ((TRT_MAJOR > major) || (TRT_MAJOR == major && TRT_MINOR > minor) || \\
    (TRT_MAJOR == major && TRT_MINOR == minor && TRT_PATCH >= patch))
+#endif
+
+#if TRT_VERSION_GE(8, 0, 0)
+#define TRT_NOEXCEPT noexcept
+#else
+#define TRT_NOEXCEPT
 #endif
 
 #define CHECK(status)                                    \\
@@ -62,7 +73,9 @@ class TRTLogger : public ILogger {
  public:
   TRTLogger() : TRTLogger(Severity::kINFO) {}
   explicit TRTLogger(Severity severity) { severity_ = severity; }
-  void log(Severity severity, const char* msg) override {
+  void log(Severity severity, const char* msg) noexcept override {
+    if (severity > severity_) return;
+
     switch (severity) {
       case Severity::kINTERNAL_ERROR:
         std::cout << "[MSC.INTERNAL_ERROR]: " << msg << std::endl;
@@ -84,6 +97,8 @@ class TRTLogger : public ILogger {
         break;
     }
   }
+
+  void setLogSeverity(Severity severity) { severity_ = severity; }
 
  private:
   Severity severity_;
@@ -107,7 +122,7 @@ using TRTPtr = std::unique_ptr<T, InferDeleter>;
 
 class TRTUtils {
  public:
-  static std::map<std::string, Weights> TRTUtils::LoadWeights(const std::string& file);
+  static std::map<std::string, Weights> LoadWeights(const std::string& file);
 
 #if TRT_VERSION_GE(6, 0, 0)
   static bool SerializeEngineToFile(const std::string& file, TRTPtr<IBuilder>& builder,
@@ -196,13 +211,13 @@ bool TRTUtils::SerializeEngineToFile(const std::string& file, TRTPtr<IBuilder>& 
 #else
   auto engine = TRTPtr<ICudaEngine>(builder->buildEngineWithConfig(*network, *config));
   if (!engine) {
-    logger.log(ILogger::Serverity::kERROR, "Failed to build engine");
+    logger.log(ILogger::Severity::kERROR, "Failed to build engine");
     return false;
   }
   auto plan = TRTPtr<IHostMemory>(engine->serialize());
 #endif
   if (!plan) {
-    logger.log(ILogger::Serverity::kERROR, "Failed to serialize network");
+    logger.log(ILogger::Severity::kERROR, "Failed to serialize network");
     return false;
   }
   std::ofstream ofs(file, std::ios::out | std::ios::binary);
@@ -216,12 +231,12 @@ bool TRTUtils::SerializeEngineToFile(const std::string& file, TRTPtr<IBuilder>& 
                                      TRTPtr<INetworkDefinition>& network, TRTLogger& logger) {
   auto engine = TRTPtr<ICudaEngine>(builder->buildCudaEngine(*network));
   if (!engine) {
-    logger.log(ILogger::Serverity::kERROR, "Failed to build engine");
+    logger.log(ILogger::Severity::kERROR, "Failed to build engine");
     return false;
   }
   auto plan = TRTPtr<IHostMemory>(engine->serialize());
   if (!plan) {
-    logger.log(ILogger::Serverity::kERROR, "Failed to serialize network");
+    logger.log(ILogger::Severity::kERROR, "Failed to serialize network");
     return false;
   }
   std::ofstream ofs(file, std::ios::out | std::ios::binary);

@@ -31,20 +31,43 @@ def get_base_h_code() -> str:
     return """#ifndef TVM_CONTRIB_MSC_UTILS_BASE_H_
 #define TVM_CONTRIB_MSC_UTILS_BASE_H_
 
+#include <fstream>
 #include <string>
 #include <utility>
 #include <vector>
+#include <cassert>
 
 namespace tvm {
 namespace contrib {
 namespace msc {
+
+class CommonUtils {
+ public:
+  template <typename T>
+  static bool CompareBuffers(const T* golden, const T* result, size_t size) {
+    return true;
+  }
+};
 
 class FileUtils {
  public:
   static inline bool FileExist(const std::string& file);
 
   template <typename T>
-  static bool ReadToBuffer(const std::string& file, T* buffer, size_t size);
+  static bool ReadToBuffer(const std::string& file, T* buffer, size_t size)  {
+    std::ifstream in_file(file, std::ifstream::binary);
+    if (!in_file.is_open()) {
+      return false;
+    }
+    try {
+      in_file.read((char*)(&buffer[0]), size * sizeof(T));
+    } catch (std::exception const& e) {
+      in_file.close();
+      return false;
+    }
+    in_file.close();
+    return true;
+  }
 };
 
 class DatasetReader {
@@ -95,22 +118,6 @@ bool FileUtils::FileExist(const std::string& file) {
     return true;
   }
   return false;
-}
-
-template <typename T>
-bool FileUtils::ReadToBuffer(const std::string& file, T* buffer, size_t size) {
-  std::ifstream in_file(file, std::ifstream::binary);
-  if (!in_file.is_open()) {
-    return false;
-  }
-  try {
-    in_file.read((char*)(&buffer[0]), size * sizeof(T));
-  } catch (std::exception const& e) {
-    in_file.close();
-    return false;
-  }
-  in_file.close();
-  return true;
 }
 
 DatasetReader::DatasetReader(const std::string& folder, int max_size) {

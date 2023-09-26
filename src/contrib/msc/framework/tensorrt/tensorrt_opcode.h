@@ -55,9 +55,9 @@ class TensorRTOpCode : public BaseOpCode<TensorRTCodeGenConfig> {
   const String IdxInputBase(const MSCJoint& node, int idx = 0, bool as_raw = false) final {
     const auto& pair = node->ProducerAndIdxOf(idx);
     if (pair.first->optype == "input") {
-      return IdxNodeBase(pair.first, as_raw);
+      return "*" + IdxNodeBase(pair.first, as_raw);
     }
-    return IdxOutputBase(pair.first, pair.second, as_raw);
+    return "*" + IdxOutputBase(pair.first, pair.second, as_raw);
   }
 
   /*! \brief Get describe for default node output*/

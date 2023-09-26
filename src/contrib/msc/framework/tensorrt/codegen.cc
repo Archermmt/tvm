@@ -27,18 +27,23 @@
 #include <tvm/ir/module.h>
 #include <tvm/relax/expr.h>
 
+#include "../../../../relax/backend/contrib/codegen_json/codegen_json.h"
+#include "../../../../relax/transform/utils.h"
+
 namespace tvm {
 namespace contrib {
 namespace msc {
 
 using namespace tvm::relax;
+using JSONSerializer = backend::contrib::JSONSerializer;
 
 void TensorRTCodeGen::CodeGenClassDeclare() {
   stack_.line("#include \"NvInfer.h\"")
       .line("#include \"NvInferRuntimeCommon.h\"")
       .line("#include \"utils/base.h\"")
+      .line("#include \"utils/trt_common.h\"")
       .line()
-      .line("using namsespace nvinfer1;")
+      .line("using namespace nvinfer1;")
       .line();
   StartNamespace();
   stack_.class_def(graph()->name).class_start().scope_start("public:");
@@ -78,7 +83,7 @@ void TensorRTCodeGen::CodeGenClassDefine() {
   auto malloc_buffer = [this](const MSCTensor& tensor) {
     const String& idx_var = "idx_" + tensor->alias;
     this->stack_
-        .func_call("getBindingIndex", DocUtils::ToDeclareDoc(idx_var, "const int"),
+        .func_call("getBindingIndex", DocUtils::ToDeclareDoc("int", idx_var),
                    DocUtils::ToPtrDoc("engine"))
         .call_arg(DocUtils::ToStrDoc(tensor->alias))
         .func_call("CHECK")
@@ -110,6 +115,13 @@ void TensorRTCodeGen::CodeGenClassDefine() {
       stack_.line(d);
     }
   }
+  // mark outputs
+  stack_.comment("Mark outputs");
+  for (const auto& o : graph()->GetOutputs()) {
+    const auto& pair = graph()->FindProducerAndIdx(o);
+    stack_.func_call("markOutput", NullOpt, DocUtils::ToPtrDoc("network"))
+        .call_arg("*" + IdxOutputBase(pair.first, pair.second));
+  }
   // end define build method
   stack_.func_end("true");
   // start define test method
@@ -120,7 +132,7 @@ void TensorRTCodeGen::CodeGenClassDefine() {
       .func_arg("logger", "TRTLogger&")
       .func_start();
   stack_.comment("Create context")
-      .func_call("TRTPTr<IExecutionContext>", DocUtils::ToDeclareDoc("auto", "context"))
+      .func_call("TRTPtr<IExecutionContext>", DocUtils::ToDeclareDoc("auto", "context"))
       .func_call("createExecutionContext", NullOpt, DocUtils::ToPtrDoc("engine"))
       .pop_nest();
   ReturnOnFail("context", "Failed to create the context");
@@ -130,7 +142,7 @@ void TensorRTCodeGen::CodeGenClassDefine() {
       .declare("bool", "pass", 0, false)
       .declare_arg("true")
       .declare("cudaStream_t", "stream")
-      .func_call("ICHECK")
+      .func_call("CHECK")
       .func_call("cudaStreamCreate")
       .call_arg("&stream")
       .pop_nest();
@@ -185,15 +197,16 @@ void TensorRTCodeGen::CodeGenClassDefine() {
   stack_.func_call("cudaStreamSynchronize").call_arg("stream");
   // compare outputs
   for (const auto& o : graph()->GetOutputs()) {
-    stack_.func_call("CompareBuffers", "pass")
+    stack_.func_call("CommonUtils::CompareBuffers", "pass")
         .call_arg("(" + CppDType(o->dtype) + "*)cpu_buffers[idx_" + o->alias + "]")
-        .call_arg("output_" + o->alias);
+        .call_arg("output_" + o->alias)
+        .call_arg(o->GetSize());
     ReturnOnFail("pass", "Failed to test the output " + o->alias);
   }
   stack_.while_end();
   // clean up
   stack_.comment("Clean up the buffers and stream")
-      .func_call("cudaStreamDestory")
+      .func_call("cudaStreamDestroy")
       .call_arg("stream")
       .for_start("i", 0, binding_num)
       .func_call("CHECK")
@@ -210,24 +223,22 @@ void TensorRTCodeGen::CodeGenClassDefine() {
 
 void TensorRTCodeGen::CodeGenMain() {
   stack_.line("#include \"" + graph()->name + ".h\"")
-      .line("#include \"utils/trt_common.h\"")
-      .line("#include \"utils/base.h\"")
       .line()
-      .line("using namsespace nvinfer1;")
-      .line("using namsespace tvm::contrib::msc;")
+      .line("using namespace nvinfer1;")
+      .line("using namespace tvm::contrib::msc;")
       .line()
       .func_def("main", "int")
       .func_arg("argc", "int")
-      .func_arg("argv", "**char")
+      .func_arg("argv", "char**")
       .func_start()
       .declare("TRTLogger", "logger")
-      .func_call("logger.setLogServerity");
+      .func_call("logger.setLogSeverity");
   if (config()->log_level == 0) {
-    stack_.call_arg("ILogger::Serverity::kVERBOSE");
+    stack_.call_arg("ILogger::Severity::kVERBOSE");
   } else if (config()->log_level == 1) {
-    stack_.call_arg("ILogger::Serverity::kINFO");
+    stack_.call_arg("ILogger::Severity::kINFO");
   } else {
-    stack_.call_arg("ILogger::Serverity::kWARNING");
+    stack_.call_arg("ILogger::Severity::kWARNING");
   }
   // prepare for build
   stack_.comment("Define arguments")
@@ -281,12 +292,12 @@ void TensorRTCodeGen::CodeGenMain() {
   stack_.comment("Set profile flag")
       .declare("ProfilingVerbosity", "profile_verbose")
       .cond_if("profile_level == 2")
-      .assign("profile_level", "ProfilingVerbosity::kDETAILED")
+      .assign("profile_verbose", "ProfilingVerbosity::kDETAILED")
       .cond_else()
       .cond_if("profile_level == 1")
-      .assign("profile_level", "ProfilingVerbosity::kLAYER_NAMES_ONLY")
+      .assign("profile_verbose", "ProfilingVerbosity::kLAYER_NAMES_ONLY")
       .cond_else()
-      .assign("profile_level", "ProfilingVerbosity::kNONE")
+      .assign("profile_verbose", "ProfilingVerbosity::kNONE")
       .cond_end()
       .cond_end()
       .func_call("setProfilingVerbosity", NullOpt, DocUtils::ToPtrDoc("config"))
@@ -304,22 +315,28 @@ void TensorRTCodeGen::CodeGenMain() {
   ReturnOnFail("pass", "Failed to serialize the engine");
   // end build the engine
   stack_.cond_end();
-  // start profile the engine
-  stack_.cond_if("profile_level > 0");
+  // start deserialize engine
+  stack_.comment("Deserialize engine")
+      .declare("std::shared_ptr<ICudaEngine>", "engine")
+      .func_call("TRTUtils::DeserializeEngineFromFile", "pass")
+      .call_arg(DocUtils::ToStrDoc(graph()->name + ".trt"))
+      .call_arg("engine")
+      .call_arg("logger");
+  ReturnOnFail("pass", "Failed to deserialize the engine");
   // dump info by inspector
   stack_.comment("Dump info by inspector")
+      .cond_if("profile_level > 0")
       .func_call("TRTPtr<IEngineInspector>", DocUtils::ToDeclareDoc("auto", "inspector"))
       .func_call("createEngineInspector", NullOpt, DocUtils::ToPtrDoc("engine"))
       .pop_nest()
       .func_call("getEngineInformation", DocUtils::ToDeclareDoc("std::string", "result"),
                  DocUtils::ToPtrDoc("inspector"))
-      .call_arg("LayerInformation::kJSON")
+      .call_arg("LayerInformationFormat::kJSON")
       .declare("std::ofstream", "os")
       .declare_arg(DocUtils::ToStrDoc(graph()->name + "_info.json"))
       .declare_arg("std::ofstream::trunc")
-      .line("os << result << std::flush;");
-  // end profile the engine
-  stack_.cond_end();
+      .line("os << result << std::flush;")
+      .cond_end();
   // test engine
   if (config()->test_iter > 0) {
     stack_.comment("Prepare dataset")
@@ -340,19 +357,21 @@ void TensorRTCodeGen::CodeGenCmake() {
   stack_.line("cmake_minimum_required(VERSION " + config()->cmake_version + " FATAL_ERROR)")
       .line("project(" + graph()->name + ")")
       .line("find_package(CUDA)")
-      .line("find_path(TRT_INCLUDE NvInfer.h HINTS " + config()->tensorrt_root +
+      .line("find_path(TENSORRT_INCLUDE_DIR NvInfer.h HINTS " + config()->tensorrt_root +
             " PATH_SUFFIXES include)")
-      .line("find_path(TRT_LIB NvInfer.h HINTS " + config()->tensorrt_root + " PATH_SUFFIXES lib)")
+      .line("find_library(TENSORRT_LIB_DIR nvinfer HINTS " + config()->tensorrt_root +
+            " PATH_SUFFIXES lib)")
       .line(
-          "message(STATUS \"Build project with TRT_INCLUDE ${TRT_INCLUDE} and TRT_LIB "
-          "${TRT_LIB}\")")
+          "message(STATUS \"Build project with TENSORRT_INCLUDE_DIR ${TENSORRT_INCLUDE_DIR} and "
+          "TENSORRT_LIB_DIR "
+          "${TENSORRT_LIB_DIR}\")")
       .line("add_definitions(-DTRT_MAJOR=" + std::to_string(config()->version[0]) + ")")
       .line("add_definitions(-DTRT_MINOR=" + std::to_string(config()->version[1]) + ")")
       .line("add_definitions(-DTRT_PATCH=" + std::to_string(config()->version[2]) + ")")
       .line("file(GLOB_RECURSE TRT_SRCS *.cc)")
       .line("cuda_add_executable(" + graph()->name + " ${TRT_SRCS})")
-      .line("target_include_directories(" + graph()->name + " ${TRT_INCLUDE})")
-      .line("target_link_libraries(" + graph()->name + " ${TRT_LIB})");
+      .line("target_include_directories(" + graph()->name + " PUBLIC ${TENSORRT_INCLUDE_DIR})")
+      .line("target_link_libraries(" + graph()->name + " ${TENSORRT_LIB_DIR})");
 }
 
 const String TensorRTCodeGen::CppDType(const DataType& dtype) {
@@ -379,7 +398,7 @@ const String TensorRTCodeGen::GetTensorBytes(const MSCTensor& tensor) {
 void TensorRTCodeGen::ReturnOnFail(const String& flag, const String& err) {
   stack_.cond_if("!" + flag)
       .func_call("logger.log")
-      .call_arg("ILogger::Serverity::kERROR")
+      .call_arg("ILogger::Severity::kERROR")
       .call_arg(DocUtils::ToStrDoc(err))
       .line("return -1;")
       .cond_end();
@@ -405,23 +424,44 @@ TVM_REGISTER_GLOBAL("msc.framework.tensorrt.GetTensorRTSources")
       return codegen.GetSources(print_config);
     });
 
+TVM_REGISTER_GLOBAL("msc.framework.tensorrt.GetTensorRTRoot").set_body_typed([]() -> String {
+#ifdef TENSORRT_ROOT_DIR
+  return TENSORRT_ROOT_DIR;
+#else
+  return "";
+#endif
+});
+
 /*!
  * \brief Create runtime modules for TensorRT.
  * \param functions The extern functions to be compiled via TensorRT
  * \return Runtime modules.
  */
-Array<runtime::Module> TensorRTCompiler(Array<Function> functions,
-                                        Map<String, ObjectRef> target_option,
-                                        Map<Constant, String> constant_names) {
+Array<runtime::Module> MSCTensorRTCompiler(Array<Function> functions,
+                                           Map<String, ObjectRef> target_option,
+                                           Map<Constant, String> constant_names) {
   Array<runtime::Module> compiled_functions;
   std::cout << "[TMINFO] target_option " << target_option << std::endl;
   for (const auto& func : functions) {
     std::cout << "[TMINFO] processing " << func << std::endl;
   }
+  for (const auto& func : functions) {
+    VLOG(1) << "MSC.TensorRT partition:" << std::endl << func;
+    JSONSerializer serializer(constant_names);
+    serializer.serialize(func);
+    std::string graph_json = serializer.GetJSON();
+    std::cout << "[TMINFO] see the graph_json " << graph_json << std::endl;
+    const auto* pf = runtime::Registry::Get("runtime.msc_tensorrt_runtime_create");
+    ICHECK(pf != nullptr) << "Cannot find TensorRT runtime module create function.";
+    std::string func_name = GetExtSymbol(func);
+    ICHECK(target_option.count(func_name)) << "Can not find engine file for " << func_name;
+    VLOG(1) << "Creating msc_tensorrt runtime::Module for '" << func_name << "'";
+    compiled_functions.push_back((*pf)(func_name, graph_json, constant_names));
+  }
   return compiled_functions;
 }
 
-TVM_REGISTER_GLOBAL("relax.ext.msc_tensorrt").set_body_typed(TensorRTCompiler);
+TVM_REGISTER_GLOBAL("relax.ext.msc_tensorrt").set_body_typed(MSCTensorRTCompiler);
 
 }  // namespace msc
 }  // namespace contrib

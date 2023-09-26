@@ -64,34 +64,39 @@ def to_tensorrt(
 
     codegen_config = codegen_config or {}
     codegen_config["version"] = msc_utils.get_version(MSCFramework.TENSORRT)
+    if "tensorrt_root" not in codegen_config:
+        codegen_config["tensorrt_root"] = _ffi_api.GetTensorRTRoot()
     build_folder = build_folder or msc_utils.msc_dir(keep_history=False, cleanup=True)
     output_folder = output_folder or msc_utils.msc_dir("msc_output")
 
     def _create_depends(folder: msc_utils.MSCDirectory) -> str:
         if weights:
+            # fill fake weights
+            runtime_weights = weights
+            for node in graph.get_nodes():
+                if node.optype in ("nn.conv2d", "msc.linear"):
+                    weight = node.weight_at("weight")
+                    bias = np.zeros([weight.dim_at("O")], dtype=weight.dtype_name)
+                    runtime_weights[node.name + ".bias"] = bias
+            # write weights file
             with open(folder.relpath(graph.name + ".wts"), "w") as f:
-                for name, data in weights.items():
-                    write_weight(name, data.asnumpy(), f)
-                # create fake bias
-                for node in graph.get_nodes():
-                    if node.optype in ("nn.conv2d", "msc.linear"):
-                        weight = node.weight_at("weight")
-                        bias = np.zeros([weight.dim_at("O")], dtype=weight.dtype_name)
-                        write_weight(node.name + ".bias", bias, f)
+                f.write("{}\n".format(len(runtime_weights)))
+                for name, data in runtime_weights.items():
+                    if isinstance(data, np.ndarray):
+                        write_weight(name, data, f)
+                    else:
+                        write_weight(name, data.asnumpy(), f)
             with folder.create_dir("utils") as utils_folder:
                 for name, source in get_trt_sources().items():
                     utils_folder.add_file(name, source)
 
     def _build_engine(engine_name: str, folder: msc_utils.MSCDirectory) -> str:
-        """
         process = subprocess.Popen("./" + engine_name, shell=True)
         process.wait()
         assert process.returncode == 0, "Failed to build {} under {}".format(
             engine_name, os.getcwd()
         )
         return folder.move_file(engine_name + ".trt", output_folder.create_dir(graph.name))
-        """
-        return None
 
     codegen = CodeGen(
         graph,
@@ -101,4 +106,4 @@ def to_tensorrt(
         build_folder.create_dir(graph.name),
         code_format="cpp",
     )
-    return codegen.load([], pre_load=_create_depends, post_load=_build_engine, build_model=False)
+    return codegen.load([], pre_load=_create_depends, post_load=_build_engine, build_model=True)

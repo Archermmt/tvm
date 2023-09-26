@@ -57,6 +57,25 @@ class TensorRTCodeGen : public CppCodeGen<TensorRTCodeGenConfig> {
   /*! \brief Stack the docs for the class define*/
   void CodeGenCmake() final;
 
+  /*! \brief Get describe for default node input*/
+  const String IdxInputBase(const MSCJoint& node, int idx = 0, bool as_raw = false) final {
+    const auto& pair = node->ProducerAndIdxOf(idx);
+    if (pair.first->optype == "input") {
+      return "*" + IdxNodeBase(pair.first, as_raw);
+    }
+    return "*" + IdxOutputBase(pair.first, pair.second, as_raw);
+  }
+
+  /*! \brief Get describe for default node output*/
+  const String IdxOutputBase(const MSCJoint& node, int idx = 0, bool as_raw = false) final {
+    return IdxNodeBase(node, as_raw) + "->getOutput(" + std::to_string(idx) + ")";
+  }
+
+  /*! \brief Get describe for default node weight*/
+  const String IdxWeightBase(const MSCJoint& node, const String& wtype, bool as_raw = false) final {
+    return "mWeights[\"" + node->WeightAt(wtype)->name + "\"]";
+  }
+
  protected:
   /*! \brief Get the docs for the op*/
   const Array<Doc> GetOpCodes(const MSCJoint& node) final;

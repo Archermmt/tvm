@@ -183,9 +183,9 @@ class BaseCodeGen {
     std::vector<size_t> given_version{major, minor, patch};
     for (size_t i = 0; i < 3; i++) {
       if (given_version[i] > config_->version[i]) {
-        return 1;
-      } else if (given_version[i] < config_->version[i]) {
         return -1;
+      } else if (given_version[i] < config_->version[i]) {
+        return 1;
       }
     }
     return 0;
