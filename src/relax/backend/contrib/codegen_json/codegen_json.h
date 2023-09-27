@@ -161,6 +161,7 @@ class JSONSerializer : public relax::MemoizedExprTranslator<NodeEntries> {
   void serialize(Function func) {
     // First we convert all the parameters into input nodes.
     for (const auto& param : func->params) {
+      std::cout << "[TMINFO] record param " << param->name_hint() << " : " << param << std::endl;
       auto node_ptr = std::make_shared<JSONGraphNode>(param->name_hint(), "input" /* op_type_ */);
       memo_[param] = AddNode(node_ptr, param);
     }
@@ -196,6 +197,7 @@ class JSONSerializer : public relax::MemoizedExprTranslator<NodeEntries> {
     NodeEntries ret;
     ShapeVector shape;
     TypeVector dtype;
+    std::cout << "[TMINFO] visiting " << expr << std::endl;
 
     // Flatten tuple node.
     if (const auto* tuple_sinfo = struct_info.as<TupleStructInfoNode>()) {

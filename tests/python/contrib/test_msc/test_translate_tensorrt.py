@@ -32,6 +32,24 @@ def verify_model(torch_model, input_info):
     graph_model = fx.symbolic_trace(torch_model)
     with torch.no_grad():
         mod = from_fx(graph_model, input_info)
+
+    """
+    from tvm.contrib.msc.framework.tensorrt import transform as trt_transform
+    from tvm.relax.backend.pattern_registry import get_patterns_with_prefix
+
+    patterns = get_patterns_with_prefix("msc_tensorrt")
+    print("patterns " + str(patterns))
+    mod = tvm.transform.Sequential(
+        [
+            trt_transform.TransformTensorRT(),
+            tvm.relax.transform.FoldConstant(),
+            tvm.relax.transform.FuseOpsByPattern(patterns),
+            tvm.relax.transform.MergeCompositeFunctions(),
+        ]
+    )(mod)
+    print("[TMINFO] partitioned " + str(mod))
+
+    """
     mod, graph_infos = translate.partition_for_tensorrt(mod, allow_incomplete=False)
     print("[TMINFO] partitioned " + str(mod))
 
@@ -41,20 +59,19 @@ def verify_model(torch_model, input_info):
     engine_files = {}
     for name, graph, weights in graph_infos:
         print("has graph({}):{}".format(name, graph))
+        """
         engine_files[name] = codegen.to_tensorrt(
             graph, weights, build_folder=build_folder, output_folder=output_folder
         )
+        """
 
-    print("engine_files " + str(engine_files))
-    """
-    target_options={"msc_tensorrt":engine_files}
+    target_options = {"msc_tensorrt": engine_files}
     mod = tvm.transform.Sequential(
         [
-            relax.transform.RunCodegen(target_options),
+            tvm.relax.transform.RunCodegen(target_options),
         ]
     )(mod)
     print("[TMINFO] compiled mod " + str(mod))
-    """
 
 
 def test_conv1d():
@@ -1127,4 +1144,4 @@ def test_attention():
 
 if __name__ == "__main__":
     # tvm.testing.main()
-    test_linear()
+    test_conv1d()

@@ -433,7 +433,7 @@ TVM_REGISTER_GLOBAL("msc.framework.tensorrt.GetTensorRTRoot").set_body_typed([](
 });
 
 /*!
- * \brief Create runtime modules for TensorRT.
+ * \brief Create runtime modules for MSC TensorRT.
  * \param functions The extern functions to be compiled via TensorRT
  * \return Runtime modules.
  */
@@ -441,22 +441,22 @@ Array<runtime::Module> MSCTensorRTCompiler(Array<Function> functions,
                                            Map<String, ObjectRef> target_option,
                                            Map<Constant, String> constant_names) {
   Array<runtime::Module> compiled_functions;
-  std::cout << "[TMINFO] target_option " << target_option << std::endl;
-  for (const auto& func : functions) {
-    std::cout << "[TMINFO] processing " << func << std::endl;
-  }
   for (const auto& func : functions) {
     VLOG(1) << "MSC.TensorRT partition:" << std::endl << func;
+    std::cout << "has constant_names " << constant_names << std::endl;
+    std::cout << "serialize json for " << func << std::endl;
     JSONSerializer serializer(constant_names);
     serializer.serialize(func);
     std::string graph_json = serializer.GetJSON();
     std::cout << "[TMINFO] see the graph_json " << graph_json << std::endl;
+    /*
     const auto* pf = runtime::Registry::Get("runtime.msc_tensorrt_runtime_create");
     ICHECK(pf != nullptr) << "Cannot find TensorRT runtime module create function.";
     std::string func_name = GetExtSymbol(func);
     ICHECK(target_option.count(func_name)) << "Can not find engine file for " << func_name;
     VLOG(1) << "Creating msc_tensorrt runtime::Module for '" << func_name << "'";
     compiled_functions.push_back((*pf)(func_name, graph_json, constant_names));
+    */
   }
   return compiled_functions;
 }
