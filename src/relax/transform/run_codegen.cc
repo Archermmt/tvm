@@ -54,6 +54,8 @@ class CodeGenRunner : ExprMutator {
       out_mod = WithAttr(out_mod, tvm::attr::kExternalMods, std::move(ext_mods));
     }
 
+    std::cout << "[TMINFO] out_mod pos 1 " << out_mod << std::endl;
+
     if (constant_names.size()) {
       // Some backends (e.g. TensorRT) expect constants to be passed when they are instantiated
       Map<String, runtime::NDArray> constants;
@@ -65,7 +67,10 @@ class CodeGenRunner : ExprMutator {
     }
 
     // TODO(@tvm-team): Implicit pass dependency. Revisit when we have a better way to handle this.
-    return DeadCodeElimination(out_mod, entry_functions);
+    std::cout << "[TMINFO] out_mod " << out_mod << std::endl;
+    auto res = DeadCodeElimination(out_mod, entry_functions);
+    std::cout << "[TMINFO] res " << res << std::endl;
+    return res;
   }
 
   using ExprMutator::VisitExpr_;

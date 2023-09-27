@@ -18,7 +18,7 @@
 
 import os
 import subprocess
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple, List
 import numpy as np
 
 import tvm
@@ -31,7 +31,7 @@ from .sources import get_trt_sources
 from .utils import write_weight
 
 
-def to_tensorrt(
+def to_sub_tensorrt(
     graph: MSCGraph,
     weights: Optional[Dict[str, tvm.nd.array]] = None,
     codegen_config: Optional[Dict[str, str]] = None,
@@ -106,4 +106,45 @@ def to_tensorrt(
         build_folder.create_dir(graph.name),
         code_format="cpp",
     )
-    return codegen.load([], pre_load=_create_depends, post_load=_build_engine, build_model=True)
+    engine_file = codegen.load([], pre_load=_create_depends, post_load=_build_engine)
+    return {
+        "graph_json": graph.to_json(),
+        "engine": engine_file,
+    }
+
+
+def to_tensorrt(
+    graph_infos: List[Tuple[str, MSCGraph, Dict[str, tvm.nd.array]]],
+    codegen_config: Optional[Dict[str, str]] = None,
+    print_config: Optional[Dict[str, str]] = None,
+    build_folder: msc_utils.MSCDirectory = None,
+    output_folder: msc_utils.MSCDirectory = None,
+) -> Dict[str, str]:
+    """Change all MSCGraphs to TensorRT engine files.
+
+    Parameters
+    ----------
+    graph_infos: list<name, graph, name>
+        The translated graph.
+    codegen_config: dict
+        The config for codegen.
+    print_config: dict
+        The config for print.
+    build_folder: MSCDirectory
+        The folder for saving sources and datas.
+    export_folder: MSCDirectory
+        The folder for saving outputs.
+
+    Returns
+    -------
+    target_options: dict<str, str>
+        The target options.
+    """
+
+    target_options = {}
+    for name, graph, weights in graph_infos:
+        options = to_sub_tensorrt(
+            graph, weights, codegen_config, print_config, build_folder, output_folder
+        )
+        target_options[name] = msc_utils.dump_dict(options)
+    return {"msc_tensorrt": target_options}

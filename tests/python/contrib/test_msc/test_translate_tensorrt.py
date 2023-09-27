@@ -15,7 +15,9 @@
 # specific language governing permissions and limitations
 # under the License.
 
-""" Test translate from TensorrRT. """
+""" Test translate for TensorrRT. """
+
+import numpy as np
 
 import torch
 from torch import fx
@@ -28,50 +30,61 @@ from tvm.contrib.msc.framework.tensorrt import codegen
 from tvm.contrib.msc.core import utils as msc_utils
 
 
+def build_and_run(mod, inputs):
+    target = tvm.target.Target("cuda")
+    mod = tvm.relax.transform.LegalizeOps()(mod)
+    with tvm.transform.PassContext(opt_level=3):
+        exec = tvm.relax.build(mod, target)
+        runnable = tvm.relax.VirtualMachine(exec, tvm.cuda())
+    res = runnable["main"](*inputs)
+    if isinstance(res, tvm.runtime.NDArray):
+        return [res.asnumpy()]
+    return [e.asnumpy() for e in res]
+
+
 def verify_model(torch_model, input_info):
     graph_model = fx.symbolic_trace(torch_model)
+    datas = [np.random.rand(*i[0]).astype(i[1]) for i in input_info]
+    torch_datas = [torch.from_numpy(i) for i in datas]
     with torch.no_grad():
+        golden = torch_model(*torch_datas)
         mod = from_fx(graph_model, input_info)
+    if not isinstance(golden, (list, tuple)):
+        golden = [golden]
+    golden = [g.detach().cpu().numpy() for g in golden]
 
-    """
-    from tvm.contrib.msc.framework.tensorrt import transform as trt_transform
-    from tvm.relax.backend.pattern_registry import get_patterns_with_prefix
-
-    patterns = get_patterns_with_prefix("msc_tensorrt")
-    print("patterns " + str(patterns))
-    mod = tvm.transform.Sequential(
-        [
-            trt_transform.TransformTensorRT(),
-            tvm.relax.transform.FoldConstant(),
-            tvm.relax.transform.FuseOpsByPattern(patterns),
-            tvm.relax.transform.MergeCompositeFunctions(),
-        ]
-    )(mod)
-    print("[TMINFO] partitioned " + str(mod))
-
-    """
     mod, graph_infos = translate.partition_for_tensorrt(mod, allow_incomplete=False)
     print("[TMINFO] partitioned " + str(mod))
 
+    """
     build_folder = msc_utils.msc_dir("msc_test")
     output_folder = msc_utils.msc_dir("msc_output")
+    target_options = codegen.to_tensorrt(
+        graph_infos, build_folder=build_folder, output_folder=output_folder
+    )
+    """
 
-    engine_files = {}
+    target_options = {}
     for name, graph, weights in graph_infos:
-        print("has graph({}):{}".format(name, graph))
-        """
-        engine_files[name] = codegen.to_tensorrt(
-            graph, weights, build_folder=build_folder, output_folder=output_folder
-        )
-        """
+        options = {
+            "graph_json": graph.to_json(),
+            "engine": "fake_{}.trt".format(graph.name),
+        }
+        target_options[name] = msc_utils.dump_dict(options)
+    target_options = {"msc_tensorrt": target_options}
 
-    target_options = {"msc_tensorrt": engine_files}
     mod = tvm.transform.Sequential(
         [
             tvm.relax.transform.RunCodegen(target_options),
         ]
     )(mod)
     print("[TMINFO] compiled mod " + str(mod))
+    tvm_datas = [tvm.nd.array(i) for i in datas]
+    results = build_and_run(mod, tvm_datas)
+    print("results " + str(results))
+    raise Exception("stop here!!")
+    for gol, res in zip(golden, results):
+        tvm.testing.assert_allclose(gol, res, atol=1e-5, rtol=1e-5)
 
 
 def test_conv1d():

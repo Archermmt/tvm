@@ -305,31 +305,32 @@ def byoc_partition(
     if params:
         mod = BindParams("main", params)(mod)
 
-    patterns = get_patterns_with_prefix(target)
-    mod = tvm.transform.Sequential(
-        [
-            tvm.relax.transform.FuseOpsByPattern(
-                patterns, bind_constants=False, annotate_codegen=False
-            ),
-            tvm.relax.transform.MergeCompositeFunctions(),
-            msc_transform.SetExprName(target=target),
-            msc_transform.SetExprLayout(trans_config.get("allow_layout_missing", True)),
-        ]
-    )(mod)
+    def _partition_mod(mod, as_msc=True):
+        patterns = get_patterns_with_prefix(target)
+        bind_constants = not as_msc
+        return tvm.transform.Sequential(
+            [
+                tvm.relax.transform.FuseOpsByPattern(patterns, bind_constants=bind_constants),
+                tvm.relax.transform.MergeCompositeFunctions(),
+                msc_transform.SetExprName(target=target),
+                msc_transform.SetExprLayout(trans_config.get("allow_layout_missing", True)),
+            ]
+        )(mod)
 
     def _is_target_func(func):
         if "Codegen" not in func.attrs:
             return False
         return func.attrs["Codegen"] == target
 
-    func_names = [var.name_hint for var, func in mod.functions.items() if _is_target_func(func)]
+    msc_mod = _partition_mod(mod)
+    func_names = [var.name_hint for var, func in msc_mod.functions.items() if _is_target_func(func)]
 
     if not allow_incomplete:
-        BYOCChecker().check(func_names, mod[entry])
+        BYOCChecker().check(func_names, msc_mod[entry])
 
-    graphs_info, all_weights = [], _ffi_api.GetRelaxWeights(mod, entry)
+    graphs_info, all_weights = [], _ffi_api.GetRelaxWeights(msc_mod, entry)
     for idx, name in enumerate(func_names):
         build_config["graph_name"] = target + "_" + str(idx)
-        graph = _ffi_api.BuildFromRelax(mod, name, msc_utils.dump_dict(build_config))
+        graph = _ffi_api.BuildFromRelax(msc_mod, name, msc_utils.dump_dict(build_config))
         graphs_info.append((name, graph, normalize_weights(all_weights, graph)))
-    return mod, graphs_info
+    return _partition_mod(mod, False), graphs_info

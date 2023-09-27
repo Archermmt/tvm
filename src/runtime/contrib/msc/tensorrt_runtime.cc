@@ -79,13 +79,19 @@ class MSCTensorRTRuntime : public JSONRuntimeBase {
   void Init(const Array<NDArray>& consts) override {
     ICHECK_EQ(consts.size(), const_idx_.size())
         << "The number of input constants must match the number of required.";
+    LoadGlobalOptions();
+    std::cout << "engine_file_ " << engine_file_ << std::endl;
   }
 
-  /*!
-   * \brief Load engine from file.
-   *
-   * \param engine_file The engine file.
-   */
+  void LoadGlobalOptions() {
+    // These settings are global to the entire subgraph. Codegen will add them as attributes to all
+    // op nodes. Read from first one.
+    for (size_t i = 0; i < nodes_.size(); ++i) {
+      if (nodes_[i].HasAttr("msc_global_options_num")) {
+        engine_file_ = nodes_[i].GetAttr<std::vector<std::string>>("msc_global_engine")[0];
+      }
+    }
+  }
 
 #ifdef TVM_GRAPH_EXECUTOR_TENSORRT
   void LoadEngine(const String& engine_file) {
@@ -105,6 +111,9 @@ class MSCTensorRTRuntime : public JSONRuntimeBase {
                << "Please build with USE_TENSORRT_RUNTIME.";
   }
 #endif  // TVM_GRAPH_EXECUTOR_TENSORRT
+
+ private:
+  String engine_file_;
 };
 
 runtime::Module MSCTensorRTRuntimeCreate(const String& symbol_name, const String& graph_json,

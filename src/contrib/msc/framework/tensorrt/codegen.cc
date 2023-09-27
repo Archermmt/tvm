@@ -27,15 +27,17 @@
 #include <tvm/ir/module.h>
 #include <tvm/relax/expr.h>
 
+#include "../../core/codegen/codegen_json.h"
+/*
 #include "../../../../relax/backend/contrib/codegen_json/codegen_json.h"
 #include "../../../../relax/transform/utils.h"
+*/
 
 namespace tvm {
 namespace contrib {
 namespace msc {
 
 using namespace tvm::relax;
-using JSONSerializer = backend::contrib::JSONSerializer;
 
 void TensorRTCodeGen::CodeGenClassDeclare() {
   stack_.line("#include \"NvInfer.h\"")
@@ -443,20 +445,18 @@ Array<runtime::Module> MSCTensorRTCompiler(Array<Function> functions,
   Array<runtime::Module> compiled_functions;
   for (const auto& func : functions) {
     VLOG(1) << "MSC.TensorRT partition:" << std::endl << func;
-    std::cout << "has constant_names " << constant_names << std::endl;
-    std::cout << "serialize json for " << func << std::endl;
-    JSONSerializer serializer(constant_names);
+    std::string func_name = GetExtSymbol(func);
+    ICHECK(target_option.count(func_name)) << "Can not find target option for " << func_name;
+    const auto& options = Downcast<String>(target_option[func_name]);
+    MSCJSONSerializer serializer(constant_names, options);
     serializer.serialize(func);
     std::string graph_json = serializer.GetJSON();
-    std::cout << "[TMINFO] see the graph_json " << graph_json << std::endl;
-    /*
     const auto* pf = runtime::Registry::Get("runtime.msc_tensorrt_runtime_create");
     ICHECK(pf != nullptr) << "Cannot find TensorRT runtime module create function.";
-    std::string func_name = GetExtSymbol(func);
-    ICHECK(target_option.count(func_name)) << "Can not find engine file for " << func_name;
     VLOG(1) << "Creating msc_tensorrt runtime::Module for '" << func_name << "'";
-    compiled_functions.push_back((*pf)(func_name, graph_json, constant_names));
-    */
+    std::cout << "[TMINFO] get func " << func << std::endl;
+    std::cout << "has graph json " << func_name << " : " << graph_json << std::endl;
+    compiled_functions.push_back((*pf)(func_name, graph_json, serializer.GetConstantNames()));
   }
   return compiled_functions;
 }

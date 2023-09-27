@@ -161,7 +161,6 @@ class JSONSerializer : public relax::MemoizedExprTranslator<NodeEntries> {
   void serialize(Function func) {
     // First we convert all the parameters into input nodes.
     for (const auto& param : func->params) {
-      std::cout << "[TMINFO] record param " << param->name_hint() << " : " << param << std::endl;
       auto node_ptr = std::make_shared<JSONGraphNode>(param->name_hint(), "input" /* op_type_ */);
       memo_[param] = AddNode(node_ptr, param);
     }
@@ -197,7 +196,6 @@ class JSONSerializer : public relax::MemoizedExprTranslator<NodeEntries> {
     NodeEntries ret;
     ShapeVector shape;
     TypeVector dtype;
-    std::cout << "[TMINFO] visiting " << expr << std::endl;
 
     // Flatten tuple node.
     if (const auto* tuple_sinfo = struct_info.as<TupleStructInfoNode>()) {
@@ -212,6 +210,10 @@ class JSONSerializer : public relax::MemoizedExprTranslator<NodeEntries> {
         dtype.emplace_back(DType2String(tensor_sinfo->dtype));
       }
       node->SetNumOutput(tuple_sinfo->fields.size());
+    } else if (const auto* shape_sinfo = struct_info.as<ShapeStructInfoNode>()) {
+      ICHECK(shape_sinfo->values.defined()) << "Expect ShapeStructInfo with defined values";
+      shape.emplace_back(std::vector<int64_t>{shape_sinfo->ndim});
+      dtype.emplace_back("int32");
     } else {
       const auto* tensor_sinfo = struct_info.as<TensorStructInfoNode>();
       ICHECK(tensor_sinfo) << "Expect TensorStructInfo, but received: "
