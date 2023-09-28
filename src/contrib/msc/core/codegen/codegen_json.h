@@ -85,19 +85,15 @@ class MSCJSONSerializer : public JSONSerializer {
 
   std::vector<JSONGraphNodeEntry> VisitExpr_(const CallNode* call_node) final;
 
-  void AddNodeAttr(JSONGraphObjectPtr node, const String& key, const String& value) {
-    std::vector<std::string> array_value{std::string(value)};
-    std::vector<dmlc::any> dmlc_value;
-    dmlc_value.emplace_back(array_value);
-    node->SetAttr(std::string(key), dmlc_value);
-  }
-
   const String GetOption(const String& key) {
     ICHECK(options_.count(key)) << "Can not find option " << key;
     return options_[key];
   }
 
   const Map<String, String> GetOptions() { return options_; }
+
+ protected:
+  void AddNodeAttr(JSONGraphObjectPtr node, const String& key, const String& value);
 
  private:
   MSCGraph graph_;

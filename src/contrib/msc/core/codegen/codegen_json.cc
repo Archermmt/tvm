@@ -51,6 +51,14 @@ std::vector<JSONGraphNodeEntry> MSCJSONSerializer::VisitExpr_(const CallNode* ca
   return AddNode(node, GetRef<Expr>(call_node));
 }
 
+void MSCJSONSerializer::AddNodeAttr(JSONGraphObjectPtr node, const String& key,
+                                    const String& value) {
+  std::vector<std::string> array_value{std::string(value)};
+  std::vector<dmlc::any> dmlc_value;
+  dmlc_value.emplace_back(array_value);
+  node->SetAttr(std::string(key), dmlc_value);
+}
+
 }  // namespace msc
 }  // namespace contrib
 }  // namespace tvm

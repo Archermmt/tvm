@@ -28,10 +28,6 @@
 #include <tvm/relax/expr.h>
 
 #include "../../core/codegen/codegen_json.h"
-/*
-#include "../../../../relax/backend/contrib/codegen_json/codegen_json.h"
-#include "../../../../relax/transform/utils.h"
-*/
 
 namespace tvm {
 namespace contrib {
@@ -451,11 +447,10 @@ Array<runtime::Module> MSCTensorRTCompiler(Array<Function> functions,
     MSCJSONSerializer serializer(constant_names, options);
     serializer.serialize(func);
     std::string graph_json = serializer.GetJSON();
+    std::cout << "graph_json " << graph_json << std::endl;
     const auto* pf = runtime::Registry::Get("runtime.msc_tensorrt_runtime_create");
     ICHECK(pf != nullptr) << "Cannot find TensorRT runtime module create function.";
     VLOG(1) << "Creating msc_tensorrt runtime::Module for '" << func_name << "'";
-    std::cout << "[TMINFO] get func " << func << std::endl;
-    std::cout << "has graph json " << func_name << " : " << graph_json << std::endl;
     compiled_functions.push_back((*pf)(func_name, graph_json, serializer.GetConstantNames()));
   }
   return compiled_functions;

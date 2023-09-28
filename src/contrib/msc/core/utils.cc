@@ -84,7 +84,7 @@ bool StringUtils::EndsWith(const String& src_string, const String& sub_string) {
   const std::string& src_cstring = src_string;
   const std::string& sub_cstring = sub_string;
   int pos = src_cstring.rfind(sub_cstring);
-  return pos == src_cstring.size() - sub_cstring.size();
+  return static_cast<size_t>(pos) == src_cstring.size() - sub_cstring.size();
 }
 
 const Array<String> StringUtils::Split(const String& src_string, const String& sep) {
@@ -269,7 +269,9 @@ const Array<String> ExprUtils::GetInputTypes(const String& optype, size_t inputs
   Array<String> input_types;
   if (as_relax && (optype == "broadcast_to" || optype == "reshape")) {
     input_types.push_back("input");
-    input_types.push_back("shape");
+    if (inputs_num > 1) {
+      input_types.push_back("shape");
+    }
   } else if (optype == "clip" && as_relax) {
     input_types.push_back("input");
     input_types.push_back("min");
@@ -285,24 +287,34 @@ const Array<String> ExprUtils::GetInputTypes(const String& optype, size_t inputs
     input_types.push_back("size");
   } else if (optype == "nn.conv1d" || optype == "nn.conv2d" || optype == "nn.conv3d") {
     input_types.push_back("input");
-    input_types.push_back("weight");
+    if (inputs_num > 1) {
+      input_types.push_back("weight");
+    }
   } else if (optype == "nn.batch_norm") {
     input_types.push_back("input");
-    input_types.push_back("gamma");
-    input_types.push_back("beta");
-    input_types.push_back("mean");
-    input_types.push_back("var");
+    if (inputs_num > 1) {
+      input_types.push_back("gamma");
+      input_types.push_back("beta");
+      input_types.push_back("mean");
+      input_types.push_back("var");
+    }
   } else if (optype == "nn.layer_norm" || optype == "nn.group_norm") {
     input_types.push_back("input");
-    input_types.push_back("gamma");
-    input_types.push_back("beta");
+    if (inputs_num > 1) {
+      input_types.push_back("gamma");
+      input_types.push_back("beta");
+    }
   } else if (optype == "msc.linear") {
     input_types.push_back("input");
-    input_types.push_back("weight");
+    if (inputs_num > 1) {
+      input_types.push_back("weight");
+    }
   } else if (optype == "msc.conv1d_bias" || optype == "msc.conv2d_bias") {
     input_types.push_back("input");
-    input_types.push_back("weight");
-    input_types.push_back("bias");
+    if (inputs_num > 1) {
+      input_types.push_back("weight");
+      input_types.push_back("bias");
+    }
     if (as_relax && inputs_num > 3) {
       input_types.push_back("expand_bias");
     }

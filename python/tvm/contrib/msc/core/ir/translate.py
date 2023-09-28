@@ -307,15 +307,22 @@ def byoc_partition(
 
     def _partition_mod(mod, as_msc=True):
         patterns = get_patterns_with_prefix(target)
-        bind_constants = not as_msc
-        return tvm.transform.Sequential(
+        if as_msc:
+            passes = [tvm.relax.transform.FuseOpsByPattern(patterns, bind_constants=False)]
+        else:
+            passes = [
+                tvm.relax.transform.FuseOpsByPattern(patterns, bind_constants=True),
+                msc_transform.BindShape(),
+                tvm.relax.transform.DeadCodeElimination(),
+            ]
+        passes.extend(
             [
-                tvm.relax.transform.FuseOpsByPattern(patterns, bind_constants=bind_constants),
                 tvm.relax.transform.MergeCompositeFunctions(),
                 msc_transform.SetExprName(target=target),
                 msc_transform.SetExprLayout(trans_config.get("allow_layout_missing", True)),
             ]
-        )(mod)
+        )
+        return tvm.transform.Sequential(passes)(mod)
 
     def _is_target_func(func):
         if "Codegen" not in func.attrs:
