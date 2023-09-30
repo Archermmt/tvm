@@ -129,9 +129,10 @@ const MSCGraph RelaxGraphBuilder::Build(const relax::Function& func) {
         continue;
       }
       const auto& producer = graph->FindProducer(output_names[i]);
-      output->alias = producer->outputs.size() == 1
-                          ? producer->name
-                          : StringUtils::Replace(output_names[i], ":", "_");
+      const auto& alias = producer->outputs.size() == 1
+                              ? producer->name
+                              : StringUtils::Replace(output_names[i], ":", "_");
+      output->alias = StringUtils::Replace(alias, ".", "_");
     }
   }
   return graph;

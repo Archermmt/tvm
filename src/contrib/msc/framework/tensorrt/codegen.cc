@@ -44,6 +44,7 @@ void TensorRTCodeGen::CodeGenClassDeclare() {
       .line("using namespace nvinfer1;")
       .line();
   StartNamespace();
+  // start class declare
   stack_.class_def(graph()->name).class_start().scope_start("public:");
   // declare build method
   stack_.func_def("Build", "bool")
@@ -53,14 +54,6 @@ void TensorRTCodeGen::CodeGenClassDeclare() {
     stack_.func_arg("config", "TRTPtr<IBuilderConfig>&");
   }
   stack_.func_arg("logger", "TRTLogger&").func_start().func_end();
-  // declare test method
-  stack_.func_def("Test", "bool")
-      .func_arg("engine", "TRTPtr<ICudaEngine>&")
-      .func_arg("reader", "DatasetReader&")
-      .func_arg("test_iter", "size_t")
-      .func_arg("logger", "TRTLogger&")
-      .func_start()
-      .func_end();
   // define cleanup method
   stack_.func_def("CleanUp", "bool")
       .func_start()
@@ -73,7 +66,15 @@ void TensorRTCodeGen::CodeGenClassDeclare() {
   stack_.scope_end();
   // private scope
   stack_.scope_start("private:").declare("std::map<std::string, Weights>", "mWeights").scope_end();
-  stack_.class_end();
+  // end class declare
+  stack_.class_end().line();
+  // declare test function
+  stack_.func_def("test_" + graph()->name, "bool")
+      .func_arg("engine", "std::shared_ptr<ICudaEngine>&")
+      .func_arg("reader", "DatasetReader&")
+      .func_arg("logger", "TRTLogger&")
+      .func_start()
+      .func_end();
   EndNamespace();
 }
 
@@ -83,7 +84,7 @@ void TensorRTCodeGen::CodeGenClassDefine() {
     this->stack_
         .func_call("getBindingIndex", DocUtils::ToDeclareDoc("int", idx_var),
                    DocUtils::ToPtrDoc("engine"))
-        .call_arg(DocUtils::ToStrDoc(tensor->alias))
+        .call_arg(DocUtils::ToStrDoc(tensor->name))
         .func_call("CHECK")
         .func_call("cudaMalloc")
         .call_arg("&gpu_buffers[" + idx_var + "]")
@@ -120,13 +121,34 @@ void TensorRTCodeGen::CodeGenClassDefine() {
     stack_.func_call("markOutput", NullOpt, DocUtils::ToPtrDoc("network"))
         .call_arg("*" + IdxOutputBase(pair.first, pair.second));
   }
+  // mark batch_size
+  stack_.comment("Mark batch size");
+  stack_.func_call("createOptimizationProfile", DocUtils::ToDeclareDoc("auto", "profile"),
+                   DocUtils::ToPtrDoc("builder"));
+  Array<String> batch_flags{"MIN", "MAX", "OPT"};
+  for (const auto& i : graph()->GetInputs()) {
+    for (const auto& f : batch_flags) {
+      stack_.func_call("setDimensions", NullOpt, DocUtils::ToPtrDoc("profile"))
+          .call_arg(DocUtils::ToStrDoc(i->name))
+          .call_arg("OptProfileSelector::k" + f)
+          .call_arg(ToDims(i->shape));
+    }
+  }
+  // set max workspace
+  stack_.comment("Set max worksapce");
+  if (CompareVersion(6, 0, 0) >= 0) {
+    stack_.func_call("setMaxWorkspaceSize", NullOpt, DocUtils::ToPtrDoc("config"))
+        .call_arg(config()->max_workspace);
+  } else {
+    stack_.func_call("setMaxWorkspaceSize", NullOpt, DocUtils::ToPtrDoc("builder"))
+        .call_arg(config()->max_workspace);
+  }
   // end define build method
   stack_.func_end("true");
-  // start define test method
-  stack_.func_def(graph()->name + "::Test", "bool")
-      .func_arg("engine", "TRTPtr<ICudaEngine>&")
+  // start define test function
+  stack_.func_def("test_" + graph()->name, "bool")
+      .func_arg("engine", "std::shared_ptr<ICudaEngine>&")
       .func_arg("reader", "DatasetReader&")
-      .func_arg("test_iter", "size_t")
       .func_arg("logger", "TRTLogger&")
       .func_start();
   stack_.comment("Create context")
@@ -135,9 +157,7 @@ void TensorRTCodeGen::CodeGenClassDefine() {
       .pop_nest();
   ReturnOnFail("context", "Failed to create the context");
   // prepare variables
-  stack_.declare("size_t", "cnt", 0, false)
-      .declare_arg(0)
-      .declare("bool", "pass", 0, false)
+  stack_.declare("bool", "pass", 0, false)
       .declare_arg("true")
       .declare("cudaStream_t", "stream")
       .func_call("CHECK")
@@ -159,7 +179,7 @@ void TensorRTCodeGen::CodeGenClassDefine() {
   }
   // read and test datas
   stack_.comment("Read and test datas")
-      .while_start("reader.ReadNext(cpu_buffers) && cnt < test_iter")
+      .while_start("reader.ReadNext(cpu_buffers)")
       .comment("Memcopy inputs host to device");
   // copy inputs
   for (const auto& i : graph()->GetInputs()) {
@@ -232,9 +252,9 @@ void TensorRTCodeGen::CodeGenMain() {
       .declare("TRTLogger", "logger")
       .func_call("logger.setLogSeverity");
   if (config()->log_level == 0) {
-    stack_.call_arg("ILogger::Severity::kVERBOSE");
-  } else if (config()->log_level == 1) {
     stack_.call_arg("ILogger::Severity::kINFO");
+  } else if (config()->log_level == 1) {
+    stack_.call_arg("ILogger::Severity::kVERBOSE");
   } else {
     stack_.call_arg("ILogger::Severity::kWARNING");
   }
@@ -259,7 +279,10 @@ void TensorRTCodeGen::CodeGenMain() {
   ReturnOnFail("builder", "Failed to create builder");
   // create network
   if (CompareVersion(6, 0, 0) >= 0) {
-    stack_.assign("flags", "0", "uint32_t")
+    stack_
+        .assign("flags",
+                "1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kEXPLICIT_BATCH)",
+                "uint32_t")
         .func_call("TRTPtr<INetworkDefinition>", DocUtils::ToDeclareDoc("auto", "network"))
         .func_call("createNetworkV2", NullOpt, DocUtils::ToPtrDoc("builder"))
         .call_arg("flags")
@@ -339,12 +362,12 @@ void TensorRTCodeGen::CodeGenMain() {
   if (config()->test_iter > 0) {
     stack_.comment("Prepare dataset")
         .declare("DatasetReader", "reader")
-        .declare_arg(DocUtils::ToStrDoc(config()->dataset));
+        .declare_arg(DocUtils::ToStrDoc(config()->dataset))
+        .declare_arg(config()->test_iter);
     stack_.comment("Test engine by datas")
-        .func_call("model.Test", "pass")
+        .func_call("test_" + graph()->name, "pass")
         .call_arg("engine")
         .call_arg("reader")
-        .call_arg(config()->test_iter)
         .call_arg("logger");
   }
   ReturnOnFail("pass", "Failed to test the engine");
@@ -402,6 +425,27 @@ void TensorRTCodeGen::ReturnOnFail(const String& flag, const String& err) {
       .cond_end();
 }
 
+template <typename T>
+const String TensorRTCodeGen::ToDims(const std::vector<T>& dims, bool use_ndim) {
+  if (dims.size() == 2 && !use_ndim) {
+    return "DimsHW{" + std::to_string(dims[0]) + "," + std::to_string(dims[1]) + "}";
+  }
+  String dims_str = "Dims({" + std::to_string(dims.size()) + ",{";
+  for (size_t i = 0; i < dims.size(); i++) {
+    dims_str = dims_str + std::to_string(dims[i]) + (i < dims.size() - 1 ? "," : "");
+  }
+  dims_str = dims_str + "}})";
+  return dims_str;
+}
+
+const String TensorRTCodeGen::ToDims(const Array<Integer>& dims, bool use_ndim) {
+  std::vector<int64_t> int_dims;
+  for (const auto& d : dims) {
+    int_dims.push_back(d->value);
+  }
+  return ToDims(int_dims, use_ndim);
+}
+
 const Array<Doc> TensorRTCodeGen::GetOpCodes(const MSCJoint& node) {
   const auto& ops_map = GetTensorRTOpCodes();
   auto it = ops_map->find(node->optype);
@@ -447,7 +491,6 @@ Array<runtime::Module> MSCTensorRTCompiler(Array<Function> functions,
     MSCJSONSerializer serializer(constant_names, options);
     serializer.serialize(func);
     std::string graph_json = serializer.GetJSON();
-    std::cout << "graph_json " << graph_json << std::endl;
     const auto* pf = runtime::Registry::Get("runtime.msc_tensorrt_runtime_create");
     ICHECK(pf != nullptr) << "Cannot find TensorRT runtime module create function.";
     VLOG(1) << "Creating msc_tensorrt runtime::Module for '" << func_name << "'";

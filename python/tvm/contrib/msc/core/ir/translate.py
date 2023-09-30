@@ -250,9 +250,7 @@ class BYOCChecker(PyExprVisitor):
             self.visit_expr(expr)
         elif isinstance(expr, tvm.relax.BindingBlock):
             self.visit_binding_block(expr)
-        assert len(self._non_target_exprs) == 0, "Exprs not on target {}".format(
-            self._non_target_exprs
-        )
+        assert len(self._non_target_exprs) == 0, "Some exprs not on target {}".format(expr)
 
     def visit_var_binding_(self, binding) -> None:
         super().visit_var_binding_(binding)

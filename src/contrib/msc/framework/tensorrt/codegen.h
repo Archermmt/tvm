@@ -88,6 +88,11 @@ class TensorRTCodeGen : public CppCodeGen<TensorRTCodeGenConfig> {
 
   /*! \brief Generate describe for tensor bytes*/
   const String GetTensorBytes(const MSCTensor& tensor);
+
+  /*! \brief Get the tensorrt dims from dims*/
+  template <typename T>
+  const String ToDims(const std::vector<T>& dims, bool use_ndim = true);
+  const String ToDims(const Array<Integer>& dims, bool use_ndim = true);
 };
 
 }  // namespace msc

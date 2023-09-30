@@ -93,7 +93,7 @@ def to_sub_tensorrt(
     def _build_engine(engine_name: str, folder: msc_utils.MSCDirectory) -> str:
         process = subprocess.Popen("./" + engine_name, shell=True)
         process.wait()
-        assert process.returncode == 0, "Failed to build {} under {}".format(
+        assert process.returncode == 0, "Failed to test engine {} under {}".format(
             engine_name, os.getcwd()
         )
         return folder.move_file(engine_name + ".trt", output_folder.create_dir(graph.name))

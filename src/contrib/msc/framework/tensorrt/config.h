@@ -39,6 +39,7 @@ struct TensorRTCodeGenConfig {
   int log_level{0};
   int profile_level{0};
   int test_iter{0};
+  size_t max_workspace{1 << 20};
   std::string cmake_version{"3.5"};
   std::string dataset{"Dataset"};
   std::string tensorrt_root{"/usr/local/cuda"};
@@ -53,6 +54,8 @@ struct TensorRTCodeGenConfig {
         reader->Read(&profile_level);
       } else if (key == "test_iter") {
         reader->Read(&test_iter);
+      } else if (key == "max_workspace") {
+        reader->Read(&max_workspace);
       } else if (key == "cmake_version") {
         reader->Read(&cmake_version);
       } else if (key == "dataset") {

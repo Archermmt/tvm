@@ -97,6 +97,7 @@ def _elemwise_check(context: PatternCheckContext) -> bool:
         return False
     ndim_a = len(context.annotated_expr["input_0"].struct_info.shape.values)
     ndim_b = len(context.annotated_expr["input_1"].struct_info.shape.values)
+    print("[TMINFO] checking elemwise with ndim_a {}, ndim_b {}".format(ndim_a, ndim_b))
     return ndim_a == ndim_b
 
 
@@ -170,16 +171,6 @@ def get_patterns(target) -> List[Pattern]:
                 target + ".msc.conv2d_bias",
                 *msc_pattern.make_opt_relax_conv_bias_pattern("relax.nn.conv2d"),
                 wrap_basic_check(msc_pattern._check_opt_relax_conv_bias),
-            ),
-            (
-                target + ".msc.linear",
-                *msc_pattern.make_opt_relax_linear_pattern(),
-                wrap_basic_check(msc_pattern._check_opt_relax_linear),
-            ),
-            (
-                target + ".msc.linear_bias",
-                *msc_pattern.make_opt_relax_linear_bias_pattern(),
-                wrap_basic_check(msc_pattern._check_opt_relax_linear_bias),
             ),
         ]
     )

@@ -35,6 +35,9 @@
 #include "../json/json_runtime.h"
 
 #ifdef TVM_GRAPH_EXECUTOR_TENSORRT
+#include "../../../runtime/cuda/cuda_common.h"
+#include "../tensorrt/tensorrt_logger.h"
+#include "../tensorrt/tensorrt_utils.h"
 #endif
 
 namespace tvm {
@@ -42,6 +45,10 @@ namespace runtime {
 namespace contrib {
 
 using namespace tvm::runtime::json;
+
+#ifdef TVM_GRAPH_EXECUTOR_TENSORRT
+using namespace nvinfer1;
+#endif
 
 class MSCTensorRTRuntime : public JSONRuntimeBase {
  public:
@@ -57,7 +64,10 @@ class MSCTensorRTRuntime : public JSONRuntimeBase {
                               const Array<String>& const_names)
       : JSONRuntimeBase(symbol_name, graph_json, const_names) {}
 
-  ~MSCTensorRTRuntime() override { VLOG(1) << "Destroying MSC TensorRT runtime"; }
+  ~MSCTensorRTRuntime() override {
+    VLOG(1) << "Destroying MSC TensorRT runtime";
+    DestroyEngine();
+  }
 
   /*!
    * \brief The type key of the module.
@@ -80,7 +90,7 @@ class MSCTensorRTRuntime : public JSONRuntimeBase {
     ICHECK_EQ(consts.size(), const_idx_.size())
         << "The number of input constants must match the number of required.";
     LoadGlobalOptions();
-    std::cout << "engine_file_ " << engine_file_ << std::endl;
+    LoadEngine(engine_file_);
   }
 
   void LoadGlobalOptions() {
@@ -94,26 +104,171 @@ class MSCTensorRTRuntime : public JSONRuntimeBase {
   }
 
 #ifdef TVM_GRAPH_EXECUTOR_TENSORRT
-  void LoadEngine(const String& engine_file) {
-    std::cout << "[TMINFO] get engine_file " << engine_file << std::endl;
+  void Run() override {
+    SetInputOutputBinds();
+    auto tvm_stream = CUDAThreadEntry::ThreadLocal()->stream;
+#if TRT_VERSION_GE(6, 0, 1)
+    ICHECK(context_->enqueueV2(bindings_.data(), tvm_stream, nullptr))
+        << "Running TensorRT failed.";
+#else
+    LOG_FATAL << "Only support tensorrt with version >=6.0.0";
+#endif
+    // Copy outputs from GPU buffers if needed.
+    for (size_t i = 0; i < outputs_.size(); ++i) {
+      auto nid = outputs_[i].id_;
+      uint32_t eid = EntryID(outputs_[i]);
+      const auto& name = nodes_[nid].GetOpName() + ":" + std::to_string(outputs_[i].index_);
+      int binding_index = engine_->getBindingIndex(name.c_str());
+      ICHECK_NE(binding_index, -1);
+      if (data_entry_[eid]->device.device_type != kDLCUDA) {
+        auto device_buffer = GetOrAllocateDeviceBuffer(eid, binding_index);
+        device_buffer.CopyTo(const_cast<DLTensor*>(data_entry_[eid]));
+      }
+    }
   }
 
-  void Run() override { std::cout << "[TMINFO] calling run of msc tensorrt" << std::endl; }
+  bool LoadEngine(const String& engine_file) {
+    IRuntime* runtime = createInferRuntime(logger_);
+    // build engine
+    std::ifstream input(engine_file_, std::ifstream::binary);
+    if (!input.is_open() || !input.good()) {
+      LOG_ERROR << "Failed to open engine file " << engine_file_;
+      return false;
+    }
+    std::vector<char> stream;
+    size_t size = 0;
+    input.seekg(0, input.end);
+    size = input.tellg();
+    input.seekg(0, input.beg);
+    stream.resize(size);
+    input.read(stream.data(), size);
+    input.close();
+
+#if TRT_VERSION_GE(8, 0, 0)
+    engine_ = runtime->deserializeCudaEngine(stream.data(), size);
+#else
+    engine_ = runtime->deserializeCudaEngine(stream.data(), size, nullptr);
+#endif
+    if (!engine_) {
+      LOG_ERROR << "Failed to load engine";
+      return false;
+    }
+    // create context
+    context_ = engine_->createExecutionContext();
+    if (!context_) {
+      LOG_ERROR << "Failed to create context";
+      return false;
+    }
+    // resize bindings
+    size_t num_binding = static_cast<size_t>(engine_->getNbBindings());
+    bindings_.resize(num_binding);
+    binding_sizes_.resize(num_binding);
+    for (size_t i = 0; i < num_binding; i++) {
+      bindings_[i] = nullptr;
+      binding_sizes_[i] = 0;
+    }
+    return true;
+  }
+
+  void DestroyEngine() {
+#if TRT_VERSION_GE(8, 0, 0)
+    delete context_;
+    delete engine_;
+#else
+    context_->destroy();
+    engine_->destroy();
+#endif
+    engine_ = nullptr;
+    context_ = nullptr;
+  }
+
+  void SetInputOutputBinds() {
+    // Setup input bindings
+    for (size_t i = 0; i < input_nodes_.size(); ++i) {
+      auto nid = input_nodes_[i];
+      if (nodes_[nid].GetOpType() == "input") {
+        for (size_t j = 0; j < nodes_[nid].GetOpShape().size(); ++j) {
+          uint32_t eid = EntryID(nid, j);
+          const auto& name = nodes_[nid].GetOpName() + ":" + std::to_string(j);
+          int binding_index = engine_->getBindingIndex(name.c_str());
+          ICHECK_NE(binding_index, -1);
+#if TRT_VERSION_GE(6, 0, 1)
+          std::vector<int64_t> shape(data_entry_[eid]->shape,
+                                     data_entry_[eid]->shape + data_entry_[eid]->ndim);
+          ICHECK(context_->setBindingDimensions(binding_index, VectorToTrtDims(shape)));
+#endif
+          if (data_entry_[eid]->device.device_type == kDLCUDA) {
+            bindings_[binding_index] = data_entry_[eid]->data;
+          } else {
+            auto device_buffer = GetOrAllocateDeviceBuffer(eid, binding_index);
+            device_buffer.CopyFrom(data_entry_[eid]);
+            bindings_[binding_index] = device_buffer->data;
+          }
+          auto dims = engine_->getBindingDimensions(binding_index);
+          int num_elements = 1;
+          for (int i = 0; i < dims.nbDims; ++i) num_elements *= dims.d[i];
+          binding_sizes_[binding_index] = num_elements;
+        }
+      }
+    }
+    // Setup output bindings.
+    for (size_t i = 0; i < outputs_.size(); ++i) {
+      auto nid = outputs_[i].id_;
+      uint32_t eid = EntryID(outputs_[i]);
+      const auto& name = nodes_[nid].GetOpName() + ":" + std::to_string(outputs_[i].index_);
+      int binding_index = engine_->getBindingIndex(name.c_str());
+      ICHECK_NE(binding_index, -1);
+      if (data_entry_[eid]->device.device_type == kDLCUDA) {
+        bindings_[binding_index] = data_entry_[eid]->data;
+      } else {
+        auto device_buffer = GetOrAllocateDeviceBuffer(eid, binding_index);
+        bindings_[binding_index] = device_buffer->data;
+      }
+    }
+  }
+
+  NDArray GetOrAllocateDeviceBuffer(int entry_id, int binding_index) {
+    std::vector<int64_t> shape(data_entry_[entry_id]->shape,
+                               data_entry_[entry_id]->shape + data_entry_[entry_id]->ndim);
+    if (device_buffers_.count(binding_index)) {
+      // Buffer is already initialized.
+      if (shape[0] > device_buffers_[binding_index]->shape[0]) {
+        // Buffer is too small. Need to allocate bigger buffer.
+        device_buffers_[binding_index] =
+            runtime::NDArray::Empty(shape, data_entry_[entry_id]->dtype, {kDLCUDA, 0});
+      } else if (shape[0] < device_buffers_[binding_index]->shape[0]) {
+        // Buffer is too large. Create view.
+        return device_buffers_[binding_index].CreateView(shape, data_entry_[entry_id]->dtype);
+      }
+    } else {
+      // Buffer not initialized yet.
+      device_buffers_[binding_index] =
+          runtime::NDArray::Empty(shape, data_entry_[entry_id]->dtype, {kDLCUDA, 0});
+    }
+    return device_buffers_.at(binding_index);
+  }
 
 #else   // TVM_GRAPH_EXECUTOR_TENSORRT
-  void LoadEngine(const String& engine_file) {
-    LOG(FATAL) << "TensorRT runtime is not enabled. "
-               << "Please build with USE_TENSORRT_RUNTIME.";
-  }
-
   void Run() override {
     LOG(FATAL) << "TensorRT runtime is not enabled. "
                << "Please build with USE_TENSORRT_RUNTIME.";
   }
+
+  bool LoadEngine(const String& engine_file) { return false; }
+
+  void DestroyEngine() {}
 #endif  // TVM_GRAPH_EXECUTOR_TENSORRT
 
  private:
   String engine_file_;
+#ifdef TVM_GRAPH_EXECUTOR_TENSORRT
+  TensorRTLogger logger_;
+  ICudaEngine* engine_{nullptr};
+  IExecutionContext* context_{nullptr};
+  std::vector<void*> bindings_;
+  std::vector<size_t> binding_sizes_;
+  std::unordered_map<int, NDArray> device_buffers_;
+#endif
 };
 
 runtime::Module MSCTensorRTRuntimeCreate(const String& symbol_name, const String& graph_json,

@@ -34,6 +34,13 @@ namespace msc {
 const Array<Doc> TensorRTOpCode::GetDocs() {
   stack_.Config(this);
   CodeGenBuild();
+  if (node()->optype != "input") {
+    SetLayerByValue("Name", DocUtils::ToStrDoc(node()->name));
+    for (size_t i = 0; i < node()->outputs.size(); i++) {
+      stack_.func_call("setName", NullOpt, DocUtils::ToPtrDoc(IdxOutput(i)))
+          .call_arg(DocUtils::ToStrDoc(node()->OutputAt(i)->name));
+    }
+  }
   return stack_.GetDocs();
 }
 
@@ -329,7 +336,7 @@ class TensorRTInputCodeGen : public TensorRTOpCode {
   void CodeGenBuild() final {
     const auto& output = node()->OutputAt(0);
     stack_.op_call()
-        .call_arg(DocUtils::ToStrDoc(output->alias))
+        .call_arg(DocUtils::ToStrDoc(output->name))
         .op_dtype_arg(output->dtype)
         .call_arg(ToDims(output->shape));
   }
@@ -621,17 +628,18 @@ GetTensorRTOpCodes() {
   map->emplace("sqrt", std::make_shared<TensorRTUnaryCodeGen>("Unary", "SQRT"));
 
   // elemwise ops
-  map->emplace("add", std::make_shared<TensorRTElemwiseCodeGen>("Elemwise", "SUM"));
-  map->emplace("divide", std::make_shared<TensorRTElemwiseCodeGen>("Elemwise", "DIV"));
-  map->emplace("equal", std::make_shared<TensorRTElemwiseCodeGen>("Elemwise", "EQUAL"));
-  map->emplace("floor_divide", std::make_shared<TensorRTElemwiseCodeGen>("Elemwise", "FLOOR_DIV"));
-  map->emplace("greater", std::make_shared<TensorRTElemwiseCodeGen>("Elemwise", "GREATER"));
-  map->emplace("less", std::make_shared<TensorRTElemwiseCodeGen>("Elemwise", "LESS"));
-  map->emplace("maximum", std::make_shared<TensorRTElemwiseCodeGen>("Elemwise", "MAX"));
-  map->emplace("minimum", std::make_shared<TensorRTElemwiseCodeGen>("Elemwise", "MIN"));
-  map->emplace("multiply", std::make_shared<TensorRTElemwiseCodeGen>("Elemwise", "PROD"));
-  map->emplace("power", std::make_shared<TensorRTElemwiseCodeGen>("Elemwise", "POW"));
-  map->emplace("subtract", std::make_shared<TensorRTElemwiseCodeGen>("Elemwise", "SUB"));
+  map->emplace("add", std::make_shared<TensorRTElemwiseCodeGen>("ElementWise", "SUM"));
+  map->emplace("divide", std::make_shared<TensorRTElemwiseCodeGen>("ElementWise", "DIV"));
+  map->emplace("equal", std::make_shared<TensorRTElemwiseCodeGen>("ElementWise", "EQUAL"));
+  map->emplace("floor_divide",
+               std::make_shared<TensorRTElemwiseCodeGen>("ElementWise", "FLOOR_DIV"));
+  map->emplace("greater", std::make_shared<TensorRTElemwiseCodeGen>("ElementWise", "GREATER"));
+  map->emplace("less", std::make_shared<TensorRTElemwiseCodeGen>("ElementWise", "LESS"));
+  map->emplace("maximum", std::make_shared<TensorRTElemwiseCodeGen>("ElementWise", "MAX"));
+  map->emplace("minimum", std::make_shared<TensorRTElemwiseCodeGen>("ElementWise", "MIN"));
+  map->emplace("multiply", std::make_shared<TensorRTElemwiseCodeGen>("ElementWise", "PROD"));
+  map->emplace("power", std::make_shared<TensorRTElemwiseCodeGen>("ElementWise", "POW"));
+  map->emplace("subtract", std::make_shared<TensorRTElemwiseCodeGen>("ElementWise", "SUB"));
 
   // reduce ops
   map->emplace("max", std::make_shared<TensorRTReduceCodeGen>("Reduce", "MAX"));

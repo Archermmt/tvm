@@ -51,7 +51,7 @@ class CommonUtils {
 
 class FileUtils {
  public:
-  static inline bool FileExist(const std::string& file);
+  static bool FileExist(const std::string& file);
 
   template <typename T>
   static bool ReadToBuffer(const std::string& file, T* buffer, size_t size)  {
@@ -127,8 +127,8 @@ DatasetReader::DatasetReader(const std::string& folder, int max_size) {
   assert(input.is_open() && ("Failed to open file " + info_file).c_str());
   std::string line;
   while (getline(input, line)) {
-    int pos = line.find(":");
-    assert(pos > 0 && ("Can not find : in line " + line).c_str());
+    int pos = line.find(" ");
+    assert(pos > 0 && ("Can not find space in line " + line).c_str());
     const auto& name = line.substr(0, pos);
     const auto& byte_size = line.substr(pos + 1, line.size());
     tensor_info_.push_back(std::make_pair(name, static_cast<size_t>(std::stoi(byte_size))));

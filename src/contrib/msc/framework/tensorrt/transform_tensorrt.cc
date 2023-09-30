@@ -43,6 +43,33 @@ Var EmitWithSuffix(BlockBuilder builder, const Call& call, const Var& src_var, c
 using FRewriteTensorRT = runtime::TypedPackedFunc<Expr(
     BlockBuilder builder, const Var& var, const Call& call, const Map<Expr, Call>& new_calls)>;
 
+Expr RewriteElemwise(BlockBuilder builder, const Var& var, const Call& call,
+                     const Map<Expr, Call>& new_calls) {
+  Array<PrimExpr> empty;
+  const auto& shape_a =
+      Downcast<TensorStructInfo>(GetStructInfo(call->args[0]))->GetShape().value_or(empty);
+  const auto& shape_b =
+      Downcast<TensorStructInfo>(GetStructInfo(call->args[1]))->GetShape().value_or(empty);
+  static const Op& reshape_op = Op::Get("relax.reshape");
+  if (shape_a.size() > shape_b.size()) {
+    ICHECK(shape_b.size() == 1) << "broadcast only support 1 dim, get " << shape_b;
+    Array<PrimExpr> exp_shape(shape_a.size(), Integer(1));
+    exp_shape.Set(shape_a.size() - 1, shape_b[0]);
+    const auto& expand_b = Call(reshape_op, {call->args[1], ShapeExpr(exp_shape)}, Attrs(), {});
+    const auto& expand_b_var = EmitWithSuffix(builder, expand_b, var, call->span, "expand_b");
+    return Call(call->op, {call->args[0], expand_b_var}, call->attrs, call->sinfo_args, call->span);
+  }
+  if (shape_a.size() < shape_b.size()) {
+    ICHECK(shape_a.size() == 1) << "broadcast only support 1 dim, get " << shape_a;
+    Array<PrimExpr> exp_shape(shape_a.size(), Integer(1));
+    exp_shape.Set(shape_b.size() - 1, shape_a[0]);
+    const auto& expand_a = Call(reshape_op, {call->args[0], ShapeExpr(exp_shape)}, Attrs(), {});
+    const auto& expand_a_var = EmitWithSuffix(builder, expand_a, var, call->span, "expand_a");
+    return Call(call->op, {expand_a_var, call->args[1]}, call->attrs, call->sinfo_args, call->span);
+  }
+  return call;
+}
+
 Expr RewriteAdd(BlockBuilder builder, const Var& var, const Call& call,
                 const Map<Expr, Call>& new_calls) {
   if (new_calls.count(call->args[0]) &&
@@ -81,7 +108,7 @@ Expr RewriteAdd(BlockBuilder builder, const Var& var, const Call& call,
       LOG_FATAL << "Unexpected data layout " << conv_attrs->data_layout;
     }
   }
-  return call;
+  return RewriteElemwise(builder, var, call, new_calls);
 }
 
 Expr RewriteConv1d(BlockBuilder builder, const Var& var, const Call& call,
@@ -136,6 +163,9 @@ TVM_REGISTER_OP("relax.nn.conv1d").set_attr<FRewriteTensorRT>("FRewriteTensorRT"
 
 // math ops
 TVM_REGISTER_OP("relax.add").set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteAdd);
+TVM_REGISTER_OP("relax.subtract").set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteElemwise);
+TVM_REGISTER_OP("relax.multiply").set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteElemwise);
+TVM_REGISTER_OP("relax.divide").set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteElemwise);
 
 class TensorRTTransformer : public ExprMutator {
  public:

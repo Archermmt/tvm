@@ -320,8 +320,10 @@ const Array<String> ExprUtils::GetInputTypes(const String& optype, size_t inputs
     }
   } else if (optype == "msc.linear_bias") {
     input_types.push_back("input");
-    input_types.push_back("weight");
-    input_types.push_back("bias");
+    if (inputs_num > 1) {
+      input_types.push_back("weight");
+      input_types.push_back("bias");
+    }
   } else if (optype == "msc.embedding" && inputs_num == 2) {
     input_types.push_back("input");
     input_types.push_back("weight");
