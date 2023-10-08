@@ -27,6 +27,7 @@
 #include <tvm/relax/transform.h>
 
 #include "../../../../relax/transform/utils.h"
+#include "../../../../support/scalars.h"
 #include "../../core/utils.h"
 
 namespace tvm {
@@ -40,11 +41,12 @@ Var EmitWithSuffix(BlockBuilder builder, const Call& call, const Var& src_var, c
   return builder->Emit(call, src_var->name_hint() + "_" + suffix);
 }
 
-using FRewriteTensorRT = runtime::TypedPackedFunc<Expr(
-    BlockBuilder builder, const Var& var, const Call& call, const Map<Expr, Call>& new_calls)>;
+using FRewriteTensorRT =
+    runtime::TypedPackedFunc<Expr(BlockBuilder builder, const Var& var, const Call& call,
+                                  const Map<Expr, Call>& new_calls, const Array<Integer>& version)>;
 
 Expr RewriteElemwise(BlockBuilder builder, const Var& var, const Call& call,
-                     const Map<Expr, Call>& new_calls) {
+                     const Map<Expr, Call>& new_calls, const Array<Integer>& version) {
   Array<PrimExpr> empty;
   const auto& shape_a =
       Downcast<TensorStructInfo>(GetStructInfo(call->args[0]))->GetShape().value_or(empty);
@@ -52,18 +54,28 @@ Expr RewriteElemwise(BlockBuilder builder, const Var& var, const Call& call,
       Downcast<TensorStructInfo>(GetStructInfo(call->args[1]))->GetShape().value_or(empty);
   static const Op& reshape_op = Op::Get("relax.reshape");
   if (shape_a.size() > shape_b.size()) {
-    ICHECK(shape_b.size() == 1) << "broadcast only support 1 dim, get " << shape_b;
     Array<PrimExpr> exp_shape(shape_a.size(), Integer(1));
-    exp_shape.Set(shape_a.size() - 1, shape_b[0]);
-    const auto& expand_b = Call(reshape_op, {call->args[1], ShapeExpr(exp_shape)}, Attrs(), {});
+    if (shape_b.size() == 1) {
+      exp_shape.Set(shape_a.size() - 1, shape_b[0]);
+    } else if (shape_b.size() == 0) {
+      LOG_DEBUG << "Expand scalar argument to " << exp_shape;
+    } else {
+      LOG_FATAL << "broadcast only support 1 dim and scalar, get " << shape_b;
+    }
+    const auto& expand_b = Call(reshape_op, {call->args[1], ShapeExpr(exp_shape)});
     const auto& expand_b_var = EmitWithSuffix(builder, expand_b, var, call->span, "expand_b");
     return Call(call->op, {call->args[0], expand_b_var}, call->attrs, call->sinfo_args, call->span);
   }
   if (shape_a.size() < shape_b.size()) {
-    ICHECK(shape_a.size() == 1) << "broadcast only support 1 dim, get " << shape_a;
-    Array<PrimExpr> exp_shape(shape_a.size(), Integer(1));
-    exp_shape.Set(shape_b.size() - 1, shape_a[0]);
-    const auto& expand_a = Call(reshape_op, {call->args[0], ShapeExpr(exp_shape)}, Attrs(), {});
+    Array<PrimExpr> exp_shape(shape_b.size(), Integer(1));
+    if (shape_a.size() == 1) {
+      exp_shape.Set(shape_b.size() - 1, shape_a[0]);
+    } else if (shape_a.size() == 0) {
+      LOG_DEBUG << "Expand scalar argument to " << exp_shape;
+    } else {
+      LOG_FATAL << "broadcast only support 1 dim and scalar, get " << shape_a;
+    }
+    const auto& expand_a = Call(reshape_op, {call->args[0], ShapeExpr(exp_shape)});
     const auto& expand_a_var = EmitWithSuffix(builder, expand_a, var, call->span, "expand_a");
     return Call(call->op, {expand_a_var, call->args[1]}, call->attrs, call->sinfo_args, call->span);
   }
@@ -71,7 +83,7 @@ Expr RewriteElemwise(BlockBuilder builder, const Var& var, const Call& call,
 }
 
 Expr RewriteAdd(BlockBuilder builder, const Var& var, const Call& call,
-                const Map<Expr, Call>& new_calls) {
+                const Map<Expr, Call>& new_calls, const Array<Integer>& version) {
   if (new_calls.count(call->args[0]) &&
       new_calls[call->args[0]]->op == Op::Get("relax.nn.conv1d")) {
     const auto& reshape = Downcast<Call>(builder->LookupBinding(Downcast<Var>(call->args[0])));
@@ -95,12 +107,11 @@ Expr RewriteAdd(BlockBuilder builder, const Var& var, const Call& call,
       // expand bias reshape
       Array<PrimExpr> exp_bias_shape{bias_shape[0], bias_shape[1], Integer(1), bias_shape[2]};
       static const Op& reshape_op = Op::Get("relax.reshape");
-      const auto& exp_bias =
-          Call(reshape_op, {call->args[1], ShapeExpr(exp_bias_shape)}, Attrs(), {});
+      const auto& exp_bias = Call(reshape_op, {call->args[1], ShapeExpr(exp_bias_shape)});
       const auto& exp_bias_var = EmitWithSuffix(builder, exp_bias, var, call->span, "exp_bias");
       // redirect to conv2d
       static const Op& add_op = Op::Get("relax.add");
-      const auto& exp_add = Call(add_op, {reshape->args[0], exp_bias_var}, Attrs(), {});
+      const auto& exp_add = Call(add_op, {reshape->args[0], exp_bias_var});
       const auto& exp_add_var = EmitWithSuffix(builder, exp_add, var, call->span, "exp");
       // reduce output
       return Call(reshape_op, {exp_add_var, ShapeExpr(input_shape)}, Attrs(), {}, call->span);
@@ -108,11 +119,128 @@ Expr RewriteAdd(BlockBuilder builder, const Var& var, const Call& call,
       LOG_FATAL << "Unexpected data layout " << conv_attrs->data_layout;
     }
   }
-  return RewriteElemwise(builder, var, call, new_calls);
+  return RewriteElemwise(builder, var, call, new_calls, version);
+}
+
+Expr RewriteArgmaxmin(BlockBuilder builder, const Var& var, const Call& call,
+                      const Map<Expr, Call>& new_calls, const Array<Integer>& version) {
+  const auto& out_dtype = Downcast<TensorStructInfo>(GetStructInfo(var))->dtype;
+  const auto* src_attrs = call->attrs.as<ArgmaxArgminAttrs>();
+  Expr raw_var;
+  if (src_attrs->keepdims) {
+    raw_var = EmitWithSuffix(builder, call, var, call->span, "raw");
+  } else {
+    auto new_attrs = make_object<ArgmaxArgminAttrs>();
+    new_attrs->axis = src_attrs->axis;
+    new_attrs->keepdims = true;
+    const auto& new_call = Call(call->op, {call->args[0]}, Attrs(new_attrs));
+    raw_var = EmitWithSuffix(builder, new_call, var, call->span, "keepdims");
+  }
+  static const Op& astype_op = Op::Get("relax.astype");
+  auto cast_to_attrs = make_object<AstypeAttrs>();
+  cast_to_attrs->dtype = DataType::Int(32);
+  const auto& cast_to = Call(astype_op, {raw_var}, Attrs(cast_to_attrs));
+  Expr res;
+  if (src_attrs->keepdims) {
+    res = EmitWithSuffix(builder, cast_to, var, call->span, "cast_to");
+  } else {
+    Array<PrimExpr> empty;
+    const auto& output_shape =
+        Downcast<TensorStructInfo>(GetStructInfo(var))->GetShape().value_or(empty);
+    ICHECK(output_shape.size() > 0) << "Can not infer output shape of argmaxmin " << call;
+    const auto& cast_to_var = EmitWithSuffix(builder, cast_to, var, call->span, "cast_to");
+    static const Op& reshape_op = Op::Get("relax.reshape");
+    const auto& reshape = Call(reshape_op, {cast_to_var, ShapeExpr(output_shape)});
+    res = EmitWithSuffix(builder, reshape, var, call->span, "reshape");
+  }
+  auto cast_from_attrs = make_object<AstypeAttrs>();
+  cast_from_attrs->dtype = out_dtype;
+  return Call(astype_op, {res}, Attrs(cast_from_attrs), call->sinfo_args);
+}
+
+Expr RewriteBatchNorm(BlockBuilder builder, const Var& var, const Call& call,
+                      const Map<Expr, Call>& new_calls, const Array<Integer>& version) {
+  Array<PrimExpr> empty;
+  const auto& input_shape =
+      Downcast<TensorStructInfo>(GetStructInfo(call->args[0]))->GetShape().value_or(empty);
+  ICHECK(input_shape.size() > 0) << "Can not infer shape of batchnorm " << call;
+  const auto& in_dtype = Downcast<TensorStructInfo>(GetStructInfo(call->args[0]))->dtype;
+  const auto* src_attrs = call->attrs.as<BatchNormAttrs>();
+  // define expand shape
+  Array<PrimExpr> exp_shape(input_shape.size(), Integer(1));
+  exp_shape.Set(src_attrs->axis, input_shape[src_attrs->axis]);
+  // create eps constant
+  const auto& eps_data = support::FloatImmToNDArray(FloatImm(in_dtype, src_attrs->epsilon));
+  const auto& eps_span =
+      SpanUtils::SetAttr(Span(), "name", SpanUtils::GetAttr(call->span, "name") + "_eps");
+  const auto& eps = Constant(eps_data, NullOpt, eps_span);
+  // create ops
+  static const Op& add_op = Op::Get("relax.add");
+  static const Op& divide_op = Op::Get("relax.divide");
+  static const Op& multiply_op = Op::Get("relax.multiply");
+  static const Op& reshape_op = Op::Get("relax.reshape");
+  static const Op& sqrt_op = Op::Get("relax.sqrt");
+  static const Op& subtract_op = Op::Get("relax.subtract");
+  // scale factor: gamma/sqrt(var + epsilon)
+  const auto& eps_add = Call(add_op, {call->args[4], eps});
+  const auto& eps_add_var = EmitWithSuffix(builder, eps_add, var, call->span, "eps_add");
+  const auto& sqrt = Call(sqrt_op, {eps_add_var});
+  const auto& sqrt_var = EmitWithSuffix(builder, sqrt, var, call->span, "sqrt");
+  const auto& scale_factor = Call(divide_op, {call->args[1], sqrt_var});
+  const auto& scale_factor_var =
+      EmitWithSuffix(builder, scale_factor, var, call->span, "scale_factor");
+  Expr res = call->args[0];
+  // scale
+  if (src_attrs->scale) {
+    const auto& exp_scale = Call(reshape_op, {scale_factor_var, ShapeExpr(exp_shape)});
+    const auto& exp_scale_var = EmitWithSuffix(builder, exp_scale, var, call->span, "exp_scale");
+    const auto& scale = Call(multiply_op, {res, exp_scale_var});
+    res = EmitWithSuffix(builder, scale, var, call->span, "scale");
+  }
+  // offset
+  if (src_attrs->center) {
+    // offset factor: beta-mean*scale_factor
+    const auto& average = Call(multiply_op, {call->args[3], scale_factor_var});
+    const auto& average_var = EmitWithSuffix(builder, average, var, call->span, "average");
+    const auto& offset_factor = Call(subtract_op, {call->args[2], average_var});
+    const auto& offset_factor_var =
+        EmitWithSuffix(builder, offset_factor, var, call->span, "offset_factor");
+    const auto& exp_offset = Call(reshape_op, {offset_factor_var, ShapeExpr(exp_shape)});
+    const auto& exp_offset_var = EmitWithSuffix(builder, exp_offset, var, call->span, "exp_offset");
+    const auto& offset = Call(add_op, {res, exp_offset_var});
+    res = EmitWithSuffix(builder, offset, var, call->span, "offset");
+  }
+  return Tuple(Array<Expr>{res}, call->span);
+}
+
+Expr RewriteBroadcastTo(BlockBuilder builder, const Var& var, const Call& call,
+                        const Map<Expr, Call>& new_calls, const Array<Integer>& version) {
+  Array<PrimExpr> empty;
+  const auto& input_shape =
+      Downcast<TensorStructInfo>(GetStructInfo(call->args[0]))->GetShape().value_or(empty);
+  ICHECK(input_shape.size() > 0) << "Can not infer input shape of broadcast_to " << call;
+  const auto& output_shape =
+      Downcast<TensorStructInfo>(GetStructInfo(var))->GetShape().value_or(empty);
+  ICHECK(output_shape.size() > 0) << "Can not infer output shape of broadcast_to " << call;
+  Expr concat_input = call->args[0];
+  static const Op& concat_op = Op::Get("relax.concat");
+  for (size_t i = 0; i < input_shape.size(); i++) {
+    int64_t in_dim = Downcast<Integer>(input_shape[i])->value;
+    int64_t out_dim = Downcast<Integer>(output_shape[i])->value;
+    if (in_dim != out_dim) {
+      Array<Expr> concat_inputs(out_dim / in_dim, concat_input);
+      auto concat_attrs = make_object<ConcatAttrs>();
+      concat_attrs->axis = Integer(i);
+      const auto& concat = Call(concat_op, {Tuple(concat_inputs)}, Attrs(concat_attrs));
+      concat_input =
+          EmitWithSuffix(builder, concat, var, call->span, "concat_" + std::to_string(i));
+    }
+  }
+  return concat_input;
 }
 
 Expr RewriteConv1d(BlockBuilder builder, const Var& var, const Call& call,
-                   const Map<Expr, Call>& new_calls) {
+                   const Map<Expr, Call>& new_calls, const Array<Integer>& version) {
   const auto* src_attrs = call->attrs.as<Conv1DAttrs>();
   Array<PrimExpr> empty;
   const auto& input_shape =
@@ -130,11 +258,9 @@ Expr RewriteConv1d(BlockBuilder builder, const Var& var, const Call& call,
     Array<PrimExpr> exp_input_shape{input_shape[0], input_shape[1], Integer(1), input_shape[2]};
     Array<PrimExpr> exp_weight_shape{weight_shape[0], weight_shape[1], Integer(1), weight_shape[2]};
     static const Op& reshape_op = Op::Get("relax.reshape");
-    const auto& exp_input =
-        Call(reshape_op, {call->args[0], ShapeExpr(exp_input_shape)}, Attrs(), {});
+    const auto& exp_input = Call(reshape_op, {call->args[0], ShapeExpr(exp_input_shape)});
     new_args.push_back(EmitWithSuffix(builder, exp_input, var, call->span, "exp_input"));
-    const auto& exp_weight =
-        Call(reshape_op, {call->args[1], ShapeExpr(exp_weight_shape)}, Attrs(), {});
+    const auto& exp_weight = Call(reshape_op, {call->args[1], ShapeExpr(exp_weight_shape)});
     new_args.push_back(EmitWithSuffix(builder, exp_weight, var, call->span, "exp_weight"));
     // change to conv2d
     static const Op& conv2d_op = Op::Get("relax.nn.conv2d");
@@ -148,7 +274,7 @@ Expr RewriteConv1d(BlockBuilder builder, const Var& var, const Call& call,
     conv_attrs->kernel_layout = "OIHW";
     conv_attrs->out_layout = "NCHW";
     conv_attrs->out_dtype = src_attrs->out_dtype;
-    const auto& conv2d = Call(conv2d_op, new_args, Attrs(conv_attrs), {});
+    const auto& conv2d = Call(conv2d_op, new_args, Attrs(conv_attrs));
     const auto& conv2d_var = EmitWithSuffix(builder, conv2d, var, call->span, "exp");
     // reduce output
     return Call(reshape_op, {conv2d_var, ShapeExpr(output_shape)}, Attrs(), {}, call->span);
@@ -158,18 +284,325 @@ Expr RewriteConv1d(BlockBuilder builder, const Var& var, const Call& call,
   return call;
 }
 
+Expr RewriteGroupNorm(BlockBuilder builder, const Var& var, const Call& call,
+                      const Map<Expr, Call>& new_calls, const Array<Integer>& version) {
+  Array<PrimExpr> empty;
+  const auto& input_shape =
+      Downcast<TensorStructInfo>(GetStructInfo(call->args[0]))->GetShape().value_or(empty);
+  ICHECK(input_shape.size() > 0) << "Can not infer shape of group_norm " << call;
+  const auto& in_dtype = Downcast<TensorStructInfo>(GetStructInfo(call->args[0]))->dtype;
+  const auto* src_attrs = call->attrs.as<GroupNormAttrs>();
+  Array<PrimExpr> group_shape = input_shape;
+  Array<PrimExpr> exp_shape(input_shape.size(), Integer(1));
+  size_t axis = CommonUtils::GetIndex(src_attrs->channel_axis, input_shape.size());
+  int64_t channel_dim = Downcast<Integer>(input_shape[axis])->value *
+                        Downcast<Integer>(input_shape[axis + 1])->value / src_attrs->num_groups;
+  group_shape.Set(axis, Integer(src_attrs->num_groups));
+  group_shape.Set(axis + 1, Integer(channel_dim));
+  exp_shape.Set(axis, Integer(src_attrs->num_groups));
+
+  // create eps constant
+  const auto& eps_data = support::FloatImmToNDArray(FloatImm(in_dtype, src_attrs->epsilon));
+  const auto& eps_span =
+      SpanUtils::SetAttr(Span(), "name", SpanUtils::GetAttr(call->span, "name") + "_eps");
+  const auto& eps = Constant(eps_data, NullOpt, eps_span);
+
+  // create ops
+  static const Op& add_op = Op::Get("relax.add");
+  static const Op& divide_op = Op::Get("relax.divide");
+  static const Op& mean_op = Op::Get("relax.mean");
+  static const Op& multiply_op = Op::Get("relax.multiply");
+  static const Op& square_op = Op::Get("relax.square");
+  static const Op& reshape_op = Op::Get("relax.reshape");
+  static const Op& sqrt_op = Op::Get("relax.sqrt");
+  static const Op& subtract_op = Op::Get("relax.subtract");
+
+  // reshape input
+  const auto& reshape_in = Call(reshape_op, {call->args[0], ShapeExpr(group_shape)});
+  const auto& reshape_in_var = EmitWithSuffix(builder, reshape_in, var, call->span, "reshape_in");
+
+  // mean(input)
+  auto mean_attrs = make_object<StatisticalAttrs>();
+  mean_attrs->axis = src_attrs->axes;
+  mean_attrs->keepdims = true;
+  const auto& mean = Call(mean_op, {reshape_in_var}, Attrs(mean_attrs));
+  const auto& mean_var = EmitWithSuffix(builder, mean, var, call->span, "mean");
+
+  // variance: mean((input-mean)*(input-mean))
+  const auto& diff = Call(subtract_op, {reshape_in_var, mean_var});
+  const auto& diff_var = EmitWithSuffix(builder, diff, var, call->span, "diff");
+  const auto& square = Call(square_op, {diff_var});
+  const auto& square_var = EmitWithSuffix(builder, square, var, call->span, "square");
+  const auto& variance = Call(mean_op, {square_var}, Attrs(mean_attrs));
+  const auto& variance_var = EmitWithSuffix(builder, variance, var, call->span, "variance");
+
+  // sqrt(var + epsilon)
+  Array<PrimExpr> exp_eps_shape(input_shape.size(), Integer(1));
+  const auto& exp_eps = Call(reshape_op, {eps, ShapeExpr(exp_eps_shape)});
+  const auto& exp_eps_var = EmitWithSuffix(builder, exp_eps, var, call->span, "exp_eps");
+  const auto& eps_add = Call(add_op, {variance_var, exp_eps_var});
+  const auto& eps_add_var = EmitWithSuffix(builder, eps_add, var, call->span, "eps_add");
+  const auto& sqrt = Call(sqrt_op, {eps_add_var});
+  const auto& sqrt_var = EmitWithSuffix(builder, sqrt, var, call->span, "sqrt");
+
+  // diff/sqrt
+  Call divide = Call(divide_op, {diff_var, sqrt_var});
+  Expr res = EmitWithSuffix(builder, divide, var, call->span, "divide");
+
+  // scale
+  if (src_attrs->scale) {
+    const auto& exp_gamma = Call(reshape_op, {call->args[1], ShapeExpr(exp_shape)});
+    const auto& exp_gamma_var = EmitWithSuffix(builder, exp_gamma, var, call->span, "exp_gamma");
+    const auto& scale = Call(multiply_op, {res, exp_gamma_var});
+    res = EmitWithSuffix(builder, scale, var, call->span, "scale");
+  }
+  // offset
+  if (src_attrs->center) {
+    const auto& exp_beta = Call(reshape_op, {call->args[2], ShapeExpr(exp_shape)});
+    const auto& exp_beta_var = EmitWithSuffix(builder, exp_beta, var, call->span, "exp_beta");
+    const auto& offset = Call(add_op, {res, exp_beta_var});
+    res = EmitWithSuffix(builder, offset, var, call->span, "offset");
+  }
+  // reshape output
+  return Call(reshape_op, {res, ShapeExpr(input_shape)});
+}
+
+Expr RewriteLayerNorm(BlockBuilder builder, const Var& var, const Call& call,
+                      const Map<Expr, Call>& new_calls, const Array<Integer>& version) {
+  Array<PrimExpr> empty;
+  const auto& input_shape =
+      Downcast<TensorStructInfo>(GetStructInfo(call->args[0]))->GetShape().value_or(empty);
+  ICHECK(input_shape.size() > 0) << "Can not infer shape of layer_norm " << call;
+  const auto& in_dtype = Downcast<TensorStructInfo>(GetStructInfo(call->args[0]))->dtype;
+  const auto* src_attrs = call->attrs.as<LayerNormAttrs>();
+  Array<PrimExpr> exp_shape(input_shape.size(), Integer(1));
+  for (const auto& a : src_attrs->axes) {
+    size_t index = CommonUtils::GetIndex(static_cast<int>(a->value), input_shape.size());
+    exp_shape.Set(index, input_shape[index]);
+  }
+  // create eps constant
+  const auto& eps_data = support::FloatImmToNDArray(FloatImm(in_dtype, src_attrs->epsilon));
+  const auto& eps_span =
+      SpanUtils::SetAttr(Span(), "name", SpanUtils::GetAttr(call->span, "name") + "_eps");
+  const auto& eps = Constant(eps_data, NullOpt, eps_span);
+
+  // create ops
+  static const Op& add_op = Op::Get("relax.add");
+  static const Op& divide_op = Op::Get("relax.divide");
+  static const Op& mean_op = Op::Get("relax.mean");
+  static const Op& multiply_op = Op::Get("relax.multiply");
+  static const Op& square_op = Op::Get("relax.square");
+  static const Op& reshape_op = Op::Get("relax.reshape");
+  static const Op& sqrt_op = Op::Get("relax.sqrt");
+  static const Op& subtract_op = Op::Get("relax.subtract");
+
+  // mean(input)
+  auto mean_attrs = make_object<StatisticalAttrs>();
+  mean_attrs->axis = src_attrs->axes;
+  mean_attrs->keepdims = true;
+  const auto& mean = Call(mean_op, {call->args[0]}, Attrs(mean_attrs));
+  const auto& mean_var = EmitWithSuffix(builder, mean, var, call->span, "mean");
+
+  // variance: mean((input-mean)*(input-mean))
+  const auto& diff = Call(subtract_op, {call->args[0], mean_var});
+  const auto& diff_var = EmitWithSuffix(builder, diff, var, call->span, "diff");
+  const auto& square = Call(square_op, {diff_var});
+  const auto& square_var = EmitWithSuffix(builder, square, var, call->span, "square");
+  const auto& variance = Call(mean_op, {square_var}, Attrs(mean_attrs));
+  const auto& variance_var = EmitWithSuffix(builder, variance, var, call->span, "variance");
+
+  // sqrt(var + epsilon)
+  Array<PrimExpr> exp_eps_shape(input_shape.size(), Integer(1));
+  const auto& exp_eps = Call(reshape_op, {eps, ShapeExpr(exp_eps_shape)});
+  const auto& exp_eps_var = EmitWithSuffix(builder, exp_eps, var, call->span, "exp_eps");
+  const auto& eps_add = Call(add_op, {variance_var, exp_eps_var});
+  const auto& eps_add_var = EmitWithSuffix(builder, eps_add, var, call->span, "eps_add");
+  const auto& sqrt = Call(sqrt_op, {eps_add_var});
+  const auto& sqrt_var = EmitWithSuffix(builder, sqrt, var, call->span, "sqrt");
+
+  // diff/sqrt
+  Call res = Call(divide_op, {diff_var, sqrt_var});
+
+  // scale
+  if (src_attrs->scale) {
+    const auto& exp_gamma = Call(reshape_op, {call->args[1], ShapeExpr(exp_shape)});
+    const auto& exp_gamma_var = EmitWithSuffix(builder, exp_gamma, var, call->span, "exp_gamma");
+    const auto& res_var = EmitWithSuffix(builder, res, var, call->span, "pre_scale");
+    res = Call(multiply_op, {res_var, exp_gamma_var});
+  }
+  // offset
+  if (src_attrs->center) {
+    const auto& exp_beta = Call(reshape_op, {call->args[2], ShapeExpr(exp_shape)});
+    const auto& exp_beta_var = EmitWithSuffix(builder, exp_beta, var, call->span, "exp_beta");
+    const auto& res_var = EmitWithSuffix(builder, res, var, call->span, "pre_offset");
+    res = Call(add_op, {res_var, exp_beta_var});
+  }
+  return res;
+}
+
+Expr RewriteMatmul(BlockBuilder builder, const Var& var, const Call& call,
+                   const Map<Expr, Call>& new_calls, const Array<Integer>& version) {
+  Array<PrimExpr> empty;
+  const auto& shape_a =
+      Downcast<TensorStructInfo>(GetStructInfo(call->args[0]))->GetShape().value_or(empty);
+  const auto& shape_b =
+      Downcast<TensorStructInfo>(GetStructInfo(call->args[1]))->GetShape().value_or(empty);
+  static const Op& reshape_op = Op::Get("relax.reshape");
+  if (shape_a.size() > shape_b.size()) {
+    Array<PrimExpr> exp_shape(shape_a.size(), Integer(1));
+    for (size_t i = shape_b.size(); i < shape_a.size(); i++) {
+      exp_shape.Set(i, shape_b[i - shape_b.size()]);
+    }
+    const auto& expand_b = Call(reshape_op, {call->args[1], ShapeExpr(exp_shape)});
+    const auto& expand_b_var = EmitWithSuffix(builder, expand_b, var, call->span, "expand_b");
+    return Call(call->op, {call->args[0], expand_b_var}, call->attrs, call->sinfo_args, call->span);
+  }
+  if (shape_a.size() < shape_b.size()) {
+    Array<PrimExpr> exp_shape(shape_b.size(), Integer(1));
+    for (size_t i = shape_a.size(); i < shape_b.size(); i++) {
+      exp_shape.Set(i, shape_a[i - shape_a.size()]);
+    }
+    const auto& expand_a = Call(reshape_op, {call->args[0], ShapeExpr(exp_shape)});
+    const auto& expand_a_var = EmitWithSuffix(builder, expand_a, var, call->span, "expand_a");
+    return Call(call->op, {expand_a_var, call->args[1]}, call->attrs, call->sinfo_args, call->span);
+  }
+  return call;
+}
+
+Expr RewriteRsqrt(BlockBuilder builder, const Var& var, const Call& call,
+                  const Map<Expr, Call>& new_calls, const Array<Integer>& version) {
+  Array<PrimExpr> empty;
+  const auto& input_shape =
+      Downcast<TensorStructInfo>(GetStructInfo(call->args[0]))->GetShape().value_or(empty);
+  ICHECK(input_shape.size() > 0) << "Can not infer shape of group_norm " << call;
+  const auto& in_dtype = Downcast<TensorStructInfo>(GetStructInfo(call->args[0]))->dtype;
+  Array<PrimExpr> exp_shape(input_shape.size(), Integer(1));
+  // create 1 constant
+  const auto& one_data = support::FloatImmToNDArray(FloatImm(in_dtype, 1));
+  const auto& one_span =
+      SpanUtils::SetAttr(Span(), "name", SpanUtils::GetAttr(call->span, "name") + "_one");
+  const auto& one = Constant(one_data, NullOpt, one_span);
+  // expand shape
+  static const Op& reshape_op = Op::Get("relax.reshape");
+  const auto& exp_one = Call(reshape_op, {one, ShapeExpr(exp_shape)});
+  const auto& exp_one_var = EmitWithSuffix(builder, exp_one, var, call->span, "exp_one");
+  static const Op& divide_op = Op::Get("relax.divide");
+  static const Op& sqrt_op = Op::Get("relax.sqrt");
+  const auto& sqrt = Call(sqrt_op, {call->args[0]});
+  const auto& sqrt_var = EmitWithSuffix(builder, sqrt, var, call->span, "sqrt");
+  return Call(divide_op, {exp_one_var, sqrt_var}, Attrs(), call->sinfo_args, call->span);
+}
+
+Expr RewriteSilu(BlockBuilder builder, const Var& var, const Call& call,
+                 const Map<Expr, Call>& new_calls, const Array<Integer>& version) {
+  // create ops
+  static const Op& multiply_op = Op::Get("relax.multiply");
+  static const Op& sigmoid_op = Op::Get("relax.sigmoid");
+  // silu=input*sigmoid(input)
+  const auto& sigmoid = Call(sigmoid_op, {call->args[0]});
+  const auto& sigmoid_var = EmitWithSuffix(builder, sigmoid, var, call->span, "sigmoid");
+  return Call(multiply_op, {call->args[0], sigmoid_var});
+}
+
+Expr RewriteShapeLike(BlockBuilder builder, const Var& var, const Call& call,
+                      const Map<Expr, Call>& new_calls, const Array<Integer>& version) {
+  Array<PrimExpr> empty;
+  const auto& output_shape =
+      Downcast<TensorStructInfo>(GetStructInfo(var))->GetShape().value_or(empty);
+  if (output_shape.size() == 0) {
+    return call;
+  }
+  static const Op& reshape_op = Op::Get("relax.reshape");
+  return Call(reshape_op, {call->args[0], ShapeExpr(output_shape)});
+}
+
+Expr RewriteSplit(BlockBuilder builder, const Var& var, const Call& call,
+                  const Map<Expr, Call>& new_calls, const Array<Integer>& version) {
+  Array<PrimExpr> empty;
+  const auto& input_shape =
+      Downcast<TensorStructInfo>(GetStructInfo(call->args[0]))->GetShape().value_or(empty);
+  ICHECK(input_shape.size() > 0) << "Can not infer input shape of split " << call;
+  const auto* src_attrs = call->attrs.as<SplitAttrs>();
+  size_t axis = CommonUtils::GetIndex(src_attrs->axis, input_shape.size());
+  std::vector<int64_t> split_begins, split_ends;
+  // get split begins and ends
+  if (src_attrs->indices_or_sections->IsInstance<PrimExprNode>()) {
+    int64_t sections = Downcast<Integer>(src_attrs->indices_or_sections)->value;
+    int64_t size = Downcast<Integer>(input_shape[axis])->value / sections;
+    for (int64_t i = 0; i < sections; i++) {
+      split_begins.push_back(i * size);
+      split_ends.push_back(i * size + size);
+    }
+  } else if (src_attrs->indices_or_sections->IsInstance<ArrayNode>()) {
+    const auto& indices = Downcast<Array<Integer>>(src_attrs->indices_or_sections);
+    int64_t last_index = 0;
+    for (size_t i = 0; i < indices.size(); ++i) {
+      split_begins.push_back(last_index);
+      last_index = indices[i]->value;
+      split_ends.push_back(last_index);
+    }
+    split_begins.push_back(last_index);
+    split_ends.push_back(Downcast<Integer>(input_shape[axis])->value);
+  } else {
+    LOG_FATAL << "Unexpected indices_or_sections " << src_attrs->indices_or_sections << "("
+              << src_attrs->indices_or_sections->GetTypeKey() << ")";
+  }
+  // create strided_slices
+  static const Op& slice_op = Op::Get("relax.strided_slice");
+  Array<Expr> outputs;
+  for (size_t i = 0; i < split_begins.size(); i++) {
+    auto slice_attrs = make_object<StridedSliceAttrs>();
+    slice_attrs->axes.push_back(Integer(axis));
+    slice_attrs->begin.push_back(Integer(split_begins[i]));
+    slice_attrs->end.push_back(Integer(split_ends[i]));
+    const auto& slice = Call(slice_op, {call->args[0]}, Attrs(slice_attrs));
+    outputs.push_back(
+        EmitWithSuffix(builder, slice, var, call->span, "slice_" + std::to_string(i)));
+  }
+  return Tuple(outputs, call->span);
+}
+
 // nn ops
+TVM_REGISTER_OP("relax.nn.batch_norm")
+    .set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteBatchNorm);
 TVM_REGISTER_OP("relax.nn.conv1d").set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteConv1d);
+TVM_REGISTER_OP("relax.nn.group_norm")
+    .set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteGroupNorm);
+TVM_REGISTER_OP("relax.nn.layer_norm")
+    .set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteLayerNorm);
+TVM_REGISTER_OP("relax.nn.silu").set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteSilu);
+
+// elemwise ops
+TVM_REGISTER_OP("relax.add").set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteAdd);
+TVM_REGISTER_OP("relax.divide").set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteElemwise);
+TVM_REGISTER_OP("relax.floor_divide")
+    .set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteElemwise);
+TVM_REGISTER_OP("relax.greater").set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteElemwise);
+TVM_REGISTER_OP("relax.less").set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteElemwise);
+TVM_REGISTER_OP("relax.maximum").set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteElemwise);
+TVM_REGISTER_OP("relax.minimum").set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteElemwise);
+TVM_REGISTER_OP("relax.multiply").set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteElemwise);
+TVM_REGISTER_OP("relax.power").set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteElemwise);
+TVM_REGISTER_OP("relax.subtract").set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteElemwise);
 
 // math ops
-TVM_REGISTER_OP("relax.add").set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteAdd);
-TVM_REGISTER_OP("relax.subtract").set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteElemwise);
-TVM_REGISTER_OP("relax.multiply").set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteElemwise);
-TVM_REGISTER_OP("relax.divide").set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteElemwise);
+TVM_REGISTER_OP("relax.argmax").set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteArgmaxmin);
+TVM_REGISTER_OP("relax.argmin").set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteArgmaxmin);
+TVM_REGISTER_OP("relax.broadcast_to")
+    .set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteBroadcastTo);
+TVM_REGISTER_OP("relax.expand_dims")
+    .set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteShapeLike);
+TVM_REGISTER_OP("relax.matmul").set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteMatmul);
+TVM_REGISTER_OP("relax.rsqrt").set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteRsqrt);
+TVM_REGISTER_OP("relax.squeeze").set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteShapeLike);
+TVM_REGISTER_OP("relax.split").set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteSplit);
 
 class TensorRTTransformer : public ExprMutator {
  public:
-  explicit TensorRTTransformer(IRModule ctx_module) : ExprMutator(ctx_module) {}
+  explicit TensorRTTransformer(IRModule ctx_module, const Array<Integer>& version)
+      : ExprMutator(ctx_module) {
+    version_ = version;
+  }
 
   void VisitBinding_(const VarBindingNode* binding, const CallNode* call_node) final {
     if (const auto* op_node = call_node->op.as<OpNode>()) {
@@ -178,7 +611,7 @@ class TensorRTTransformer : public ExprMutator {
       if (rewrite_map.count(op)) {
         const auto& call = GetRef<Call>(call_node);
         FRewriteTensorRT f = rewrite_map[op];
-        const auto& new_call = f(builder_, binding->var, call, new_calls_);
+        const auto& new_call = f(builder_, binding->var, call, new_calls_, version_);
         if (new_call != call) {
           ReEmitBinding(binding, builder_->Normalize(new_call));
           new_calls_.Set(binding->var, call);
@@ -192,17 +625,21 @@ class TensorRTTransformer : public ExprMutator {
 
  private:
   Map<Expr, Call> new_calls_;
+  Array<Integer> version_;
 };
 
-Function TransformTensorRT(const Function& func, const IRModule& module) {
-  return Downcast<Function>(TensorRTTransformer(module).VisitExpr(func));
+Function TransformTensorRT(const Function& func, const IRModule& module,
+                           const Array<Integer>& version) {
+  return Downcast<Function>(TensorRTTransformer(module, version).VisitExpr(func));
 }
 
 namespace transform {
 
-Pass TransformTensorRT() {
+Pass TransformTensorRT(const Array<Integer>& version) {
   runtime::TypedPackedFunc<Function(Function, IRModule, PassContext)> pass_func =
-      [=](Function f, IRModule m, PassContext pc) { return relax::TransformTensorRT(f, m); };
+      [=](Function f, IRModule m, PassContext pc) {
+        return relax::TransformTensorRT(f, m, version);
+      };
   return CreateFunctionPass(pass_func, 0, "TransformTensorRT", {});
 }
 

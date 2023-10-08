@@ -31,11 +31,11 @@ def get_base_h_code() -> str:
     return """#ifndef TVM_CONTRIB_MSC_UTILS_BASE_H_
 #define TVM_CONTRIB_MSC_UTILS_BASE_H_
 
+#include <cassert>
 #include <fstream>
 #include <string>
 #include <utility>
 #include <vector>
-#include <cassert>
 
 namespace tvm {
 namespace contrib {
@@ -54,7 +54,7 @@ class FileUtils {
   static bool FileExist(const std::string& file);
 
   template <typename T>
-  static bool ReadToBuffer(const std::string& file, T* buffer, size_t size)  {
+  static bool ReadToBuffer(const std::string& file, T* buffer, size_t size) {
     std::ifstream in_file(file, std::ifstream::binary);
     if (!in_file.is_open()) {
       return false;
@@ -102,10 +102,10 @@ def get_base_cc_code() -> str:
         The base cc source.
     """
 
-    return """#include "base.h"
-
-#include <algorithm>
+    return """#include <algorithm>
 #include <fstream>
+
+#include "base.h"
 
 namespace tvm {
 namespace contrib {

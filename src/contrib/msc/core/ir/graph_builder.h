@@ -59,6 +59,7 @@ struct MSCRBuildConfig {
   bool prune_graph{false};
   bool use_var_name{false};
   int float_precision = 6;
+  std::string byoc_entry;
   std::string sort_by;
   std::string target = "";
   std::string graph_name = "";
@@ -86,6 +87,8 @@ struct MSCRBuildConfig {
         reader->Read(&use_var_name);
       } else if (key == "float_precision") {
         reader->Read(&float_precision);
+      } else if (key == "byoc_entry") {
+        reader->Read(&byoc_entry);
       } else if (key == "sort_by") {
         reader->Read(&sort_by);
       } else if (key == "target") {
@@ -157,6 +160,20 @@ class RelaxFuncAttrGetter : public RelaxExprVisitor {
   Map<String, String> attrs_;
 };
 
+class RelaxFuncValueGetter : public RelaxExprVisitor {
+ public:
+  /*! \brief Get the attributes from prim value as Map<String, String>*/
+  Array<String> GetValues(const Expr& expr) {
+    RelaxExprVisitor::VisitExpr(expr);
+    return values_;
+  }
+
+  void VisitExpr_(const relax::CallNode* op) final;
+
+ private:
+  Array<String> values_;
+};
+
 class RelaxFuncParamsFinder : public RelaxExprVisitor {
  public:
   /*!
@@ -201,8 +218,8 @@ class RelaxGraphBuilder : public RelaxExprVisitor {
       reader.Read(&config_);
     }
     name_ = config_.graph_name.size() > 0 ? String(config_.graph_name) : name;
-    if (name != "main") {
-      func_params_ = RelaxFuncParamsFinder(ref_module).FindParams(ref_module->Lookup("main"));
+    if (config_.byoc_entry.size() > 0) {
+      func_params_ = RelaxFuncParamsFinder(ref_module).FindParams(ref_module->Lookup(name));
     }
   }
 
@@ -233,6 +250,8 @@ class RelaxGraphBuilder : public RelaxExprVisitor {
   void VisitBinding_(const relax::VarBindingNode* binding, const relax::DataflowVarNode* val) final;
 
   void VisitBinding_(const relax::VarBindingNode* binding, const relax::FunctionNode* val) final;
+
+  const MSCRBuildConfig config() { return config_; }
 
  private:
   String name_;

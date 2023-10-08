@@ -42,7 +42,7 @@ def basic_pattern(
     Returns
     -------
     out: tvm.relax.dpl.pattern.DFPattern
-        The resulting pattern describing a conv_bias operation.
+        The resulting pattern describing the operation.
 
     annotations: Mapping[str, tvm.relax.dpl.pattern.DFPattern]
         A mapping from name to sub pattern. It can be used to extract
@@ -65,6 +65,83 @@ def basic_pattern(
     return out, annotations
 
 
+def elemwise_pattern(op_name: str) -> Tuple[pattern.DFPattern, Mapping[str, pattern.DFPattern]]:
+    """create elemwise pattern for tensorrt support ops.
+
+    Parameters
+    ----------
+    op_name: str
+        The name of a Relax op, such as "relax.add"
+
+    Returns
+    -------
+    out: tvm.relax.dpl.pattern.DFPattern
+        The resulting pattern describing the operation.
+
+    annotations: Mapping[str, tvm.relax.dpl.pattern.DFPattern]
+        A mapping from name to sub pattern. It can be used to extract
+        important expressions from match result, to power the partition
+        check function and codegen.
+    """
+
+    return basic_pattern(op_name, ["input", "input"])
+
+
+def argmaxmin_pattern(op_name: str) -> Tuple[pattern.DFPattern, Mapping[str, pattern.DFPattern]]:
+    """create argmaxmin pattern for tensorrt support ops.
+
+    Parameters
+    ----------
+    op_name: str
+        The name of a Relax op, such as "relax.argmax"
+
+    Returns
+    -------
+    out: tvm.relax.dpl.pattern.DFPattern
+        The resulting pattern describing the operation.
+
+    annotations: Mapping[str, tvm.relax.dpl.pattern.DFPattern]
+        A mapping from name to sub pattern. It can be used to extract
+        important expressions from match result, to power the partition
+        check function and codegen.
+    """
+
+    input = pattern.wildcard()
+    argmaxmin = pattern.is_op(op_name)(input)
+    out = pattern.is_op("relax.astype")(argmaxmin)
+    return out, {"input": input, "argmaxmin": argmaxmin, "out": out}
+
+
+def _check_expr(expr: relax.Expr, dtypes: Tuple[str] = None) -> bool:
+    """Check if the expr can be fused on tensorrt.
+
+    Parameters
+    ----------
+    expr: relax.Expr
+        The expr to be check
+    dtype: tuple<str>
+        The accept dtypes
+
+    Returns
+    -------
+    pass: bool
+        Whether the expr is correct.
+    """
+
+    if isinstance(expr, relax.ShapeExpr):
+        return True
+    if isinstance(expr, relax.PrimValue):
+        return True
+    if isinstance(expr, relax.Tuple):
+        return all(_check_expr(field) for field in expr.fields)
+    if any(i < 0 for i in expr.struct_info.shape.values):
+        return False
+    dtypes = dtypes or ("float32", "float16")
+    if expr.struct_info.dtype not in dtypes:
+        return False
+    return True
+
+
 def _basic_check(context: PatternCheckContext) -> bool:
     """Check if the basic pattern is correct.
 
@@ -75,13 +152,41 @@ def _basic_check(context: PatternCheckContext) -> bool:
     """
 
     for _, expr in context.annotated_expr.items():
-        if isinstance(expr, relax.ShapeExpr):
-            continue
-        if any(i < 0 for i in expr.struct_info.shape.values):
-            return False
-        if expr.struct_info.dtype not in ("float32", "float16"):
+        if not _check_expr(expr):
             return False
     return True
+
+
+def _argmaxmin_check(context: PatternCheckContext) -> bool:
+    """Check if the argmaxmin pattern is correct.
+
+    Returns
+    -------
+    pass: bool
+        Whether the pattern is correct.
+    """
+
+    if not _check_expr(context.annotated_expr["input"]):
+        return False
+    return _check_expr(context.annotated_expr["out"], ("int32"))
+
+
+def _compare_check(context: PatternCheckContext) -> bool:
+    """Check if the compare pattern is correct.
+
+    Returns
+    -------
+    pass: bool
+        Whether the pattern is correct.
+    """
+
+    if any(not _check_expr(context.annotated_expr[key]) for key in ["input_0", "input_1"]):
+        return False
+    if not _check_expr(context.annotated_expr["out"], ("bool")):
+        return False
+    ndim_a = len(context.annotated_expr["input_0"].struct_info.shape.values)
+    ndim_b = len(context.annotated_expr["input_1"].struct_info.shape.values)
+    return ndim_a == ndim_b
 
 
 def _elemwise_check(context: PatternCheckContext) -> bool:
@@ -97,8 +202,36 @@ def _elemwise_check(context: PatternCheckContext) -> bool:
         return False
     ndim_a = len(context.annotated_expr["input_0"].struct_info.shape.values)
     ndim_b = len(context.annotated_expr["input_1"].struct_info.shape.values)
-    print("[TMINFO] checking elemwise with ndim_a {}, ndim_b {}".format(ndim_a, ndim_b))
     return ndim_a == ndim_b
+
+
+def _reshape_check(context: PatternCheckContext) -> bool:
+    """Check if the reshape pattern is correct.
+
+    Returns
+    -------
+    pass: bool
+        Whether the pattern is correct.
+    """
+
+    dtypes = ("float32", "float16", "int32")
+    if any(not _check_expr(context.annotated_expr[key], dtypes) for key in ["input_0", "out"]):
+        return False
+    return True
+
+
+def _take_check(context: PatternCheckContext) -> bool:
+    """Check if the take pattern is correct.
+
+    Returns
+    -------
+    pass: bool
+        Whether the pattern is correct.
+    """
+
+    if any(not _check_expr(context.annotated_expr[key]) for key in ["input_0", "out"]):
+        return False
+    return _check_expr(context.annotated_expr["input_1"], ("int32"))
 
 
 def wrap_basic_check(
@@ -145,25 +278,64 @@ def get_patterns(target) -> List[Pattern]:
     """
 
     basic_ops = {
+        "nn.adaptive_avg_pool2d": ["input"],
+        "nn.avg_pool2d": ["input"],
         "nn.conv2d": ["input", "constant"],
-        "reshape": ["input", "input"],
+        "nn.max_pool2d": ["input"],
+        "concat": ["input"],
+        "clip": ["input", "input", "input"],
+        "image.resize2d": ["input", "input"],
         "matmul": ["input", "input"],
+        "permute_dims": ["input"],
+        "strided_slice": ["input"],
     }
-    elemwise_ops = {
-        "add": ["input", "input"],
-        "divide": ["input", "input"],
-        "multiply": ["input", "input"],
-        "subtract": ["input", "input"],
-    }
+    activation_ops = ["nn.relu", "nn.softmax", "sigmoid"]
+    reduce_ops = ["max", "min", "mean", "sum"]
+    unary_ops = ["cos", "exp", "negative", "round", "sin", "square", "sqrt", "tanh"]
+    elemwise_ops = [
+        "add",
+        "divide",
+        "floor_divide",
+        "maximum",
+        "minimum",
+        "multiply",
+        "power",
+        "subtract",
+    ]
+    compare_ops = ["greater", "less"]
     patterns = []
     # basic ops
     for op, in_types in basic_ops.items():
         patterns.append((target + "." + op, *basic_pattern("relax." + op, in_types), _basic_check))
+    # activation ops
+    for op in activation_ops:
+        patterns.append((target + "." + op, *basic_pattern("relax." + op, ["input"]), _basic_check))
+    # reduce ops
+    for op in reduce_ops:
+        patterns.append((target + "." + op, *basic_pattern("relax." + op, ["input"]), _basic_check))
+    # unary ops
+    for op in unary_ops:
+        patterns.append((target + "." + op, *basic_pattern("relax." + op, ["input"]), _basic_check))
     # elemwise ops
-    for op, in_types in elemwise_ops.items():
-        patterns.append(
-            (target + "." + op, *basic_pattern("relax." + op, in_types), _elemwise_check)
-        )
+    for op in elemwise_ops:
+        patterns.append((target + "." + op, *elemwise_pattern("relax." + op), _elemwise_check))
+    # compare ops
+    for op in compare_ops:
+        patterns.append((target + "." + op, *elemwise_pattern("relax." + op), _compare_check))
+
+    # special ops
+    patterns.extend(
+        [
+            (target + ".take", *basic_pattern("relax.take", ["input", "input"]), _take_check),
+            (target + ".argmax", *argmaxmin_pattern("relax.argmax"), _argmaxmin_check),
+            (target + ".argmin", *argmaxmin_pattern("relax.argmin"), _argmaxmin_check),
+            (
+                target + ".reshape",
+                *basic_pattern("relax.reshape", ["input", "input"]),
+                _reshape_check,
+            ),
+        ]
+    )
     # fusable ops
     patterns.extend(
         [

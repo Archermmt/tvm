@@ -33,12 +33,12 @@ def get_trt_common_h_code() -> str:
     return """#ifndef TVM_CONTRIB_MSC_UTILS_TRT_COMMON_H_
 #define TVM_CONTRIB_MSC_UTILS_TRT_COMMON_H_
 
+#include <cassert>
 #include <fstream>
 #include <iostream>
 #include <map>
 #include <memory>
 #include <vector>
-#include <cassert>
 
 #include "NvInfer.h"
 
@@ -122,6 +122,8 @@ using TRTPtr = std::unique_ptr<T, InferDeleter>;
 
 class TRTUtils {
  public:
+  static const std::string TensorInfo(ILayer* layer, size_t id = 0);
+
   static std::map<std::string, Weights> LoadWeights(const std::string& file);
 
 #if TRT_VERSION_GE(6, 0, 0)
@@ -160,6 +162,30 @@ def get_trt_common_cc_code() -> str:
 namespace tvm {
 namespace contrib {
 namespace msc {
+
+const std::string TRTUtils::TensorInfo(ILayer* layer, size_t id) {
+  std::string info = "S:";
+  Dims dims = layer->getOutput(id)->getDimensions();
+  for (int i = 0; i < dims.nbDims; i++) {
+    info += std::to_string(dims.d[i]) + ';';
+  }
+  DataType dtype = layer->getOutput(id)->getType();
+  info += " D:";
+  if (dtype == DataType::kFLOAT) {
+    info += "float32";
+  } else if (dtype == DataType::kHALF) {
+    info += "float16";
+  } else if (dtype == DataType::kINT32) {
+    info += "int32";
+  } else if (dtype == DataType::kINT8) {
+    info += "int8";
+  } else if (dtype == DataType::kBOOL) {
+    info += "bool";
+  } else {
+    info += "unknown";
+  }
+  return info;
+}
 
 std::map<std::string, Weights> TRTUtils::LoadWeights(const std::string& file) {
   std::map<std::string, Weights> weightMap;

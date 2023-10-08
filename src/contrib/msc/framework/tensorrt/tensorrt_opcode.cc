@@ -62,14 +62,16 @@ void TensorRTOpCode::SetPadding(const String& key) {
 const String TensorRTOpCode::DeclareInputs(bool simplify) {
   const String& inputs_ref = "inputs_" + std::to_string(node()->index);
   if (node()->parents.size() == 1 && simplify) {
+    const auto& idx_input = StringUtils::Replace(IdxInput(), "*", "");
     stack_.declare("std::vector<ITensor*>", inputs_ref + "_vec")
         .declare_arg(node()->inputs.size())
-        .declare_arg(IdxInput())
+        .declare_arg(idx_input)
         .assign(inputs_ref, inputs_ref + "_vec.data()", "ITensor**");
   } else {
     Array<String> idx_inputs;
     for (size_t i = 0; i < node()->inputs.size(); i++) {
-      idx_inputs.push_back(IdxInput(i));
+      const auto& idx_input = StringUtils::Replace(IdxInput(i), "*", "");
+      idx_inputs.push_back(idx_input);
     }
     stack_.assign(inputs_ref, DocUtils::ToListDoc(idx_inputs), "ITensor**");
   }
@@ -81,6 +83,8 @@ const String TensorRTOpCode::DType(const DataType& dtype) {
   String dtype_enum;
   if (dtype_name == "int8") {
     dtype_enum = "DataType::kINT8";
+  } else if (dtype_name == "int32") {
+    dtype_enum = "DataType::kINT32";
   } else if (dtype_name == "float16") {
     dtype_enum = "DataType::kHALF";
   } else if (dtype_name == "float32") {
@@ -144,7 +148,7 @@ const size_t TensorRTOpCode::AttrToAxis(const String& key, size_t ndim) {
 
 template <typename T>
 void TensorRTOpCode::SetLayerByAttr(const String& method, const String& key) {
-  stack_.func_call("set" + method, NullOpt, DocUtils::ToPtrDoc(IdxNode())).op_arg<T>(key);
+  stack_.func_call("set" + method, NullOpt, DocUtils::ToPtrDoc(IdxNode())).op_arg<T>(key, "");
 }
 
 template <typename T>
@@ -185,7 +189,9 @@ void TensorRTOpCode::SetLayerByDimsValue(const String& method, const Array<Integ
 
 class TensorRTActivationCodeGen : public TensorRTOpCode {
  public:
-  TENSORRT_FLAG_OP_CODEGEN_METHODS(TensorRTActivationCodeGen)
+  TensorRTActivationCodeGen(const String& symbol) : TensorRTOpCode("Activation") {
+    symbol_ = symbol;
+  }
 
  protected:
   void CodeGenBuild() final {
@@ -197,6 +203,9 @@ class TensorRTActivationCodeGen : public TensorRTOpCode {
       SetLayerByAttr<float>("Beta", "max");
     }
   }
+
+ private:
+  String symbol_;
 };
 
 class TensorRTAdaptivePool2dCodeGen : public TensorRTOpCode {
@@ -206,27 +215,38 @@ class TensorRTAdaptivePool2dCodeGen : public TensorRTOpCode {
  protected:
   void CodeGenBuild() final {
     const auto& input = node()->InputAt(0);
-    std::vector<int64_t> pool_size{input->DimAt("H")->value, input->DimAt("W")->value};
+    const auto& output = node()->OutputAt(0);
+    std::vector<int64_t> in_sizes{input->DimAt("H")->value, input->DimAt("W")->value};
+    std::vector<int64_t> out_sizes{output->DimAt("H")->value, output->DimAt("W")->value};
+    std::vector<int64_t> stride, kernel;
+    for (size_t i = 0; i < 2; i++) {
+      stride.push_back(in_sizes[i] / out_sizes[i]);
+      kernel.push_back((in_sizes[i] - (out_sizes[i] - 1) * stride[i]));
+    }
     stack_.op_call()
         .op_input_arg()
         .call_arg("PoolingType::k" + symbol_)
-        .call_arg(ToDims(pool_size));
+        .call_arg(ToDims(kernel, false));
+    SetLayerByDimsValue("Stride", stride, false);
   }
 };
 
-class TensorRTArgsortCodeGen : public TensorRTOpCode {
+class TensorRTArgmaxminCodeGen : public TensorRTOpCode {
  public:
-  TENSORRT_FLAG_OP_CODEGEN_METHODS(TensorRTArgsortCodeGen)
+  TensorRTArgmaxminCodeGen(const String& symbol) : TensorRTOpCode("TopK") { symbol_ = symbol; }
 
  protected:
   void CodeGenBuild() final {
-    ICHECK(node()->GetTypeAttr<bool>("keepdims")) << "Only support argsor with keepdims";
+    ICHECK(node()->GetTypeAttr<bool>("keepdims")) << "Only support argsort with keepdims";
     stack_.op_call()
         .op_input_arg()
         .call_arg("TopKOperation::k" + symbol_)
-        .op_arg<bool>("keepdims")
+        .op_arg<bool>("keepdims", "")
         .call_arg(AttrToReduceAxis());
   }
+
+ private:
+  String symbol_;
 };
 
 class TensorRTAstypeCodeGen : public TensorRTOpCode {
@@ -320,12 +340,17 @@ class TensorRTConvCodeGen : public TensorRTOpCode {
 
 class TensorRTElemwiseCodeGen : public TensorRTOpCode {
  public:
-  TENSORRT_FLAG_OP_CODEGEN_METHODS(TensorRTElemwiseCodeGen)
+  TensorRTElemwiseCodeGen(const String& symbol) : TensorRTOpCode("ElementWise") {
+    symbol_ = symbol;
+  }
 
  protected:
   void CodeGenBuild() final {
     stack_.op_call().op_inputs_arg(false).call_arg("ElementWiseOperation::k" + symbol_);
   }
+
+ private:
+  String symbol_;
 };
 
 class TensorRTInputCodeGen : public TensorRTOpCode {
@@ -424,7 +449,7 @@ class TensorRTPermuteDimsCodeGen : public TensorRTOpCode {
 
 class TensorRTPool2dCodeGen : public TensorRTOpCode {
  public:
-  TENSORRT_FLAG_OP_CODEGEN_METHODS(TensorRTPool2dCodeGen)
+  TensorRTPool2dCodeGen(const String& symbol) : TensorRTOpCode("Pooling") { symbol_ = symbol; }
 
  protected:
   void CodeGenBuild() final {
@@ -432,17 +457,23 @@ class TensorRTPool2dCodeGen : public TensorRTOpCode {
         .op_input_arg()
         .call_arg("PoolingType::k" + symbol_)
         .call_arg(AttrToDims("pool_size", false));
-    SetLayerByDimsAttr("Strides", "strides");
-    if (node()->optype == "nn.max_pool2d" && node()->GetTypeAttr<bool>("ceil_mode")) {
+    SetLayerByDimsAttr("Stride", "strides", false);
+    if (node()->GetTypeAttr<bool>("ceil_mode")) {
       SetLayerByValue("PaddingMode", "PaddingMode::kEXPLICIT_ROUND_UP");
+    }
+    if (node()->optype == "nn.avg_pool2d") {
+      SetLayerByValue("AverageCountExcludesPadding", false);
     }
     SetPadding();
   }
+
+ private:
+  String symbol_;
 };
 
 class TensorRTReduceCodeGen : public TensorRTOpCode {
  public:
-  TENSORRT_FLAG_OP_CODEGEN_METHODS(TensorRTReduceCodeGen)
+  TensorRTReduceCodeGen(const String& symbol) : TensorRTOpCode("Reduce") { symbol_ = symbol; }
 
  protected:
   void CodeGenBuild() final {
@@ -450,8 +481,11 @@ class TensorRTReduceCodeGen : public TensorRTOpCode {
         .op_input_arg()
         .call_arg("ReduceOperation::k" + symbol_)
         .call_arg(AttrToReduceAxis())
-        .op_arg<bool>("keepdims");
+        .op_arg<bool>("keepdims", "");
   }
+
+ private:
+  String symbol_;
 };
 
 class TensorRTReshapeCodeGen : public TensorRTOpCode {
@@ -477,13 +511,13 @@ class TensorRTResize2dCodeGen : public TensorRTOpCode {
     String resize_mode;
     if (method == "linear") {
       resize_mode = "LINEAR";
-    } else if (method == "nearest_neighbour") {
+    } else if (method == "nearest_neighbor") {
       resize_mode = "NEAREST";
     } else {
       LOG_FATAL << "Unexpected resize method " << method;
     }
     SetLayerByValue("ResizeMode", "ResizeMode::k" + resize_mode);
-    SetLayerByValue("SelectotForSinglePixel", "ResizeSelector::kFORMULA");
+    SetLayerByValue("SelectorForSinglePixel", "ResizeSelector::kFORMULA");
     const auto& transformation_mode =
         node()->GetTypeAttr<std::string>("coordinate_transformation_mode");
     // set transformation
@@ -501,23 +535,23 @@ class TensorRTResize2dCodeGen : public TensorRTOpCode {
       LOG_FATAL << "Unexpected transformation_mode " << transformation_mode;
     }
     // set round
-    const auto& round_method = node()->GetTypeAttr<std::string>("round_method");
+    const auto& rounding_method = node()->GetTypeAttr<std::string>("rounding_method");
     if (transformation_mode == "tf_half_pixel_for_nn") {
-      SetLayerByValue("NearestRounding", "ResizeRounfMode::kCEIL");
-    } else if (round_method == "floor") {
-      SetLayerByValue("NearestRounding", "ResizeRounfMode::kFLOOR");
-    } else if (round_method == "ceil") {
-      SetLayerByValue("NearestRounding", "ResizeRounfMode::kCEIL");
-    } else if (round_method == "round_prefer_floor") {
-      SetLayerByValue("NearestRounding", "ResizeRounfMode::kHALF_DOWN");
-    } else if (round_method == "round_prefer_ceil") {
-      SetLayerByValue("NearestRounding", "ResizeRounfMode::kHALF_UP");
-    } else if (round_method == "round") {
-      SetLayerByValue("NearestRounding", "ResizeRounfMode::kHALF_UP");
-    } else if (round_method == "") {
-      SetLayerByValue("NearestRounding", "ResizeRounfMode::kHALF_UP");
+      SetLayerByValue("NearestRounding", "ResizeRoundMode::kCEIL");
+    } else if (rounding_method == "floor") {
+      SetLayerByValue("NearestRounding", "ResizeRoundMode::kFLOOR");
+    } else if (rounding_method == "ceil") {
+      SetLayerByValue("NearestRounding", "ResizeRoundMode::kCEIL");
+    } else if (rounding_method == "round_prefer_floor") {
+      SetLayerByValue("NearestRounding", "ResizeRoundMode::kHALF_DOWN");
+    } else if (rounding_method == "round_prefer_ceil") {
+      SetLayerByValue("NearestRounding", "ResizeRoundMode::kHALF_UP");
+    } else if (rounding_method == "round") {
+      SetLayerByValue("NearestRounding", "ResizeRoundMode::kHALF_UP");
+    } else if (rounding_method == "") {
+      SetLayerByValue("NearestRounding", "ResizeRoundMode::kHALF_UP");
     } else {
-      LOG_FATAL << "Unexpected round_method " << round_method;
+      LOG_FATAL << "Unexpected rounding_method " << rounding_method;
     }
     // set output dims
     SetLayerByDimsValue("OutputDimensions", node()->OutputAt(0)->shape);
@@ -532,6 +566,16 @@ class TensorRTSoftmaxCodeGen : public TensorRTOpCode {
   void CodeGenBuild() final {
     stack_.op_call().op_input_arg();
     SetLayerByValue("Axes", AttrToReduceAxis());
+  }
+};
+
+class TensorRTSquareCodeGen : public TensorRTOpCode {
+ public:
+  TENSORRT_OP_CODEGEN_METHODS(TensorRTSquareCodeGen)
+
+ protected:
+  void CodeGenBuild() final {
+    stack_.op_call().op_input_arg().op_input_arg().call_arg("ElementWiseOperation::kPROD");
   }
 };
 
@@ -550,18 +594,21 @@ class TensorRTStridedSliceCodeGen : public TensorRTOpCode {
     std::vector<size_t> begin(node()->InputAt(0)->Ndim(), 0);
     std::vector<size_t> strides(node()->InputAt(0)->Ndim(), 1);
     const auto& attr_begin = node()->GetTypeArrayAttr<int>("begin");
-    const auto& attr_strides = node()->GetTypeArrayAttr<int>("strides");
-
     for (size_t i = 0; i < axes.size(); i++) {
       size_t max_dim = static_cast<size_t>(node()->InputAt(0)->DimAt(axes[i])->value);
       begin[axes[i]] = CommonUtils::GetIndex(attr_begin[i], max_dim);
-      strides[axes[i]] = attr_strides[i];
+    }
+    std::vector<int> attr_strides;
+    if (node()->GetAttr("strides", &attr_strides)) {
+      for (size_t i = 0; i < axes.size(); i++) {
+        strides[axes[i]] = static_cast<size_t>(attr_strides[i]);
+      }
     }
     stack_.op_call()
         .op_input_arg()
-        .call_arg(DocUtils::ToListDoc(begin))
-        .call_arg(DocUtils::ToListDoc(node()->OutputAt(0)->shape))
-        .call_arg(DocUtils::ToListDoc(strides));
+        .call_arg(ToDims(begin))
+        .call_arg(ToDims(node()->OutputAt(0)->shape))
+        .call_arg(ToDims(strides));
   }
 };
 
@@ -588,19 +635,22 @@ class TensorRTTopkCodeGen : public TensorRTOpCode {
     stack_.op_call()
         .op_input_arg()
         .call_arg("TopKOperation::k" + symbol)
-        .op_arg<int>("k")
+        .op_arg<int>("k", "")
         .call_arg(AttrToReduceAxis());
   }
 };
 
 class TensorRTUnaryCodeGen : public TensorRTOpCode {
  public:
-  TENSORRT_FLAG_OP_CODEGEN_METHODS(TensorRTUnaryCodeGen)
+  TensorRTUnaryCodeGen(const String& symbol) : TensorRTOpCode("Unary") { symbol_ = symbol; }
 
  protected:
   void CodeGenBuild() final {
     stack_.op_call().op_input_arg().call_arg("UnaryOperation::k" + symbol_);
   }
+
+ private:
+  String symbol_;
 };
 
 class TensorRTWhereCodeGen : public TensorRTOpCode {
@@ -616,46 +666,56 @@ GetTensorRTOpCodes() {
   static auto map = std::make_shared<std::unordered_map<String, std::shared_ptr<TensorRTOpCode>>>();
   if (!map->empty()) return map;
   // unary ops
-  map->emplace("abs", std::make_shared<TensorRTUnaryCodeGen>("Unary", "ABS"));
-  map->emplace("ceil", std::make_shared<TensorRTUnaryCodeGen>("Unary", "CEIL"));
-  map->emplace("cos", std::make_shared<TensorRTUnaryCodeGen>("Unary", "COS"));
-  map->emplace("erf", std::make_shared<TensorRTUnaryCodeGen>("Unary", "ERF"));
-  map->emplace("exp", std::make_shared<TensorRTUnaryCodeGen>("Unary", "EXP"));
-  map->emplace("floor", std::make_shared<TensorRTUnaryCodeGen>("Unary", "FLOOR"));
-  map->emplace("log", std::make_shared<TensorRTUnaryCodeGen>("Unary", "LOG"));
-  map->emplace("round", std::make_shared<TensorRTUnaryCodeGen>("Unary", "ROUND"));
-  map->emplace("sin", std::make_shared<TensorRTUnaryCodeGen>("Unary", "SIN"));
-  map->emplace("sqrt", std::make_shared<TensorRTUnaryCodeGen>("Unary", "SQRT"));
+  map->emplace("abs", std::make_shared<TensorRTUnaryCodeGen>("ABS"));
+  map->emplace("acos", std::make_shared<TensorRTUnaryCodeGen>("ACOS"));
+  map->emplace("acosh", std::make_shared<TensorRTUnaryCodeGen>("ACOSH"));
+  map->emplace("asin", std::make_shared<TensorRTUnaryCodeGen>("ASIN"));
+  map->emplace("asinh", std::make_shared<TensorRTUnaryCodeGen>("ASINH"));
+  map->emplace("atan", std::make_shared<TensorRTUnaryCodeGen>("ATAN"));
+  map->emplace("atanh", std::make_shared<TensorRTUnaryCodeGen>("ATANH"));
+  map->emplace("ceil", std::make_shared<TensorRTUnaryCodeGen>("CEIL"));
+  map->emplace("cos", std::make_shared<TensorRTUnaryCodeGen>("COS"));
+  map->emplace("cosh", std::make_shared<TensorRTUnaryCodeGen>("COSH"));
+  map->emplace("erf", std::make_shared<TensorRTUnaryCodeGen>("ERF"));
+  map->emplace("exp", std::make_shared<TensorRTUnaryCodeGen>("EXP"));
+  map->emplace("floor", std::make_shared<TensorRTUnaryCodeGen>("FLOOR"));
+  map->emplace("log", std::make_shared<TensorRTUnaryCodeGen>("LOG"));
+  map->emplace("negative", std::make_shared<TensorRTUnaryCodeGen>("NEG"));
+  map->emplace("round", std::make_shared<TensorRTUnaryCodeGen>("ROUND"));
+  map->emplace("sin", std::make_shared<TensorRTUnaryCodeGen>("SIN"));
+  map->emplace("sinh", std::make_shared<TensorRTUnaryCodeGen>("SINH"));
+  map->emplace("sqrt", std::make_shared<TensorRTUnaryCodeGen>("SQRT"));
+  map->emplace("tanh", std::make_shared<TensorRTUnaryCodeGen>("TANH"));
 
   // elemwise ops
-  map->emplace("add", std::make_shared<TensorRTElemwiseCodeGen>("ElementWise", "SUM"));
-  map->emplace("divide", std::make_shared<TensorRTElemwiseCodeGen>("ElementWise", "DIV"));
-  map->emplace("equal", std::make_shared<TensorRTElemwiseCodeGen>("ElementWise", "EQUAL"));
-  map->emplace("floor_divide",
-               std::make_shared<TensorRTElemwiseCodeGen>("ElementWise", "FLOOR_DIV"));
-  map->emplace("greater", std::make_shared<TensorRTElemwiseCodeGen>("ElementWise", "GREATER"));
-  map->emplace("less", std::make_shared<TensorRTElemwiseCodeGen>("ElementWise", "LESS"));
-  map->emplace("maximum", std::make_shared<TensorRTElemwiseCodeGen>("ElementWise", "MAX"));
-  map->emplace("minimum", std::make_shared<TensorRTElemwiseCodeGen>("ElementWise", "MIN"));
-  map->emplace("multiply", std::make_shared<TensorRTElemwiseCodeGen>("ElementWise", "PROD"));
-  map->emplace("power", std::make_shared<TensorRTElemwiseCodeGen>("ElementWise", "POW"));
-  map->emplace("subtract", std::make_shared<TensorRTElemwiseCodeGen>("ElementWise", "SUB"));
+  map->emplace("add", std::make_shared<TensorRTElemwiseCodeGen>("SUM"));
+  map->emplace("divide", std::make_shared<TensorRTElemwiseCodeGen>("DIV"));
+  map->emplace("equal", std::make_shared<TensorRTElemwiseCodeGen>("EQUAL"));
+  map->emplace("floor_divide", std::make_shared<TensorRTElemwiseCodeGen>("FLOOR_DIV"));
+  map->emplace("greater", std::make_shared<TensorRTElemwiseCodeGen>("GREATER"));
+  map->emplace("less", std::make_shared<TensorRTElemwiseCodeGen>("LESS"));
+  map->emplace("maximum", std::make_shared<TensorRTElemwiseCodeGen>("MAX"));
+  map->emplace("minimum", std::make_shared<TensorRTElemwiseCodeGen>("MIN"));
+  map->emplace("multiply", std::make_shared<TensorRTElemwiseCodeGen>("PROD"));
+  map->emplace("power", std::make_shared<TensorRTElemwiseCodeGen>("POW"));
+  map->emplace("subtract", std::make_shared<TensorRTElemwiseCodeGen>("SUB"));
 
   // reduce ops
-  map->emplace("max", std::make_shared<TensorRTReduceCodeGen>("Reduce", "MAX"));
-  map->emplace("mean", std::make_shared<TensorRTReduceCodeGen>("Reduce", "AVG"));
-  map->emplace("min", std::make_shared<TensorRTReduceCodeGen>("Reduce", "MIN"));
-  map->emplace("sum", std::make_shared<TensorRTReduceCodeGen>("Reduce", "SUM"));
+  map->emplace("max", std::make_shared<TensorRTReduceCodeGen>("MAX"));
+  map->emplace("mean", std::make_shared<TensorRTReduceCodeGen>("AVG"));
+  map->emplace("min", std::make_shared<TensorRTReduceCodeGen>("MIN"));
+  map->emplace("sum", std::make_shared<TensorRTReduceCodeGen>("SUM"));
 
   // math ops
-  map->emplace("argmax", std::make_shared<TensorRTArgsortCodeGen>("TopK", "MAX"));
-  map->emplace("argmin", std::make_shared<TensorRTArgsortCodeGen>("TopK", "MIN"));
+  map->emplace("argmax", std::make_shared<TensorRTArgmaxminCodeGen>("MAX"));
+  map->emplace("argmin", std::make_shared<TensorRTArgmaxminCodeGen>("MIN"));
   map->emplace("astype", std::make_shared<TensorRTAstypeCodeGen>("Identity"));
   map->emplace("concat", std::make_shared<TensorRTConcatCodeGen>("Concatenation"));
   map->emplace("expand_dims", std::make_shared<TensorRTReshapeCodeGen>("Shuffle"));
   map->emplace("matmul", std::make_shared<TensorRTMatmulCodeGen>("MatrixMultiply"));
   map->emplace("permute_dims", std::make_shared<TensorRTPermuteDimsCodeGen>("Shuffle"));
   map->emplace("reshape", std::make_shared<TensorRTReshapeCodeGen>("Shuffle"));
+  map->emplace("square", std::make_shared<TensorRTSquareCodeGen>("ElementWise"));
   map->emplace("squeeze", std::make_shared<TensorRTReshapeCodeGen>("Shuffle"));
   map->emplace("strided_slice", std::make_shared<TensorRTStridedSliceCodeGen>("Slice"));
   map->emplace("take", std::make_shared<TensorRTTakeCodeGen>("Gather"));
@@ -666,20 +726,18 @@ GetTensorRTOpCodes() {
   map->emplace("constant", std::make_shared<TensorRTConstantCodeGen>("Constant"));
 
   // activation ops
-  map->emplace("clip", std::make_shared<TensorRTActivationCodeGen>("Activation", "CLIP"));
-  map->emplace("sigmoid", std::make_shared<TensorRTActivationCodeGen>("Activation", "SIGMOID"));
-  map->emplace("tanh", std::make_shared<TensorRTActivationCodeGen>("Activation", "TANH"));
-  map->emplace("nn.relu", std::make_shared<TensorRTActivationCodeGen>("Activation", "RELU"));
-  map->emplace("nn.leaky_relu",
-               std::make_shared<TensorRTActivationCodeGen>("Activation", "LEAKY_RELU"));
+  map->emplace("clip", std::make_shared<TensorRTActivationCodeGen>("CLIP"));
+  map->emplace("sigmoid", std::make_shared<TensorRTActivationCodeGen>("SIGMOID"));
+  map->emplace("nn.relu", std::make_shared<TensorRTActivationCodeGen>("RELU"));
+  map->emplace("nn.leaky_relu", std::make_shared<TensorRTActivationCodeGen>("LEAKY_RELU"));
 
   // nn ops
   map->emplace("nn.adaptive_avg_pool2d",
                std::make_shared<TensorRTAdaptivePool2dCodeGen>("Pooling", "AVERAGE"));
-  map->emplace("nn.avg_pool2d", std::make_shared<TensorRTPool2dCodeGen>("Pooling", "AVERAGE"));
+  map->emplace("nn.avg_pool2d", std::make_shared<TensorRTPool2dCodeGen>("AVERAGE"));
   map->emplace("nn.batch_matmul", std::make_shared<TensorRTBatchMatmulCodeGen>("MatrixMultiply"));
   map->emplace("nn.conv2d", std::make_shared<TensorRTConvCodeGen>("ConvolutionNd", false));
-  map->emplace("nn.max_pool2d", std::make_shared<TensorRTPool2dCodeGen>("Pooling", "MAX"));
+  map->emplace("nn.max_pool2d", std::make_shared<TensorRTPool2dCodeGen>("MAX"));
   map->emplace("nn.pad", std::make_shared<TensorRTPadCodeGen>("Padding"));
   map->emplace("nn.softmax", std::make_shared<TensorRTSoftmaxCodeGen>("SoftMax"));
 

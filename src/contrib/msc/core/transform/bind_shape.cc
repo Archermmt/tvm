@@ -89,14 +89,15 @@ class ShapeBinder : public ExprMutator {
     if (new_args.size() == call_node->args.size()) {
       ExprMutator::VisitBinding_(binding, call_node);
     } else if (const auto* op_node = call_node->op.as<OpNode>()) {
-      ICHECK(op_node->name == "relax.reshape")
-          << "Expect ShapeExpr consumer as reshape, get " << GetRef<Call>(call_node);
+      ICHECK(op_node->name == "relax.reshape" || op_node->name == "relax.image.resize2d")
+          << "Expect ShapeExpr consumer as reshape or image.resize2d, get "
+          << GetRef<Call>(call_node);
       const auto& opt_shape = Downcast<ShapeStructInfo>(GetStructInfo(call_node->args[1]))->values;
       ICHECK(opt_shape.defined()) << "Expected shape defined, get " << call_node->args[1];
       new_args.push_back(ShapeExpr(opt_shape.value()));
-      const auto& new_reshape =
+      const auto& new_call =
           Call(call_node->op, new_args, call_node->attrs, call_node->sinfo_args, call_node->span);
-      ReEmitBinding(binding, builder_->Normalize(new_reshape));
+      ReEmitBinding(binding, builder_->Normalize(new_call));
     } else if (const auto* gv_node = call_node->op.as<GlobalVarNode>()) {
       const auto& func_info = Downcast<FuncStructInfo>(gv_node->struct_info_);
       Array<StructInfo> params_info;

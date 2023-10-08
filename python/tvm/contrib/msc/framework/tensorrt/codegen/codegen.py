@@ -86,14 +86,18 @@ def to_sub_tensorrt(
                         write_weight(name, data, f)
                     else:
                         write_weight(name, data.asnumpy(), f)
-            with folder.create_dir("utils") as utils_folder:
-                for name, source in get_trt_sources().items():
-                    utils_folder.add_file(name, source)
+        # save utils sources
+        with folder.create_dir("utils") as utils_folder:
+            for name, source in get_trt_sources().items():
+                utils_folder.add_file(name, source)
 
     def _build_engine(engine_name: str, folder: msc_utils.MSCDirectory) -> str:
-        process = subprocess.Popen("./" + engine_name, shell=True)
+        with open("engine.log", "w") as log_f:
+            process = subprocess.Popen("./" + engine_name, stdout=log_f, stderr=log_f, shell=True)
         process.wait()
-        assert process.returncode == 0, "Failed to test engine {} under {}".format(
+        assert (
+            process.returncode == 0
+        ), "Failed to test engine {} under {}, check engine.log for detail".format(
             engine_name, os.getcwd()
         )
         return folder.move_file(engine_name + ".trt", output_folder.create_dir(graph.name))

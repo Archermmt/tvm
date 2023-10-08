@@ -55,10 +55,11 @@ def partition_for_tensorrt(
         The func <name, MSCGraph and weights> list, each element for a sub graph.
     """
 
+    trans_config = trans_config or {}
     mod = tvm.transform.Sequential(
         [
             msc_transform.SetExprName(),
-            trt_transform.TransformTensorRT(),
+            trt_transform.TransformTensorRT(trans_config.get("version")),
             relax.transform.FoldConstant(),
         ]
     )(mod)

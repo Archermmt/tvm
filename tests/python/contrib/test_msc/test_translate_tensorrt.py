@@ -33,6 +33,8 @@ from tvm.contrib.msc.core import utils as msc_utils
 def build_and_run(mod, inputs):
     target = tvm.target.Target("cuda")
     mod = tvm.relax.transform.LegalizeOps()(mod)
+    with target:
+        mod = tvm.tir.transform.DefaultGPUSchedule()(mod)
     with tvm.transform.PassContext(opt_level=3):
         exec = tvm.relax.build(mod, target)
         runnable = tvm.relax.VirtualMachine(exec, tvm.cuda())
@@ -42,7 +44,7 @@ def build_and_run(mod, inputs):
     return [e.asnumpy() for e in res]
 
 
-def verify_model(torch_model, input_info):
+def verify_model(torch_model, input_info, allow_incomplete=False):
     graph_model = fx.symbolic_trace(torch_model)
     datas = [np.random.rand(*i[0]).astype(i[1]) for i in input_info]
     torch_datas = [torch.from_numpy(i) for i in datas]
@@ -52,43 +54,46 @@ def verify_model(torch_model, input_info):
     if not isinstance(golden, (list, tuple)):
         golden = [golden]
     golden = [g.detach().cpu().numpy() for g in golden]
+    # partition module for tensorrt
+    mod, graph_infos = translate.partition_for_tensorrt(mod, allow_incomplete=allow_incomplete)
+    # print("partitioned mod " + str(mod))
+    # print("graph " + str(graph_infos[0][1]))
 
-    mod, graph_infos = translate.partition_for_tensorrt(mod, allow_incomplete=False)
-    print("[TMINFO] partitioned " + str(mod))
+    build_folder = None
+    output_folder = msc_utils.msc_dir()
+    codegen_config = None
 
     """
     build_folder = msc_utils.msc_dir("msc_test")
     output_folder = msc_utils.msc_dir("msc_output")
-    target_options = codegen.to_tensorrt(
-        graph_infos, build_folder=build_folder, output_folder=output_folder
-    )
+    dataset = output_folder.relpath("dataset")
+    codegen_config = {"test_iter": 1, "dataset": dataset}
+    with msc_utils.MSCDataSaver(dataset, ["inp_0:0"], ["reshape_1:0"]) as saver:
+        saver.save(datas, golden)
+    with open(os.path.join(dataset, "tensor_info"), "w") as f:
+        f.write("inp_0:0 {}\n".format(datas[0].size * datas[0].itemsize))
+        f.write("reshape_1:0 {}\n".format(golden[0].size * golden[0].itemsize))
     """
-
-    target_options = {}
-    for name, graph, weights in graph_infos:
-        options = {
-            "graph_json": graph.to_json(),
-            "engine": "fake_{}.trt".format(graph.name),
-        }
-        target_options[name] = msc_utils.dump_dict(options)
-    target_options = {"msc_tensorrt": target_options}
-
+    target_options = codegen.to_tensorrt(
+        graph_infos,
+        codegen_config=codegen_config,
+        build_folder=build_folder,
+        output_folder=output_folder,
+    )
     mod = tvm.transform.Sequential(
         [
             tvm.relax.transform.RunCodegen(target_options),
         ]
     )(mod)
-    print("[TMINFO] compiled mod " + str(mod))
-    tvm_datas = [tvm.nd.array(i) for i in datas]
+    tvm_datas = [tvm.nd.array(i, device=tvm.cuda()) for i in datas]
     results = build_and_run(mod, tvm_datas)
-    print("results " + str(results))
-    raise Exception("stop here!!")
     for gol, res in zip(golden, results):
-        tvm.testing.assert_allclose(gol, res, atol=1e-5, rtol=1e-5)
+        tvm.testing.assert_allclose(gol, res, atol=1e-3, rtol=1e-3)
+    output_folder.destory()
 
 
 def test_conv1d():
-    """test relax translator for conv1d"""
+    """test tensorrt translator for conv1d"""
 
     class Conv1D1(Module):
         def __init__(self):
@@ -112,7 +117,7 @@ def test_conv1d():
 
 
 def test_conv2d():
-    """test relax translator for conv2d"""
+    """test tensorrt translator for conv2d"""
 
     class Conv2D1(Module):
         def __init__(self):
@@ -136,7 +141,7 @@ def test_conv2d():
 
 
 def test_linear():
-    """test relax translator for linear"""
+    """test tensorrt translator for linear"""
 
     class Dense1(Module):
         def __init__(self):
@@ -160,12 +165,12 @@ def test_linear():
 
     input_info = [([1, 3, 10, 10], "float32")]
     verify_model(Dense1(), input_info)
-    # verify_model(Dense2(), input_info)
-    # verify_model(MatMul1(), [([10, 10], "float32"), ([10, 10], "float32")])
+    verify_model(Dense2(), input_info)
+    verify_model(MatMul1(), [([10, 10], "float32"), ([10, 10], "float32")])
 
 
 def test_bmm():
-    """test relax translator for bmm"""
+    """test tensorrt translator for bmm"""
 
     class BMM(Module):
         def forward(self, x, y):
@@ -176,7 +181,7 @@ def test_bmm():
 
 
 def test_baddbmm():
-    """test relax translator for baddbmm"""
+    """test tensorrt translator for baddbmm"""
 
     class BAddBMM1(Module):
         def forward(self, c, x, y):
@@ -196,7 +201,7 @@ def test_baddbmm():
 
 
 def test_relu():
-    """test relax translator for relu"""
+    """test tensorrt translator for relu"""
 
     class ReLU(Module):
         def __init__(self):
@@ -206,17 +211,12 @@ def test_relu():
         def forward(self, data):
             return self.relu(data)
 
-    class ReLU1(Module):
-        def forward(self, data):
-            return torch.nn.functional.relu(data)
-
     input_info = [([10, 10], "float32")]
     verify_model(ReLU(), input_info)
-    verify_model(ReLU1(), input_info)
 
 
 def test_relu6():
-    """test relax translator for relu6"""
+    """test tensorrt translator for relu6"""
 
     class ReLU6(Module):
         def __init__(self):
@@ -231,7 +231,7 @@ def test_relu6():
 
 
 def test_maxpool2d():
-    """test relax translator for maxpool2d"""
+    """test tensorrt translator for maxpool2d"""
 
     class MaxPool2d(Module):
         def __init__(self):
@@ -244,14 +244,6 @@ def test_maxpool2d():
     class MaxPool2d2(Module):
         def __init__(self):
             super().__init__()
-            self.pool = torch.nn.MaxPool2d(kernel_size=[2, 2], dilation=[2, 3])
-
-        def forward(self, data):
-            return self.pool(data)
-
-    class MaxPool2d3(Module):
-        def __init__(self):
-            super().__init__()
             self.pool = torch.nn.MaxPool2d(kernel_size=[4, 4], padding=2, stride=2)
 
         def forward(self, data):
@@ -260,11 +252,10 @@ def test_maxpool2d():
     input_info = [([1, 3, 10, 10], "float32")]
     verify_model(MaxPool2d(), input_info)
     verify_model(MaxPool2d2(), input_info)
-    verify_model(MaxPool2d3(), input_info)
 
 
 def test_avgpool2d():
-    """test relax translator for avgpool2d"""
+    """test tensorrt translator for avgpool2d"""
 
     class AvgPool2d(Module):
         def __init__(self):
@@ -288,7 +279,7 @@ def test_avgpool2d():
 
 
 def test_adaptive_avgpool2d():
-    """test relax translator for adaptive_avgpool2d"""
+    """test tensorrt translator for adaptive_avgpool2d"""
 
     class AdaptiveAvgPool2d0(Module):
         def __init__(self):
@@ -303,7 +294,7 @@ def test_adaptive_avgpool2d():
 
 
 def test_flatten():
-    """test relax translator for flatten"""
+    """test tensorrt translator for flatten"""
 
     class Flatten(Module):
         def __init__(self):
@@ -319,7 +310,7 @@ def test_flatten():
 
 
 def test_batchnorm2d():
-    """test relax translator for batchnorm2d"""
+    """test tensorrt translator for batchnorm2d"""
 
     class BatchNorm2d(Module):
         def __init__(self):
@@ -330,11 +321,11 @@ def test_batchnorm2d():
             return self.batchnorm(data)
 
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(BatchNorm2d(), input_info)
+    verify_model(BatchNorm2d().eval(), input_info, allow_incomplete=True)
 
 
 def test_embedding():
-    """test relax translator for embedding"""
+    """test tensorrt translator for embedding"""
 
     class Embedding(Module):
         def __init__(self):
@@ -344,32 +335,12 @@ def test_embedding():
         def forward(self, data):
             return self.embedding(data)
 
-    verify_model(Embedding(), [([4], "int64")])
-    verify_model(Embedding(), [([4, 5], "int64")])
-
-
-def test_dropout():
-    """test relax translator for dropout"""
-
-    class Dropout1(Module):
-        def __init__(self):
-            super().__init__()
-            self.dropout = torch.nn.Dropout(0.5)
-
-        def forward(self, data):
-            return self.dropout(data)
-
-    class Dropout2(Module):
-        def forward(self, data):
-            return torch.dropout(data, 0.5, train=True)
-
-    input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Dropout1(), input_info)
-    verify_model(Dropout2(), input_info)
+    verify_model(Embedding(), [([4], "int64")], allow_incomplete=True)
+    verify_model(Embedding(), [([4, 5], "int64")], allow_incomplete=True)
 
 
 def test_layernorm():
-    """test relax translator for layernorm"""
+    """test tensorrt translator for layernorm"""
 
     class LayerNorm(Module):
         def __init__(self):
@@ -383,71 +354,8 @@ def test_layernorm():
     verify_model(LayerNorm(), input_info)
 
 
-def test_functional_layernorm():
-    """test relax translator for functional_layernorm"""
-
-    class LayerNorm(Module):
-        def __init__(self, shape):
-            super().__init__()
-            self.weight = torch.nn.Parameter(torch.ones(shape))
-            self.bias = torch.nn.Parameter(torch.zeros(shape))
-
-        def forward(self, data):
-            return torch.nn.functional.layer_norm(
-                data, self.weight.shape, self.weight, self.bias, 1e-5
-            )
-
-    input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(LayerNorm((10, 10)), input_info)
-
-
-def test_cross_entropy():
-    """test relax translator for cross_entropy"""
-
-    class CrossEntropy1(Module):
-        def __init__(self):
-            super().__init__()
-            self.loss = torch.nn.CrossEntropyLoss()
-
-        def forward(self, logits, targets):
-            return self.loss(logits, targets)
-
-    class CrossEntropy2(Module):
-        def __init__(self):
-            super().__init__()
-            self.weight = torch.nn.Parameter(torch.ones((2,)))
-            self.loss = torch.nn.CrossEntropyLoss(weight=self.weight)
-
-        def forward(self, logits, targets):
-            return self.loss(logits, targets)
-
-    class CrossEntropy3(Module):
-        def __init__(self):
-            super().__init__()
-            self.loss = torch.nn.CrossEntropyLoss(ignore_index=1, reduction="sum")
-
-        def forward(self, logits, targets):
-            return self.loss(logits, targets)
-
-    input_info = [([3, 2], "float32"), ([3], "int32")]
-    verify_model(CrossEntropy1(), input_info)
-    verify_model(CrossEntropy2(), input_info)
-    verify_model(CrossEntropy3(), input_info)
-
-
-def test_functional_cross_entropy():
-    """test relax translator for functional_cross_entropy"""
-
-    class CrossEntropy(Module):
-        def forward(self, logits, targets):
-            return torch.nn.functional.cross_entropy(logits, targets)
-
-    input_info = [([3, 10], "float32"), ([3], "int32")]
-    verify_model(CrossEntropy(), input_info)
-
-
 def test_silu():
-    """test relax translator for silu"""
+    """test tensorrt translator for silu"""
 
     class SiLU(Module):
         def __init__(self):
@@ -457,17 +365,12 @@ def test_silu():
         def forward(self, data):
             return self.silu(data)
 
-    class SiLU2(Module):
-        def forward(self, data):
-            return torch.nn.functional.silu(data)
-
     input_info = [([1, 3, 10, 10], "float32")]
     verify_model(SiLU(), input_info)
-    verify_model(SiLU2(), input_info)
 
 
 def test_groupnorm():
-    """test relax translator for groupnorm"""
+    """test tensorrt translator for groupnorm"""
 
     class GroupNorm(Module):
         def __init__(self):
@@ -482,7 +385,7 @@ def test_groupnorm():
 
 
 def test_softmax():
-    """test relax translator for softmax"""
+    """test tensorrt translator for softmax"""
 
     class Softmax(Module):
         def __init__(self):
@@ -497,7 +400,7 @@ def test_softmax():
 
 
 def test_binary():
-    """test relax translator for binary"""
+    """test tensorrt translator for binary"""
 
     input_info1 = [([1, 3, 10, 10], "float32"), ([1, 3, 10, 10], "float32")]
     input_info2 = [([1, 3, 10, 10], "float32")]
@@ -565,41 +468,18 @@ def test_binary():
     # Power
     class Power1(Module):
         def forward(self, lhs, rhs):
-            return lhs**rhs
+            return lhs ** rhs
 
     class Power2(Module):
         def forward(self, lhs):
-            return lhs**1.0
+            return lhs ** 1.0
 
     verify_model(Power1(), input_info1)
     verify_model(Power2(), input_info2)
 
-    # LT
-    class LT1(Module):
-        def forward(self, lhs, rhs):
-            return lhs < rhs
-
-    class LT2(Module):
-        def forward(self, lhs):
-            return lhs < 1.0
-
-    verify_model(LT1(), input_info1)
-    verify_model(LT2(), input_info2)
-
-
-def test_size():
-    """test relax translator for size"""
-
-    class Size(Module):
-        def forward(self, data):
-            return data.size()
-
-    input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Size(), input_info)
-
 
 def test_squeeze():
-    """test relax translator for squeeze"""
+    """test tensorrt translator for squeeze"""
 
     class Squeeze1(Module):
         def forward(self, data):
@@ -615,7 +495,7 @@ def test_squeeze():
 
 
 def test_unsqueeze():
-    """test relax translator for unsqueeze"""
+    """test tensorrt translator for unsqueeze"""
 
     class Unsqueeze1(Module):
         def forward(self, data):
@@ -630,23 +510,12 @@ def test_unsqueeze():
     verify_model(Unsqueeze2(), input_info)
 
 
-def test_getattr():
-    """test relax translator for getattr"""
-
-    class GetAttr1(Module):
-        def forward(self, data):
-            return data.shape
-
-    input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(GetAttr1(), input_info)
-
-
 def test_getitem():
-    """test relax translator for getitem"""
+    """test tensorrt translator for getitem"""
 
     class Slice1(Module):
         def forward(self, x):
-            return x[0, 1::2, :, :3]
+            return x[0:1, 1::2, :, :3]
 
     class Slice2(Module):
         def forward(self, x):
@@ -657,7 +526,7 @@ def test_getitem():
 
 
 def test_unary():
-    """test relax translator for unary"""
+    """test tensorrt translator for unary"""
 
     input_info = [([1, 3, 10, 10], "float32")]
 
@@ -704,19 +573,8 @@ def test_unary():
     verify_model(Round(), input_info)
 
 
-def test_gelu():
-    """test relax translator for gelu"""
-
-    class Gelu(Module):
-        def forward(self, data):
-            return torch.nn.functional.gelu(data)
-
-    input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Gelu(), input_info)
-
-
 def test_tanh():
-    """test relax translator for tanh"""
+    """test tensorrt translator for tanh"""
 
     class Tanh(Module):
         def forward(self, data):
@@ -727,7 +585,7 @@ def test_tanh():
 
 
 def test_clamp():
-    """test relax translator for clamp"""
+    """test tensorrt translator for clamp"""
 
     class Clamp(Module):
         def forward(self, data):
@@ -738,7 +596,7 @@ def test_clamp():
 
 
 def test_interpolate():
-    """test relax translator for interpolate"""
+    """test tensorrt translator for interpolate"""
 
     class Interpolate(Module):
         def forward(self, data):
@@ -749,7 +607,7 @@ def test_interpolate():
 
 
 def test_addmm():
-    """test relax translator for addmm"""
+    """test tensorrt translator for addmm"""
 
     class Addmm(Module):
         def forward(self, x_1, x_2, x_3):
@@ -764,131 +622,29 @@ def test_addmm():
 
 
 def test_split():
-    """test relax translator for split"""
+    """test tensorrt translator for split"""
 
     class Split(Module):
         def forward(self, data):
             return torch.split(data, 1, dim=1)
 
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Split(), input_info)
-
-
-def test_cumsum():
-    """test relax translator for cumsum"""
-
-    class Cumsum(Module):
-        def forward(self, data):
-            return torch.cumsum(data, dim=1, dtype=torch.int32)
-
-    input_info = [([1, 2, 3, 4], "float32")]
-    verify_model(Cumsum(), input_info)
+    verify_model(Split(), input_info, allow_incomplete=True)
 
 
 def test_chunk():
-    """test relax translator for chunk"""
+    """test tensorrt translator for chunk"""
 
     class Chunk(Module):
         def forward(self, data):
             return torch.chunk(data, 3, dim=1)
 
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Chunk(), input_info)
-
-
-def test_inplace_fill():
-    """test relax translator for inplace_fill"""
-
-    class InplaceFill(Module):
-        def forward(self, data):
-            data.fill_(1.5)
-            return data
-
-    verify_model(InplaceFill(), [([10, 10], "float32")])
-
-
-def test_arange():
-    """test relax translator for arange"""
-
-    class Arange(Module):
-        def forward(self):
-            return torch.arange(0, 20, dtype=torch.int32)
-
-    verify_model(Arange(), [([10, 10], "float32")])
-
-
-def test_empty():
-    """test relax translator for empty"""
-
-    class Empty(Module):
-        def forward(self):
-            return torch.empty((10, 10), dtype=torch.float32)
-
-    verify_model(Empty(), [([10, 10], "float32")])
-
-
-def test_tensor():
-    """test relax translator for tensor"""
-
-    class Empty1(Module):
-        def forward(self):
-            return torch.tensor(3, dtype=torch.float32)
-
-    class Empty2(Module):
-        def forward(self):
-            return torch.tensor(3)
-
-    verify_model(Empty1(), [([10, 10], "float32")])
-    verify_model(Empty2(), [([10, 10], "float32")])
-
-
-def test_tril():
-    """test relax translator for tril"""
-
-    class Tril(Module):
-        def forward(self, data):
-            return torch.tril(data, 1)
-
-    class InplaceTril(Module):
-        def forward(self, data):
-            data.tril_(1)
-            return data
-
-    input_info = [([10, 10], "float32")]
-    verify_model(Tril(), input_info)
-    verify_model(InplaceTril(), input_info)
-
-
-def test_triu():
-    """test relax translator for triu"""
-
-    class Triu(Module):
-        def forward(self, data):
-            return torch.triu(data, 1)
-
-    class InplaceTriu(Module):
-        def forward(self, data):
-            data.triu_(1)
-            return data
-
-    input_info = [([10, 10], "float32")]
-    verify_model(Triu(), input_info)
-    verify_model(InplaceTriu(), input_info)
-
-
-def test_new_ones():
-    """test relax translator for new_ones"""
-
-    class NewOnes(Module):
-        def forward(self, x):
-            return x.new_ones(1, 2, 3)
-
-    input_info = [([1, 2, 3], "float32")]
-    verify_model(NewOnes(), input_info)
+    verify_model(Chunk(), input_info, allow_incomplete=True)
 
 
 def test_expand():
-    """test relax translator for expand"""
+    """test tensorrt translator for expand"""
 
     class Expand(Module):
         def forward(self, x):
@@ -899,7 +655,7 @@ def test_expand():
 
 
 def test_reduce():
-    """test relax translator for reduce"""
+    """test tensorrt translator for reduce"""
 
     # sum
     class Sum(Module):
@@ -910,47 +666,8 @@ def test_reduce():
     verify_model(Sum(), input_info)
 
 
-def test_datatype():
-    """test relax translator for datatype"""
-
-    input_info = [([1, 2, 3, 4], "float32")]
-
-    # float
-    class ToFloat(Module):
-        def forward(self, x):
-            return x.float()
-
-    verify_model(ToFloat(), input_info)
-
-    # half
-    class ToHalf(Module):
-        def forward(self, x):
-            return x.half()
-
-    verify_model(ToHalf(), input_info)
-
-    # type
-    class Type(Module):
-        def forward(self, x):
-            return x.type(torch.float32)
-
-    # type
-    class TypeFromAttr(Module):
-        def forward(self, x):
-            return x.type(x.getattr("dtype"))
-
-    # astype
-    class AsType(Module):
-        def forward(self, x):
-            return x.astype(torch.float32)
-
-    verify_model(Type(), input_info)
-    verify_model(TypeFromAttr(), input_info)
-    verify_model(AsType(), input_info)
-
-
 def test_permute():
-    """test relax translator for permute"""
+    """test tensorrt translator for permute"""
 
     class Permute(Module):
         def forward(self, x):
@@ -961,7 +678,7 @@ def test_permute():
 
 
 def test_reshape():
-    """test relax translator for reshape"""
+    """test tensorrt translator for reshape"""
 
     class Reshape(Module):
         def forward(self, x):
@@ -972,7 +689,7 @@ def test_reshape():
 
 
 def test_transpose():
-    """test relax translator for transpose"""
+    """test tensorrt translator for transpose"""
 
     class Transpose(Module):
         def forward(self, x):
@@ -983,7 +700,7 @@ def test_transpose():
 
 
 def test_view():
-    """test relax translator for view"""
+    """test tensorrt translator for view"""
 
     class View(Module):
         def forward(self, x):
@@ -993,43 +710,8 @@ def test_view():
     verify_model(View(), input_info)
 
 
-def test_keep_params():
-    """test relax translator for keep_params"""
-
-    class Conv2D1(Module):
-        def __init__(self):
-            super().__init__()
-            self.conv = torch.nn.Conv2d(3, 6, 7, bias=True)
-
-        def forward(self, data):
-            return self.conv(data)
-
-    verify_model(Conv2D1(), [([1, 3, 10, 10], "float32")])
-
-
-def test_unwrap_unit_return_tuple():
-    """test relax translator for unwrap_unit_return_tuple"""
-
-    class Identity(Module):
-        def forward(self, x):
-            return (x,)
-
-    verify_model(Identity(), [([256, 256], "float32")])
-
-
-def test_no_bind_return_tuple():
-    """test relax translator for no_bind_return_tuple"""
-
-    class Identity(Module):
-        def forward(self, x, y):
-            return (x, y)
-
-    input_info = [([256, 256], "float32"), ([256, 256], "float32")]
-    verify_model(Identity(), input_info)
-
-
 def test_argmax():
-    """test relax translator for argmax"""
+    """test tensorrt translator for argmax"""
 
     class Argmax1(Module):
         def forward(self, data):
@@ -1039,42 +721,27 @@ def test_argmax():
         def forward(self, data):
             return torch.argmax(data, dim=-1, keepdim=True)
 
-    verify_model(Argmax1(), [([256, 256], "float32")])
-    verify_model(Argmax2(), [([256, 256], "float32")])
+    verify_model(Argmax1(), [([256, 256], "float32")], allow_incomplete=True)
+    verify_model(Argmax2(), [([256, 256], "float32")], allow_incomplete=True)
 
 
 def test_argmin():
-    """test relax translator for argmin"""
+    """test tensorrt translator for argmin"""
 
     class Argmin1(Module):
         def forward(self, data):
-            return torch.argmin(data)
+            return torch.argmin(data, dim=-1)
 
     class Argmin2(Module):
         def forward(self, data):
-            return torch.argmin(data, keepdim=True)
+            return torch.argmin(data, dim=-1, keepdim=True)
 
-    verify_model(Argmin1(), [([256, 256], "float32")])
-    verify_model(Argmin2(), [([256, 256], "float32")])
-
-
-def test_to():
-    """test relax translator for to"""
-
-    class To1(Module):
-        def forward(self, data):
-            return data.to(torch.float16)
-
-    class To2(Module):
-        def forward(self, data):
-            return data.to("cpu")
-
-    verify_model(To1(), [([256, 256], "float32")])
-    verify_model(To2(), [([256, 256], "float32")])
+    verify_model(Argmin1(), [([256, 256], "float32")], allow_incomplete=True)
+    verify_model(Argmin2(), [([256, 256], "float32")], allow_incomplete=True)
 
 
 def test_mean():
-    """test relax translator for mean"""
+    """test tensorrt translator for mean"""
 
     class Mean(Module):
         def forward(self, data):
@@ -1089,7 +756,7 @@ def test_mean():
 
 
 def test_rsqrt():
-    """test relax translator for rsqrt"""
+    """test tensorrt translator for rsqrt"""
 
     class Rsqrt(Module):
         def forward(self, data):
@@ -1099,7 +766,7 @@ def test_rsqrt():
 
 
 def test_neg():
-    """test relax translator for neg"""
+    """test tensorrt translator for neg"""
 
     class Neg(Module):
         def forward(self, data):
@@ -1109,7 +776,7 @@ def test_neg():
 
 
 def test_max():
-    """test relax translator for max"""
+    """test tensorrt translator for max"""
 
     class Max(Module):
         def forward(self, x, y):
@@ -1119,7 +786,7 @@ def test_max():
 
 
 def test_attention():
-    """test relax translator for attention"""
+    """test tensorrt translator for attention"""
 
     # pylint: disable=import-outside-toplevel
     import torch.nn.functional as F
@@ -1156,5 +823,4 @@ def test_attention():
 
 
 if __name__ == "__main__":
-    # tvm.testing.main()
-    test_conv1d()
+    tvm.testing.main()

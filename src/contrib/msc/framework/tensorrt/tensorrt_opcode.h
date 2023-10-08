@@ -62,6 +62,10 @@ class TensorRTOpCode : public BaseOpCode<TensorRTCodeGenConfig> {
 
   /*! \brief Get describe for default node output*/
   const String IdxOutputBase(const MSCJoint& node, int idx = 0, bool as_raw = false) final {
+    if (node->optype == "argmax" || node->optype == "argmin") {
+      ICHECK_EQ(idx, 0) << "argmax and argmin only has 1 output, get " << idx;
+      return IdxNodeBase(node, as_raw) + "->getOutput(1)";
+    }
     return IdxNodeBase(node, as_raw) + "->getOutput(" + std::to_string(idx) + ")";
   }
 

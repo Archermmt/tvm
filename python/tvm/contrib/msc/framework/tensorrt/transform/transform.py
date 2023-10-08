@@ -17,16 +17,26 @@
 # pylint: disable=invalid-name
 """tvm.contrib.msc.framework.tensorrt.transform.transform"""
 
+from typing import List
+
 import tvm
 from tvm.relax.transform import _ffi_api as relax_api
+from tvm.contrib.msc.core.utils import MSCFramework
+from tvm.contrib.msc.core import utils as msc_utils
 
 
-def TransformTensorRT() -> tvm.ir.transform.Pass:
+def TransformTensorRT(version: List[int] = None) -> tvm.ir.transform.Pass:
     """Transform the Function to fit TensorRT.
+
+    Parameters
+    ----------
+    version: list<int>
+        The tensorrt version.
 
     Returns
     -------
     ret: tvm.ir.transform.Pass
     """
 
-    return relax_api.TransformTensorRT()  # type: ignore
+    version = version or msc_utils.get_version(MSCFramework.TENSORRT)
+    return relax_api.TransformTensorRT(version)  # type: ignore

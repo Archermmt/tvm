@@ -260,6 +260,8 @@ class BYOCChecker(PyExprVisitor):
                     self._non_target_exprs.append(binding.value)
             else:
                 self._non_target_exprs.append(binding.value)
+        elif not isinstance(binding.value, tvm.relax.DataflowVar):
+            self._non_target_exprs.append(binding.value)
 
 
 def byoc_partition(
@@ -308,13 +310,10 @@ def byoc_partition(
         if as_msc:
             passes = [tvm.relax.transform.FuseOpsByPattern(patterns, bind_constants=False)]
         else:
-            passes = [
-                tvm.relax.transform.FuseOpsByPattern(patterns, bind_constants=True),
-                msc_transform.BindShape(),
-                tvm.relax.transform.DeadCodeElimination(),
-            ]
+            passes = [tvm.relax.transform.FuseOpsByPattern(patterns, bind_constants=True)]
         passes.extend(
             [
+                msc_transform.BindShape(),
                 tvm.relax.transform.MergeCompositeFunctions(),
                 msc_transform.SetExprName(target=target),
                 msc_transform.SetExprLayout(trans_config.get("allow_layout_missing", True)),
@@ -331,11 +330,12 @@ def byoc_partition(
     func_names = [var.name_hint for var, func in msc_mod.functions.items() if _is_target_func(func)]
 
     if not allow_incomplete:
+        assert len(func_names) == 1, "More than 1 target func is found: " + str(msc_mod)
         BYOCChecker().check(func_names, msc_mod[entry])
 
     graphs_info, all_weights = [], _ffi_api.GetRelaxWeights(msc_mod, entry)
     for idx, name in enumerate(func_names):
-        build_config["graph_name"] = target + "_" + str(idx)
-        graph = _ffi_api.BuildFromRelax(msc_mod, name, msc_utils.dump_dict(build_config))
+        build_config.update({"graph_name": target + "_" + str(idx), "byoc_entry": name})
+        graph = _ffi_api.BuildFromRelax(msc_mod, entry, msc_utils.dump_dict(build_config))
         graphs_info.append((name, graph, normalize_weights(all_weights, graph)))
     return _partition_mod(mod, False), graphs_info

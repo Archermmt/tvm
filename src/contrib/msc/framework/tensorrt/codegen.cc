@@ -80,7 +80,7 @@ void TensorRTCodeGen::CodeGenClassDeclare() {
 
 void TensorRTCodeGen::CodeGenClassDefine() {
   auto malloc_buffer = [this](const MSCTensor& tensor) {
-    const String& idx_var = "idx_" + tensor->alias;
+    const String& idx_var = "idx_" + IdxTensor(tensor);
     this->stack_
         .func_call("getBindingIndex", DocUtils::ToDeclareDoc("int", idx_var),
                    DocUtils::ToPtrDoc("engine"))
@@ -174,7 +174,7 @@ void TensorRTCodeGen::CodeGenClassDefine() {
   }
   for (const auto& o : graph()->GetOutputs()) {
     malloc_buffer(o);
-    stack_.declare(CppDType(o->dtype), "output_" + o->alias,
+    stack_.declare(CppDType(o->dtype), "output_" + IdxTensor(o),
                    static_cast<size_t>(o->GetSize()->value));
   }
   // read and test datas
@@ -185,8 +185,8 @@ void TensorRTCodeGen::CodeGenClassDefine() {
   for (const auto& i : graph()->GetInputs()) {
     stack_.func_call("CHECK")
         .func_call("cudaMemcpyAsync")
-        .call_arg("gpu_buffers[idx_" + i->alias + "]")
-        .call_arg("cpu_buffers[idx_" + i->alias + "]")
+        .call_arg("gpu_buffers[idx_" + IdxTensor(i) + "]")
+        .call_arg("cpu_buffers[idx_" + IdxTensor(i) + "]")
         .call_arg(GetTensorBytes(i))
         .call_arg("cudaMemcpyHostToDevice")
         .call_arg("stream")
@@ -205,8 +205,8 @@ void TensorRTCodeGen::CodeGenClassDefine() {
   for (const auto& o : graph()->GetOutputs()) {
     stack_.func_call("CHECK")
         .func_call("cudaMemcpyAsync")
-        .call_arg("output_" + o->alias)
-        .call_arg("gpu_buffers[idx_" + o->alias + "]")
+        .call_arg("output_" + IdxTensor(o))
+        .call_arg("gpu_buffers[idx_" + IdxTensor(o) + "]")
         .call_arg(GetTensorBytes(o))
         .call_arg("cudaMemcpyDeviceToHost")
         .call_arg("stream")
@@ -216,10 +216,10 @@ void TensorRTCodeGen::CodeGenClassDefine() {
   // compare outputs
   for (const auto& o : graph()->GetOutputs()) {
     stack_.func_call("CommonUtils::CompareBuffers", "pass")
-        .call_arg("(" + CppDType(o->dtype) + "*)cpu_buffers[idx_" + o->alias + "]")
-        .call_arg("output_" + o->alias)
+        .call_arg("(" + CppDType(o->dtype) + "*)cpu_buffers[idx_" + IdxTensor(o) + "]")
+        .call_arg("output_" + IdxTensor(o))
         .call_arg(o->GetSize());
-    ReturnOnFail("pass", "Failed to test the output " + o->alias);
+    ReturnOnFail("pass", "Failed to test the output " + o->name);
   }
   stack_.while_end();
   // clean up
@@ -393,6 +393,15 @@ void TensorRTCodeGen::CodeGenCmake() {
       .line("cuda_add_executable(" + graph()->name + " ${TRT_SRCS})")
       .line("target_include_directories(" + graph()->name + " PUBLIC ${TENSORRT_INCLUDE_DIR})")
       .line("target_link_libraries(" + graph()->name + " ${TENSORRT_LIB_DIR})");
+}
+
+const String TensorRTCodeGen::IdxTensor(const MSCTensor& tensor) {
+  const auto& pair = graph()->FindProducerAndIdx(tensor);
+  const String& prefix = "tensor_" + std::to_string(pair.first->index);
+  if (pair.first->outputs.size() > 1) {
+    return prefix + "_" + std::to_string(pair.second);
+  }
+  return prefix;
 }
 
 const String TensorRTCodeGen::CppDType(const DataType& dtype) {
