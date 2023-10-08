@@ -694,6 +694,15 @@ MSCJoint RelayGraphBuilder::AddNode(const Expr& expr, const String& name) {
     ICHECK(expr_tensor_map_.count(getitem_node->tuple))
         << "Can not find tuple " << getitem_node->tuple;
     input_names = expr_tensor_map_[getitem_node->tuple];
+  } else if (optype == "constant") {
+    Type checked_type = expr->checked_type_;
+    ICHECK(checked_type.defined() && checked_type->IsInstance<relay::TensorTypeNode>())
+        << "Constant checked_type is not defined";
+    const auto& t_info = Downcast<TensorType>(checked_type);
+    const auto& layout = SpanUtils::GetAttr(expr->span, "layout");
+    const auto& weight =
+        MSCTensor(node_name, t_info->dtype, layout, ArrayUtils::Cast<Integer>(t_info->shape));
+    node_weights.Set("const", weight);
   }
   std::vector<std::pair<BaseJoint, size_t>> inputs;
   for (const auto& i : input_names) {
