@@ -114,6 +114,9 @@ bool StringUtils::EndsWith(const String& src_string, const String& sub_string) {
   const std::string& src_cstring = src_string;
   const std::string& sub_cstring = sub_string;
   int pos = src_cstring.rfind(sub_cstring);
+  if (pos < 0) {
+    return false;
+  }
   return static_cast<size_t>(pos) == src_cstring.size() - sub_cstring.size();
 }
 
@@ -311,7 +314,10 @@ const Array<String> ExprUtils::GetInputTypes(const String& optype, size_t inputs
   } else if (optype == "full" && as_relax) {
     input_types.push_back("shape");
     input_types.push_back("input");
-  } else if (optype == "trilu") {
+  } else if (optype == "triu") {
+    input_types.push_back("input");
+    input_types.push_back("k");
+  } else if (optype == "tril") {
     input_types.push_back("input");
     input_types.push_back("k");
   } else if (optype == "image.resize2d" && as_relax) {

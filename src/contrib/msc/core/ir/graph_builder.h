@@ -251,8 +251,6 @@ class RelaxGraphBuilder : public RelaxExprVisitor {
 
   void VisitBinding_(const relax::VarBindingNode* binding, const relax::FunctionNode* val) final;
 
-  const MSCRBuildConfig config() { return config_; }
-
  private:
   String name_;
   String scope_name_;

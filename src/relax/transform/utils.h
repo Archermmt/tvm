@@ -214,12 +214,6 @@ class VarReplacer : public ExprMutator {
     return it == var_remap_.end() ? var : it->second;
   }
 
-  Expr VisitExpr_(const DataflowVarNode* op) final {
-    Var var = GetRef<Var>(op);
-    auto it = var_remap_.find(var->vid);
-    return it == var_remap_.end() ? var : it->second;
-  }
-
   const VarMap& var_remap_;
 };
 
@@ -294,14 +288,6 @@ class FunctionCopier : public ExprMutator {
   Function Copy(Function func) {
     auto new_func = Downcast<Function>(VisitExpr(func));
     return SymbolicVarRenewMutator::Renew(new_func);
-  }
-
-  Var VisitVarDef_(const DataflowVarNode* var) override {
-    Var new_var = ExprMutator::VisitVarDef_(var);
-    Var copied_var = DataflowVar(new_var->name_hint(), GetStructInfo(new_var), new_var->span);
-    var_remap_[var->vid] = copied_var;
-    var_map.Set(GetRef<Var>(var), copied_var);
-    return copied_var;
   }
 
   Var VisitVarDef_(const VarNode* var) override {
@@ -387,6 +373,33 @@ inline String GetCodegenName(const std::string& composite_name) {
                                             "start with a compiler name followed by period.";
   return composite_name.substr(0, delim_pos);
 }
+
+/* \brief Eliminate common subexpressions
+ *
+ * Utility for simplifying relax expressions by removing common
+ * subexpressions.
+ *
+ * \param expr The expression to be updated
+ *
+ * \param call_only If true, only eliminate relax::Call nodes.  If
+ * false, eliminate any common subexpressions.
+ *
+ * \ret The updated expression
+ */
+Expr EliminateCommonSubexpr(const Expr& expr, bool call_only = false);
+
+/* \brief Remove use of trivial bindings
+ *
+ * Utility for simplifying relax expressions by folding var bindings
+ * and match shape nodes.  May include other forms of simplification
+ * in the future.  Ideally should be used before constant folding and
+ * eliminating unused bindings.
+ *
+ * \param expr The expression to be canonicalized
+ *
+ * \ret The canonicalized expression
+ */
+Expr CanonicalizeBindings(const Expr& expr);
 
 }  // namespace relax
 }  // namespace tvm
