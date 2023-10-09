@@ -189,7 +189,7 @@ void TensorRTOpCode::SetLayerByDimsValue(const String& method, const Array<Integ
 
 class TensorRTActivationCodeGen : public TensorRTOpCode {
  public:
-  TensorRTActivationCodeGen(const String& symbol) : TensorRTOpCode("Activation") {
+  explicit TensorRTActivationCodeGen(const String& symbol) : TensorRTOpCode("Activation") {
     symbol_ = symbol;
   }
 
@@ -233,7 +233,9 @@ class TensorRTAdaptivePool2dCodeGen : public TensorRTOpCode {
 
 class TensorRTArgmaxminCodeGen : public TensorRTOpCode {
  public:
-  TensorRTArgmaxminCodeGen(const String& symbol) : TensorRTOpCode("TopK") { symbol_ = symbol; }
+  explicit TensorRTArgmaxminCodeGen(const String& symbol) : TensorRTOpCode("TopK") {
+    symbol_ = symbol;
+  }
 
  protected:
   void CodeGenBuild() final {
@@ -340,7 +342,7 @@ class TensorRTConvCodeGen : public TensorRTOpCode {
 
 class TensorRTElemwiseCodeGen : public TensorRTOpCode {
  public:
-  TensorRTElemwiseCodeGen(const String& symbol) : TensorRTOpCode("ElementWise") {
+  explicit TensorRTElemwiseCodeGen(const String& symbol) : TensorRTOpCode("ElementWise") {
     symbol_ = symbol;
   }
 
@@ -449,7 +451,9 @@ class TensorRTPermuteDimsCodeGen : public TensorRTOpCode {
 
 class TensorRTPool2dCodeGen : public TensorRTOpCode {
  public:
-  TensorRTPool2dCodeGen(const String& symbol) : TensorRTOpCode("Pooling") { symbol_ = symbol; }
+  explicit TensorRTPool2dCodeGen(const String& symbol) : TensorRTOpCode("Pooling") {
+    symbol_ = symbol;
+  }
 
  protected:
   void CodeGenBuild() final {
@@ -473,7 +477,9 @@ class TensorRTPool2dCodeGen : public TensorRTOpCode {
 
 class TensorRTReduceCodeGen : public TensorRTOpCode {
  public:
-  TensorRTReduceCodeGen(const String& symbol) : TensorRTOpCode("Reduce") { symbol_ = symbol; }
+  explicit TensorRTReduceCodeGen(const String& symbol) : TensorRTOpCode("Reduce") {
+    symbol_ = symbol;
+  }
 
  protected:
   void CodeGenBuild() final {
@@ -642,7 +648,9 @@ class TensorRTTopkCodeGen : public TensorRTOpCode {
 
 class TensorRTUnaryCodeGen : public TensorRTOpCode {
  public:
-  TensorRTUnaryCodeGen(const String& symbol) : TensorRTOpCode("Unary") { symbol_ = symbol; }
+  explicit TensorRTUnaryCodeGen(const String& symbol) : TensorRTOpCode("Unary") {
+    symbol_ = symbol;
+  }
 
  protected:
   void CodeGenBuild() final {
@@ -685,7 +693,7 @@ GetTensorRTOpCodes() {
   map->emplace("sin", std::make_shared<TensorRTUnaryCodeGen>("SIN"));
   map->emplace("sinh", std::make_shared<TensorRTUnaryCodeGen>("SINH"));
   map->emplace("sqrt", std::make_shared<TensorRTUnaryCodeGen>("SQRT"));
-  map->emplace("tanh", std::make_shared<TensorRTUnaryCodeGen>("TANH"));
+  map->emplace("tan", std::make_shared<TensorRTUnaryCodeGen>("TAN"));
 
   // elemwise ops
   map->emplace("add", std::make_shared<TensorRTElemwiseCodeGen>("SUM"));
@@ -728,6 +736,7 @@ GetTensorRTOpCodes() {
   // activation ops
   map->emplace("clip", std::make_shared<TensorRTActivationCodeGen>("CLIP"));
   map->emplace("sigmoid", std::make_shared<TensorRTActivationCodeGen>("SIGMOID"));
+  map->emplace("tanh", std::make_shared<TensorRTActivationCodeGen>("TANH"));
   map->emplace("nn.relu", std::make_shared<TensorRTActivationCodeGen>("RELU"));
   map->emplace("nn.leaky_relu", std::make_shared<TensorRTActivationCodeGen>("LEAKY_RELU"));
 

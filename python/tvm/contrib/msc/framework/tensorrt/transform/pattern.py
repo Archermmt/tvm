@@ -106,10 +106,10 @@ def argmaxmin_pattern(op_name: str) -> Tuple[pattern.DFPattern, Mapping[str, pat
         check function and codegen.
     """
 
-    input = pattern.wildcard()
-    argmaxmin = pattern.is_op(op_name)(input)
+    data = pattern.wildcard()
+    argmaxmin = pattern.is_op(op_name)(data)
     out = pattern.is_op("relax.astype")(argmaxmin)
-    return out, {"input": input, "argmaxmin": argmaxmin, "out": out}
+    return out, {"input": data, "argmaxmin": argmaxmin, "out": out}
 
 
 def _check_expr(expr: relax.Expr, dtypes: Tuple[str] = None) -> bool:
@@ -289,9 +289,9 @@ def get_patterns(target) -> List[Pattern]:
         "permute_dims": ["input"],
         "strided_slice": ["input"],
     }
-    activation_ops = ["nn.relu", "nn.softmax", "sigmoid"]
+    activation_ops = ["nn.relu", "nn.softmax", "sigmoid", "tanh"]
     reduce_ops = ["max", "min", "mean", "sum"]
-    unary_ops = ["cos", "exp", "negative", "round", "sin", "square", "sqrt", "tanh"]
+    unary_ops = ["cos", "exp", "negative", "round", "sin", "square", "sqrt", "tan"]
     elemwise_ops = [
         "add",
         "divide",

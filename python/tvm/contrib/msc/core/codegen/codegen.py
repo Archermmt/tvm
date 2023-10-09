@@ -98,7 +98,7 @@ class CodeGen(object):
                 folder.add_file(name, source)
             if build_model:
                 if self._code_format == "cpp":
-                    with folder.create_dir("build") as build_dir:
+                    with folder.create_dir("build"):
                         command = "cmake ../ && make && mv {} ../".format(self._graph.name)
                         with open("codegen.log", "w") as log_f:
                             process = subprocess.Popen(

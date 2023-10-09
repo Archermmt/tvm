@@ -61,7 +61,7 @@ void TensorflowCodeGen::CodeGenGraph() {
   }
   stack_.func_arg("weights", "Dict[str, tvm.nd.array]").func_start();
   // define weights
-  stack_.comment("Define the weights and constant");
+  stack_.comment("Define the weights");
   for (const auto& n : graph()->node_names) {
     const auto& node = graph()->FindNode(n);
     for (const auto& pair : node->weights) {
@@ -71,15 +71,12 @@ void TensorflowCodeGen::CodeGenGraph() {
           .call_arg(DocUtils::ToStrDoc(pair.second->DTypeName()))
           .call_arg("weights");
     }
-    if (node->optype == "constant") {
-      CodeGenNode(node);
-    }
   }
   // define ops
   stack_.comment("Define the ops");
   for (const auto& n : graph()->node_names) {
     const auto& node = graph()->FindNode(n);
-    if (node->optype == "input" || node->optype == "constant") {
+    if (node->optype == "input") {
       continue;
     }
     CodeGenNode(node);

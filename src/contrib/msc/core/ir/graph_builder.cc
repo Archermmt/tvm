@@ -138,9 +138,6 @@ const MSCGraph RelaxGraphBuilder::Build(const relax::Function& func) {
       n->index = valid_nodes.size();
       valid_nodes.push_back(n);
     }
-    else if (n->optype == "input") {
-      ignore_inputs.insert(n->OutputAt(0)->name);
-    }
   }
   // remove uselese inputs
   Array<String> valid_inputs;

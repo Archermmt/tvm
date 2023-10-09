@@ -226,6 +226,9 @@ class RelaxGraphBuilder : public RelaxExprVisitor {
   /*! \brief Build MSCGraph from relax function*/
   const MSCGraph Build(const relax::Function& func);
 
+  /*! \brief Get the config of builder */
+  const MSCRBuildConfig config() { return config_; }
+
   /*! \brief Create and add MSCJoint from expr*/
   const MSCJoint AddNode(const Expr& expr, const Optional<Expr>& binding_var = NullOpt,
                          const String& name = "");
@@ -335,6 +338,9 @@ class RelayGraphBuilder : public RelayExprVisitor {
 
   /*! \brief Build MSCGraph from relax function*/
   MSCGraph Build(const relay::Function& func);
+
+  /*! \brief Get the config of builder */
+  const MSCRBuildConfig config() { return config_; }
 
   /*! \brief Create and add MSCJoint from expr*/
   MSCJoint AddNode(const Expr& expr, const String& name = "");

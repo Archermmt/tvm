@@ -177,13 +177,7 @@ class TFV1ConstantCodeGen : public TFV1OpCode {
   TFV1_OP_CODEGEN_METHODS(TFV1ConstantCodeGen)
 
  protected:
-  void CodeGenBuild() final {
-    stack_.op_call()
-        .op_name_arg("")
-        .call_arg(DocUtils::ToListDoc(node()->OutputAt(0)->shape, true))
-        .call_arg(DocUtils::ToStrDoc(node()->OutputAt(0)->DTypeName()))
-        .call_arg("weights");
-  }
+  void CodeGenBuild() final { stack_.assign(IdxNode(), IdxWeight("const")); }
 };
 
 class TFV1ConvCodeGen : public TFV1OpCode {

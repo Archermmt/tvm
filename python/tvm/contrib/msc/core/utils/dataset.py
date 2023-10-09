@@ -18,8 +18,8 @@
 
 import os
 import json
-import numpy as np
 from typing import List
+import numpy as np
 
 from .info import load_dict
 

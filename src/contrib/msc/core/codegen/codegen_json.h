@@ -26,6 +26,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "../../../../relax/backend/contrib/codegen_json/codegen_json.h"
 #include "../ir/graph.h"

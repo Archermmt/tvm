@@ -23,6 +23,8 @@
 
 #include "codegen_json.h"
 
+#include <memory>
+
 namespace tvm {
 namespace contrib {
 namespace msc {
