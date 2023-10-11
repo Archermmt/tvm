@@ -56,8 +56,8 @@ def verify_model(torch_model, input_info, allow_incomplete=False):
     golden = [g.detach().cpu().numpy() for g in golden]
     # partition module for tensorrt
     mod, graph_infos = translate.partition_for_tensorrt(mod, allow_incomplete=allow_incomplete)
-    # print("partitioned mod " + str(mod))
-    # print("graph " + str(graph_infos[0][1]))
+    print("partitioned mod " + str(mod))
+    print("graph " + str(graph_infos[0][1]))
 
     build_folder = None
     output_folder = msc_utils.msc_dir()
@@ -321,7 +321,7 @@ def test_batchnorm2d():
             return self.batchnorm(data)
 
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(BatchNorm2d().eval(), input_info, allow_incomplete=True)
+    verify_model(BatchNorm2d().eval(), input_info)
 
 
 def test_embedding():
@@ -468,11 +468,11 @@ def test_binary():
     # Power
     class Power1(Module):
         def forward(self, lhs, rhs):
-            return lhs ** rhs
+            return lhs**rhs
 
     class Power2(Module):
         def forward(self, lhs):
-            return lhs ** 1.0
+            return lhs**1.0
 
     verify_model(Power1(), input_info1)
     verify_model(Power2(), input_info2)
@@ -823,4 +823,5 @@ def test_attention():
 
 
 if __name__ == "__main__":
-    tvm.testing.main()
+    # tvm.testing.main()
+    test_batchnorm2d()
