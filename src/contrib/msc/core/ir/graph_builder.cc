@@ -128,21 +128,26 @@ const MSCGraph RelaxGraphBuilder::Build(const relax::Function& func) {
   }
   // remove const nodes as weights
   Array<MSCJoint> valid_nodes;
-  std::set<String> ignore_tensors;
+  std::set<String> ignore_inputs;
   for (const auto& n : nodes_) {
     if (weights_.count(n->name) || ignore_nodes_.count(n->name)) {
       for (const auto& o : n->outputs) {
-        ignore_tensors.insert(o->name);
+        ignore_inputs.insert(o->name);
       }
     } else {
       n->index = valid_nodes.size();
       valid_nodes.push_back(n);
+      if (n->optype != "input") {
+        for (const auto& o : n->outputs) {
+          ignore_inputs.insert(o->name);
+        }
+      }
     }
   }
   // remove uselese inputs
   Array<String> valid_inputs;
   for (const auto& i : input_names) {
-    if (!ignore_tensors.count(i)) {
+    if (!ignore_inputs.count(i)) {
       valid_inputs.push_back(i);
     }
   }

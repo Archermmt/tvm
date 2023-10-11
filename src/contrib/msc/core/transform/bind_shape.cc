@@ -18,7 +18,7 @@
  */
 
 /*!
- * \file src/contrib/msc/core/transform/bind_shape.cc
+ * \file src/contrib/msc/core/transform/fuse_shape.cc
  * \brief Pass for fuse ShapeExpr.
  */
 

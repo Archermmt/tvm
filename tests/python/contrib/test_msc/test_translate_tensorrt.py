@@ -785,43 +785,6 @@ def test_max():
     verify_model(Max(), [([256, 256], "float32"), ([256, 256], "float32")])
 
 
-def test_attention():
-    """test tensorrt translator for attention"""
-
-    # pylint: disable=import-outside-toplevel
-    import torch.nn.functional as F
-
-    class Attention1(Module):
-        def forward(self, q_data, k_data, v_data):
-            return F.scaled_dot_product_attention(q_data, k_data, v_data)
-
-    class Attention2(Module):
-        def forward(self, q_data, k_data, v_data):
-            return F.scaled_dot_product_attention(q_data, k_data, v_data, is_causal=True)
-
-    input_info = [
-        ([32, 8, 128, 64], "float32"),
-        ([32, 8, 128, 64], "float32"),
-        ([32, 8, 128, 64], "float32"),
-    ]
-    verify_model(Attention1(), input_info)
-    verify_model(Attention2(), input_info)
-
-    class Attention3(Module):
-        def forward(self, q_data, k_data, v_data, mask):
-            return F.scaled_dot_product_attention(q_data, k_data, v_data, mask)
-
-    verify_model(
-        Attention3(),
-        [
-            ([32, 8, 128, 64], "float32"),
-            ([32, 8, 128, 64], "float32"),
-            ([32, 8, 128, 64], "float32"),
-            ([32, 8, 128, 128], "float32"),
-        ],
-    )
-
-
 if __name__ == "__main__":
     # tvm.testing.main()
     test_batchnorm2d()

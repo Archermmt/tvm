@@ -62,6 +62,16 @@ class TorchOpCode : public BaseOpCode<TorchCodeGenConfig> {
     module_ref_ = "self." + StringUtils::Replace(node->name, ".", "_");
   }
 
+  /*! \brief Get describe for default node input*/
+  const String IdxInputBase(const MSCJoint& node, int idx = 0, bool as_raw = false) final {
+    const auto& pair = node->ProducerAndIdxOf(idx);
+    const auto& idx_input = BaseOpCode<TorchCodeGenConfig>::IdxInputBase(node, idx, as_raw);
+    if (pair.first->optype == "max" || pair.first->optype == "min") {
+      return idx_input + ".values";
+    }
+    return idx_input;
+  }
+
   /*! \brief Get return describe for default node*/
   const String IdxNode(bool as_raw = true) final {
     return is_init_ ? module_ref_ : BaseOpCode<TorchCodeGenConfig>::IdxNode(as_raw);

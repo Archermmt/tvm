@@ -110,14 +110,8 @@ Expr RewriteAdd(BlockBuilder builder, const Var& var, const Call& src_call,
     if (conv2d->op != Op::Get("relax.nn.conv2d")) {
       return call;
     }
-    Array<PrimExpr> empty;
-    const auto& input_shape =
-        Downcast<TensorStructInfo>(GetStructInfo(call->args[0]))->GetShape().value_or(empty);
-    const auto& bias_shape =
-        Downcast<TensorStructInfo>(GetStructInfo(call->args[1]))->GetShape().value_or(empty);
-    if (input_shape.size() == 0 || bias_shape.size() == 0) {
-      return call;
-    }
+    const auto& input_shape = GetShape(call->args[0]);
+    const auto& bias_shape = GetShape(call->args[1]);
     const auto* conv_attrs = conv2d->attrs.as<Conv2DAttrs>();
     if (conv_attrs->data_layout == "NCHW") {
       // expand bias reshape
@@ -169,13 +163,178 @@ Expr RewriteArgmaxmin(BlockBuilder builder, const Var& var, const Call& src_call
   return Call(astype_op, {res}, Attrs(cast_from_attrs), call->sinfo_args, call->span);
 }
 
+Expr RewriteAttention(BlockBuilder builder, const Var& var, const Call& src_call,
+                      const Map<Expr, Call>& new_calls, const Array<Integer>& version) {
+  const auto& call = new_calls.count(src_call) ? new_calls[src_call] : src_call;
+  const auto& in_dtype = Downcast<TensorStructInfo>(GetStructInfo(call->args[0]))->dtype;
+  const auto* src_attrs = src_call->attrs.as<AttentionAttrs>();
+
+  /*
+  batch_size, seq_len, num_head, head_dim = q.shape
+  _, seq_len_kv, _, head_dim_v = v.shape
+  q = topi.transpose(q, [0, 2, 1, 3])
+  k = topi.transpose(k, [0, 2, 1, 3])
+  v = topi.transpose(v, [0, 2, 1, 3])
+  q = topi.reshape(q, [batch_size * num_head, seq_len, head_dim])
+  k = topi.reshape(k, [batch_size * num_head, seq_len_kv, head_dim])
+  v = topi.reshape(v, [batch_size * num_head, seq_len_kv, head_dim_v])
+  p = topi.nn.batch_matmul(q, k)
+  if scale is not None:
+      p = topi.multiply(p, scale)
+  else:
+      p = topi.divide(p, tir.sqrt(tir.Cast(p.dtype, head_dim)))
+  if bias is not None:
+      p = topi.reshape(p, [batch_size, num_head, seq_len, seq_len_kv])
+      p = topi.add(p, bias)
+      p = topi.reshape(p, [batch_size * num_head, seq_len, seq_len_kv])
+  if causal_mask is None:
+      s = topi.nn.softmax(p)
+  else:
+      if causal_mask == "TopLeft":
+          offset = tir.IntImm("int32", 0)
+      elif causal_mask == "BottomRight":
+          offset = tir.IntImm("int32", abs(seq_len - seq_len_kv))
+      else:
+          raise NotImplementedError()
+      p_masked = topi.trilu(p, k=offset, upper=False)
+      p_masked_exp = topi.trilu(
+          topi.exp(p_masked - topi.max(p_masked, axis=-1, keepdims=True)), k=offset, upper=False
+      )
+      p_masked_sum = topi.sum(p_masked_exp, axis=-1, keepdims=True)
+      s = topi.divide(p_masked_exp, p_masked_sum)
+  o = topi.nn.batch_matmul(s, v, transpose_b=False)
+  o = topi.reshape(o, [batch_size, num_head, seq_len, head_dim_v])
+  return topi.transpose(o, [0, 2, 1, 3])
+  */
+  // define dims
+  const auto& in_q_shape = GetShape(call->args[0]);
+  const auto& in_v_shape = GetShape(call->args[2]);
+  const auto& batch_size = in_q_shape[0];
+  const auto& seq_len = in_q_shape[1];
+  const auto& num_head = in_q_shape[2];
+  const auto& head_dim = in_q_shape[3];
+  const auto& seq_len_kv = in_v_shape[1];
+  const auto& head_dim_v = in_v_shape[3];
+
+  // create ops
+  static const Op& permute_dims_op = Op::Get("relax.permute_dims");
+  static const Op& reshape_op = Op::Get("relax.reshape");
+  static const Op& matmul_op = Op::Get("relax.matmul");
+  static const Op& multiply_op = Op::Get("relax.multiply");
+  static const Op& add_op = Op::Get("relax.add");
+  static const Op& divide_op = Op::Get("relax.divide");
+  static const Op& sqrt_op = Op::Get("relax.sqrt");
+  static const Op& softmax_op = Op::Get("relax.nn.softmax");
+  static const Op& tril_op = Op::Get("relax.tril");
+  static const Op& max_op = Op::Get("relax.max");
+  static const Op& sum_op = Op::Get("relax.sum");
+  static const Op& subtract_op = Op::Get("relax.subtract");
+  static const Op& exp_op = Op::Get("relax.exp");
+
+  // prepare q,k,v
+  auto permute_attrs = make_object<PermuteDimsAttrs>();
+  Array<Integer> axes{Integer(0), Integer(2), Integer(1), Integer(3)};
+  permute_attrs->axes = axes;
+  const auto& q_trans = MakeCall(builder, call->span, "q_trans", permute_dims_op, {call->args[0]},
+                                 Attrs(permute_attrs));
+  const auto& k_trans = MakeCall(builder, call->span, "k_trans", permute_dims_op, {call->args[1]},
+                                 Attrs(permute_attrs));
+  const auto& v_trans = MakeCall(builder, call->span, "v_trans", permute_dims_op, {call->args[2]},
+                                 Attrs(permute_attrs));
+  Array<PrimExpr> q_shape({batch_size * num_head, seq_len, head_dim});
+  const auto& q_reshape =
+      MakeCall(builder, call->span, "q_reshape", reshape_op, {q_trans, ShapeExpr(q_shape)});
+  Array<PrimExpr> k_shape({batch_size * num_head, seq_len_kv, head_dim});
+  const auto& k_reshape =
+      MakeCall(builder, call->span, "k_reshape", reshape_op, {k_trans, ShapeExpr(k_shape)});
+  Array<PrimExpr> v_shape({batch_size * num_head, seq_len_kv, head_dim_v});
+  const auto& v_reshape =
+      MakeCall(builder, call->span, "v_reshape", reshape_op, {v_trans, ShapeExpr(v_shape)});
+  auto reduce_permute_attrs = make_object<PermuteDimsAttrs>();
+  Array<Integer> v_axes{Integer(0), Integer(2), Integer(1)};
+  reduce_permute_attrs->axes = v_axes;
+  // transpose for batch_matmul
+  const auto& k_reshape_trans = MakeCall(builder, call->span, "k_reshape_trans", permute_dims_op,
+                                         {k_reshape}, Attrs(reduce_permute_attrs));
+
+  // calculate product
+  auto matmul_attrs = make_object<MatmulAttrs>();
+  matmul_attrs->out_dtype = in_dtype;
+  const auto& qk_prod = MakeCall(builder, call->span, "qk_prod", matmul_op,
+                                 {q_reshape, k_reshape_trans}, Attrs(matmul_attrs));
+  Expr p_scale;
+  if (src_attrs->scale.defined()) {
+    const auto& scale = MakeConstant(double(src_attrs->scale.value()->value), in_dtype,
+                                     SpanUtils::GetAttr(call->span, "name") + "_scale");
+    Array<PrimExpr> exp_shape(3, Integer(1));
+    const auto& exp_scale =
+        MakeCall(builder, call->span, "exp_scale", reshape_op, {scale, ShapeExpr(exp_shape)});
+    p_scale = MakeCall(builder, call->span, "p_scale", multiply_op, {qk_prod, exp_scale});
+  } else {
+    const auto& scale = MakeConstant(double(Downcast<Integer>(head_dim)->value), in_dtype,
+                                     SpanUtils::GetAttr(call->span, "name") + "_scale");
+    Array<PrimExpr> exp_shape(3, Integer(1));
+    const auto& exp_scale =
+        MakeCall(builder, call->span, "exp_scale", reshape_op, {scale, ShapeExpr(exp_shape)});
+    const auto& sqrt_scale = MakeCall(builder, call->span, "sqrt_scale", sqrt_op, {exp_scale});
+    p_scale = MakeCall(builder, call->span, "p_scale", divide_op, {qk_prod, sqrt_scale});
+  }
+
+  // bias
+  Expr prod = p_scale;
+  if (call->args.size() == 4) {
+    Array<PrimExpr> exp_shape{batch_size, num_head, seq_len, seq_len_kv};
+    Array<PrimExpr> reduce_shape{batch_size * num_head, seq_len, seq_len_kv};
+    const auto& prod_exp =
+        MakeCall(builder, call->span, "prod_exp", reshape_op, {prod, ShapeExpr(exp_shape)});
+    const auto& prod_add =
+        MakeCall(builder, call->span, "prod_add", add_op, {prod_exp, call->args[3]});
+    prod = MakeCall(builder, call->span, "prod_reduce", reshape_op,
+                    {prod_add, ShapeExpr(reduce_shape)});
+  }
+
+  // causal_mask
+  Expr s_value;
+  if (!src_attrs->causal_mask.defined()) {
+    auto softmax_attrs = make_object<SoftmaxAttrs>();
+    softmax_attrs->axis = 2;
+    s_value = MakeCall(builder, call->span, "act", softmax_op, {prod}, Attrs(softmax_attrs));
+  } else {
+    const auto& causal_mask = src_attrs->causal_mask.value();
+    PrimValue tril_k;
+    if (causal_mask == "TopLeft") {
+      tril_k = PrimValue(Integer(0));
+    } else if (causal_mask == "BottomRight") {
+      tril_k = PrimValue(seq_len - seq_len_kv);
+    } else {
+      LOG_FATAL << "Unexpected causal_mask " << causal_mask;
+    }
+    const auto& p_masked = MakeCall(builder, call->span, "p_masked", tril_op, {prod, tril_k});
+    auto reduce_attrs = make_object<StatisticalAttrs>();
+    Array<Integer> axis{Integer(2)};
+    reduce_attrs->axis = axis;
+    reduce_attrs->keepdims = true;
+    const auto& p_max = MakeCall(builder, call->span, "p_max", max_op, {prod}, Attrs(reduce_attrs));
+    const auto& p_diff = MakeCall(builder, call->span, "p_diff", subtract_op, {p_masked, p_max});
+    const auto& p_exp = MakeCall(builder, call->span, "p_exp", exp_op, {p_diff});
+    const auto& p_masked_exp =
+        MakeCall(builder, call->span, "p_masked_exp", tril_op, {p_exp, tril_k});
+    const auto& p_masked_sum =
+        MakeCall(builder, call->span, "p_masked_sum", sum_op, {p_masked_exp}, Attrs(reduce_attrs));
+    s_value = MakeCall(builder, call->span, "act", divide_op, {p_masked_exp, p_masked_sum});
+  }
+
+  // final calculation
+  const auto& o_prod =
+      MakeCall(builder, call->span, "o_prod", matmul_op, {s_value, v_reshape}, Attrs(matmul_attrs));
+  Array<PrimExpr> o_shape{batch_size, num_head, seq_len, head_dim_v};
+  return Call(reshape_op, {o_prod, ShapeExpr(o_shape)}, Attrs(), call->sinfo_args, call->span);
+}
+
 Expr RewriteBatchNorm(BlockBuilder builder, const Var& var, const Call& src_call,
                       const Map<Expr, Call>& new_calls, const Array<Integer>& version) {
   const auto& call = new_calls.count(src_call) ? new_calls[src_call] : src_call;
-  Array<PrimExpr> empty;
-  const auto& input_shape =
-      Downcast<TensorStructInfo>(GetStructInfo(call->args[0]))->GetShape().value_or(empty);
-  ICHECK(input_shape.size() > 0) << "Can not infer shape of batchnorm " << call;
+  const auto& input_shape = GetShape(call->args[0]);
   const auto& in_dtype = Downcast<TensorStructInfo>(GetStructInfo(call->args[0]))->dtype;
   const auto* src_attrs = src_call->attrs.as<BatchNormAttrs>();
   // define expand shape
@@ -535,6 +694,10 @@ Expr RewriteSplit(BlockBuilder builder, const Var& var, const Call& src_call,
 }
 
 // nn ops
+TVM_REGISTER_OP("relax.nn.attention")
+    .set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteAttention);
+TVM_REGISTER_OP("relax.nn.attention_bias")
+    .set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteAttention);
 TVM_REGISTER_OP("relax.nn.batch_norm")
     .set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteBatchNorm);
 TVM_REGISTER_OP("relax.nn.conv1d").set_attr<FRewriteTensorRT>("FRewriteTensorRT", RewriteConv1d);

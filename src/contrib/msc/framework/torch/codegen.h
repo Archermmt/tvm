@@ -45,6 +45,16 @@ class TorchCodeGen : public PyCodeGen<TorchCodeGenConfig> {
   explicit TorchCodeGen(const MSCGraph& graph, const std::string& config = "")
       : PyCodeGen<TorchCodeGenConfig>(graph, config) {}
 
+  /*! \brief Get describe for default node input*/
+  const String IdxInputBase(const MSCJoint& node, int idx = 0, bool as_raw = false) final {
+    const auto& pair = node->ProducerAndIdxOf(idx);
+    const auto& idx_input = PyCodeGen<TorchCodeGenConfig>::IdxInputBase(node, idx, as_raw);
+    if (pair.first->optype == "max" || pair.first->optype == "min") {
+      return idx_input + ".values";
+    }
+    return idx_input;
+  }
+
  protected:
   /*! \brief Stack the docs for the header*/
   void CodeGenHeader() final;
