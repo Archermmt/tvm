@@ -29,6 +29,20 @@ namespace tvm {
 namespace contrib {
 namespace msc {
 
+const std::string GetScalarStr(const runtime::NDArray& data, int float_precision) {
+  std::string scalar_str;
+  if (data->dtype.code == kDLFloat) {
+    const float val = ExprUtils::GetScalar<float>(data);
+    std::stringstream stream;
+    stream << std::fixed << std::setprecision(float_precision) << val;
+    scalar_str = stream.str();
+  } else {
+    const int val = ExprUtils::GetScalar<int>(data);
+    scalar_str = std::to_string(val);
+  }
+  return scalar_str;
+}
+
 void RelaxFuncAttrGetter::VisitExpr_(const relax::CallNode* op) {
   if (op->attrs.defined()) {
     Map<String, String> attrs;
@@ -190,6 +204,8 @@ const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>
                                           const String& name) {
   String node_name = name.size() > 0 ? name : SpanUtils::GetAttr(expr->span, "name");
   const auto& shared_ref = SpanUtils::GetAttr(expr->span, "shared_ref");
+
+  // Get optype
   String optype;
   if (expr->IsInstance<relax::VarNode>()) {
     if (func_params_.count(expr) && func_params_[expr]->IsInstance<relax::ConstantNode>()) {
@@ -229,6 +245,7 @@ const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>
   } else {
     optype = "unknown_expr";
   }
+
   // Extract attributes
   Map<String, String> attrs;
   if (const auto* call_node = expr.as<relax::CallNode>()) {
@@ -237,8 +254,7 @@ const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>
       attrs = RelaxFuncAttrGetter().GetAttrs(func);
     } else if (call_node->op->IsInstance<relax::VarNode>()) {
       ICHECK(target_funcs_.count(call_node->op)) << "Can not find target func: " << call_node->op;
-      const auto& func = target_funcs_[call_node->op];
-      attrs = RelaxFuncAttrGetter().GetAttrs(func);
+      attrs = RelaxFuncAttrGetter().GetAttrs(target_funcs_[call_node->op]);
     } else if (call_node->op->IsInstance<relax::FunctionNode>()) {
       attrs = RelaxFuncAttrGetter().GetAttrs(call_node->op);
     } else if (call_node->attrs.defined()) {
@@ -247,16 +263,14 @@ const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>
     }
   } else if (const auto* const_node = expr.as<relax::ConstantNode>()) {
     if (const_node->is_scalar()) {
-      const float val = ExprUtils::GetScalar<float>(Downcast<relax::Constant>(expr));
-      std::stringstream stream;
-      stream << std::fixed << std::setprecision(config_.float_precision) << val;
-      attrs.Set("scalar", stream.str());
+      attrs.Set("scalar", GetScalarStr(const_node->data, config_.float_precision));
     }
   } else if (const auto* shape_node = expr.as<relax::ShapeExprNode>()) {
     attrs.Set("shape", StringUtils::ToString(shape_node->values));
   } else if (const auto* get_node = expr.as<relax::TupleGetItemNode>()) {
     attrs.Set("index", std::to_string(get_node->index));
   }
+
   // Get scope
   Array<String> scope;
   if (optype != "input" && optype != "constant") {
@@ -372,6 +386,7 @@ const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>
   for (const auto& i : input_names) {
     inputs.push_back(tensor_input_map_[i]);
   }
+
   // Build outputs
   Array<MSCTensor> outputs;
   const auto& layout = SpanUtils::GetAttr(expr->span, "layout");
@@ -411,6 +426,7 @@ const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>
   } else {
     LOG(FATAL) << "Unexpected struct info (" << sinfo->GetTypeKey() << ")" << sinfo;
   }
+
   // Build node
   const auto& node = MSCJoint(nodes_.size(), node_name, shared_ref, optype, attrs, scope, inputs,
                               outputs, node_weights);
@@ -590,6 +606,8 @@ MSCGraph RelayGraphBuilder::Build(const relay::Function& func) {
 MSCJoint RelayGraphBuilder::AddNode(const Expr& expr, const String& name) {
   const auto& node_name = name.size() > 0 ? name : SpanUtils::GetAttr(expr->span, "name");
   const auto& shared_ref = SpanUtils::GetAttr(expr->span, "shared_ref");
+
+  // Get optype
   String optype;
   if (expr->IsInstance<relay::VarNode>()) {
     optype = "input";
@@ -612,6 +630,7 @@ MSCJoint RelayGraphBuilder::AddNode(const Expr& expr, const String& name) {
   } else {
     optype = "unknown_expr";
   }
+
   // Extract attributes
   Map<String, String> attrs;
   if (const auto* call_node = expr.as<relay::CallNode>()) {
@@ -623,19 +642,18 @@ MSCJoint RelayGraphBuilder::AddNode(const Expr& expr, const String& name) {
     attrs = RelayFuncAttrGetter().GetAttrs(expr);
   } else if (const auto* const_node = expr.as<relay::ConstantNode>()) {
     if (const_node->is_scalar()) {
-      const float val = ExprUtils::GetScalar<float>(Downcast<relay::Constant>(expr));
-      std::stringstream stream;
-      stream << std::fixed << std::setprecision(config_.float_precision) << val;
-      attrs.Set("scalar", stream.str());
+      attrs.Set("scalar", GetScalarStr(const_node->data, config_.float_precision));
     }
   } else if (const auto* get_node = expr.as<relay::TupleGetItemNode>()) {
     attrs.Set("index", std::to_string(get_node->index));
   }
+
   // Get scope
   Array<String> scope;
   if (optype != "input" && optype != "constant") {
     scope.push_back("block");
   }
+
   // Build inputs and weights
   Array<String> input_names;
   Map<String, MSCTensor> node_weights;
@@ -717,6 +735,7 @@ MSCJoint RelayGraphBuilder::AddNode(const Expr& expr, const String& name) {
   for (const auto& i : input_names) {
     inputs.push_back(tensor_input_map_[i]);
   }
+
   // Build outputs
   Array<MSCTensor> outputs;
   const auto& layout = SpanUtils::GetAttr(expr->span, "layout");

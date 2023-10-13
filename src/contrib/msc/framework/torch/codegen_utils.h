@@ -27,10 +27,28 @@
 #include <string>
 
 #include "../../core/codegen/base_codegen.h"
+#include "../../core/codegen/codegen_utils.h"
 
 namespace tvm {
 namespace contrib {
 namespace msc {
+
+/*!
+ * \brief CodeGen helper for torch codegen
+ */
+class TorchCodeGenHelper : public BaseCodeGenHelper {
+ public:
+  /*! \brief Get describe for default node input*/
+  const String IdxInputBase(const MSCJoint& node, const String& prefix = "", int idx = 0,
+                            const String& suffix = "") final {
+    const auto& pair = node->ProducerAndIdxOf(idx);
+    const auto& idx_input = BaseCodeGenHelper::IdxInputBase(node, prefix, idx, suffix);
+    if (pair.first->optype == "max" || pair.first->optype == "min") {
+      return idx_input + ".values";
+    }
+    return idx_input;
+  }
+};
 
 /*!
  * \brief CodeGen config for torch codegen

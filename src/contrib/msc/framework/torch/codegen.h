@@ -28,14 +28,14 @@
 
 #include "../../core/codegen/base_codegen.h"
 #include "../../core/codegen/py_codegen.h"
-#include "config.h"
+#include "codegen_utils.h"
 #include "torch_opcode.h"
 
 namespace tvm {
 namespace contrib {
 namespace msc {
 
-class TorchCodeGen : public PyCodeGen<TorchCodeGenConfig> {
+class TorchCodeGen : public PyCodeGen<TorchCodeGenConfig, TorchCodeGenHelper> {
  public:
   /*!
    * \brief The constructor of TorchCodeGen
@@ -43,17 +43,7 @@ class TorchCodeGen : public PyCodeGen<TorchCodeGenConfig> {
    * \param config the options for codegen.
    */
   explicit TorchCodeGen(const MSCGraph& graph, const std::string& config = "")
-      : PyCodeGen<TorchCodeGenConfig>(graph, config) {}
-
-  /*! \brief Get describe for default node input*/
-  const String IdxInputBase(const MSCJoint& node, int idx = 0, bool as_raw = false) final {
-    const auto& pair = node->ProducerAndIdxOf(idx);
-    const auto& idx_input = PyCodeGen<TorchCodeGenConfig>::IdxInputBase(node, idx, as_raw);
-    if (pair.first->optype == "max" || pair.first->optype == "min") {
-      return idx_input + ".values";
-    }
-    return idx_input;
-  }
+      : PyCodeGen<TorchCodeGenConfig, TorchCodeGenHelper>(graph, config) {}
 
  protected:
   /*! \brief Stack the docs for the header*/

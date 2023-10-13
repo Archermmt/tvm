@@ -27,10 +27,16 @@
 #include <string>
 
 #include "../../core/codegen/base_codegen.h"
+#include "../../core/codegen/codegen_utils.h"
 
 namespace tvm {
 namespace contrib {
 namespace msc {
+
+/*!
+ * \brief CodeGen helper for relax codegen
+ */
+class RelaxCodeGenHelper : public BaseCodeGenHelper {};
 
 /*!
  * \brief CodeGen config for tvm codegen

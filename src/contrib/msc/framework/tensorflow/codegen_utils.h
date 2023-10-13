@@ -27,10 +27,16 @@
 #include <string>
 
 #include "../../core/codegen/base_codegen.h"
+#include "../../core/codegen/codegen_utils.h"
 
 namespace tvm {
 namespace contrib {
 namespace msc {
+
+/*!
+ * \brief CodeGen helper for tensorrt codegen
+ */
+class TFV1CodeGenHelper : public BaseCodeGenHelper {};
 
 /*!
  * \brief CodeGen config for tensorflow codegen

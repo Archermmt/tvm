@@ -34,7 +34,15 @@ namespace msc {
 const Array<Doc> TensorRTOpCode::GetDocs() {
   stack_.Config(this);
   CodeGenBuild();
-  if (node()->optype != "input" && node()->optype != "tuple" && node()->optype != "get_item") {
+  if (node()->optype == "tuple") {
+    for (size_t i = 0; i < node()->outputs.size(); i++) {
+      stack_.func_call("setName", NullOpt, DocUtils::ToPtrDoc(IdxOutput(i)))
+          .call_arg(DocUtils::ToStrDoc(node()->OutputAt(i)->name));
+    }
+  } else if (node()->optype == "get_item") {
+    stack_.func_call("setName", NullOpt, DocUtils::ToPtrDoc(IdxNode()))
+        .call_arg(DocUtils::ToStrDoc(node()->OutputAt(0)->name));
+  } else if (node()->optype != "input") {
     SetLayerByValue("Name", DocUtils::ToStrDoc(node()->name));
     for (size_t i = 0; i < node()->outputs.size(); i++) {
       stack_.func_call("setName", NullOpt, DocUtils::ToPtrDoc(IdxOutput(i)))
@@ -78,7 +86,7 @@ const String TensorRTOpCode::DeclareInputs(bool simplify) {
 }
 
 const String TensorRTOpCode::DType(const DataType& dtype) {
-  const String& dtype_name = BaseOpCode<TensorRTCodeGenConfig>::DType(dtype);
+  const String& dtype_name = BaseOpCode<TensorRTCodeGenConfig, TensorRTCodeGenHelper>::DType(dtype);
   String dtype_enum;
   if (dtype_name == "int8") {
     dtype_enum = "DataType::kINT8";

@@ -118,6 +118,7 @@ def to_sub_tensorrt(
 
 
 def to_tensorrt(
+    mod: tvm.IRModule,
     graph_infos: List[Tuple[str, MSCGraph, Dict[str, tvm.nd.array]]],
     codegen_config: Optional[Dict[str, str]] = None,
     print_config: Optional[Dict[str, str]] = None,
@@ -128,6 +129,8 @@ def to_tensorrt(
 
     Parameters
     ----------
+    mod: IRModule
+        The IRModule of relax.
     graph_infos: list<name, graph, name>
         The translated graph.
     codegen_config: dict
@@ -141,8 +144,8 @@ def to_tensorrt(
 
     Returns
     -------
-    target_options: dict<str, str>
-        The target options.
+    mod: IRModule
+        The translated mod with target func.
     """
 
     target_options = {}
@@ -151,4 +154,9 @@ def to_tensorrt(
             graph, weights, codegen_config, print_config, build_folder, output_folder
         )
         target_options[name] = msc_utils.dump_dict(options)
-    return {"msc_tensorrt": target_options}
+    mod = tvm.transform.Sequential(
+        [
+            tvm.relax.transform.RunCodegen({"msc_tensorrt": target_options}),
+        ]
+    )(mod)
+    return mod

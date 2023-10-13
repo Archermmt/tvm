@@ -30,7 +30,7 @@
 #include <vector>
 
 #include "../../core/codegen/base_codegen.h"
-#include "config.h"
+#include "codegen_utils.h"
 
 namespace tvm {
 namespace contrib {
@@ -42,54 +42,22 @@ typedef OpCodeStack<TensorRTOpCode> TensorRTOpCodeStack;
 /*!
  * \brief CodeGen for relax op
  */
-class TensorRTOpCode : public BaseOpCode<TensorRTCodeGenConfig> {
+class TensorRTOpCode : public BaseOpCode<TensorRTCodeGenConfig, TensorRTCodeGenHelper> {
  public:
   /*!
    * \brief The constructor of BaseOpDocsifier
    * \param func_name the function name for the node.
    * \param config the config json for the node.
    */
-  explicit TensorRTOpCode(const String& func_name) : BaseOpCode<TensorRTCodeGenConfig>(func_name) {}
-
-  /*! \brief Get describe for default node input*/
-  const String IdxInputBase(const MSCJoint& node, int idx = 0, bool as_raw = false) final {
-    const auto& pair = node->ProducerAndIdxOf(idx);
-    if (pair.first->optype == "input") {
-      return "*" + IdxNodeBase(pair.first, as_raw);
-    }
-    if (pair.first->optype == "tuple" || pair.first->optype == "get_item") {
-      return IdxNodeBase(pair.first, as_raw);
-    }
-    return "*" + IdxOutputBase(pair.first, pair.second, as_raw);
-  }
-
-  /*! \brief Get describe for default node output*/
-  const String IdxOutputBase(const MSCJoint& node, int idx = 0, bool as_raw = false) final {
-    if (node->optype == "argmax" || node->optype == "argmin") {
-      ICHECK_EQ(idx, 0) << "argmax and argmin only has 1 output, get " << idx;
-      return IdxNodeBase(node, as_raw) + "->getOutput(1)";
-    }
-    if (node->optype == "tuple") {
-      return IdxNodeBase(node, as_raw) + "[" + std::to_string(idx) + "]";
-    }
-    if (node->optype == "get_item") {
-      ICHECK_EQ(idx, 0) << "get item only has 1 output, get " << idx;
-      return IdxNodeBase(node, as_raw);
-    }
-    return IdxNodeBase(node, as_raw) + "->getOutput(" + std::to_string(idx) + ")";
-  }
-
-  /*! \brief Get describe for default node weight*/
-  const String IdxWeightBase(const MSCJoint& node, const String& wtype, bool as_raw = false) final {
-    return "mWeights[\"" + node->WeightAt(wtype)->name + "\"]";
-  }
+  explicit TensorRTOpCode(const String& func_name)
+      : BaseOpCode<TensorRTCodeGenConfig, TensorRTCodeGenHelper>(func_name) {}
 
   /*! \brief Convert node to docs*/
   const Array<Doc> GetDocs() final;
 
   /*! \brief Get func_name for the default node*/
   const String callee_name() final {
-    return "network->add" + BaseOpCode<TensorRTCodeGenConfig>::callee_name();
+    return "network->add" + BaseOpCode<TensorRTCodeGenConfig, TensorRTCodeGenHelper>::callee_name();
   }
 
   /*! \brief Get valid return name for the default node*/

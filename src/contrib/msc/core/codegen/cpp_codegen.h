@@ -40,8 +40,8 @@ namespace msc {
 
 using namespace tvm::script::printer;
 
-template <typename ConfigType>
-class CppCodeGen : public BaseCodeGen<ConfigType> {
+template <typename ConfigType, typename HelperType>
+class CppCodeGen : public BaseCodeGen<ConfigType, HelperType> {
  public:
   /*!
    * \brief The constructor of PyCodeGen
@@ -49,7 +49,7 @@ class CppCodeGen : public BaseCodeGen<ConfigType> {
    * \param config the options for codegen.
    */
   explicit CppCodeGen(const MSCGraph& graph, const std::string& config = "")
-      : BaseCodeGen<ConfigType>(graph, config) {}
+      : BaseCodeGen<ConfigType, HelperType>(graph, config) {}
 
   /*! \brief Stack the docs for the class declare*/
   virtual void CodeGenClassDeclare() = 0;

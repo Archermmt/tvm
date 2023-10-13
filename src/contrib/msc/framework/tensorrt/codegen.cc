@@ -405,7 +405,7 @@ const String TensorRTCodeGen::IdxTensor(const MSCTensor& tensor) {
 }
 
 const String TensorRTCodeGen::CppDType(const DataType& dtype) {
-  const String& dtype_name = CppCodeGen<TensorRTCodeGenConfig>::DType(dtype);
+  const String& dtype_name = CppCodeGen<TensorRTCodeGenConfig, TensorRTCodeGenHelper>::DType(dtype);
   if (dtype_name == "int32") {
     return "int";
   }

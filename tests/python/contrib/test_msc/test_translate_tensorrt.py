@@ -56,38 +56,9 @@ def verify_model(torch_model, input_info, allow_incomplete=False):
     golden = [g.detach().cpu().numpy() for g in golden]
     # partition module for tensorrt
     mod, graph_infos = translate.partition_for_tensorrt(mod, allow_incomplete=allow_incomplete)
-    print("partitioned mod " + str(mod))
-    print("graph " + str(graph_infos[0][1]))
-
-    build_folder = None
     output_folder = msc_utils.msc_dir()
-    codegen_config = None
-
-    build_folder = msc_utils.msc_dir("msc_test")
-    output_folder = msc_utils.msc_dir("msc_output")
-
-    """
-    build_folder = msc_utils.msc_dir("msc_test")
-    output_folder = msc_utils.msc_dir("msc_output")
-    dataset = output_folder.relpath("dataset")
-    codegen_config = {"test_iter": 1, "dataset": dataset}
-    with msc_utils.MSCDataSaver(dataset, ["inp_0:0"], ["reshape_1:0"]) as saver:
-        saver.save(datas, golden)
-    with open(os.path.join(dataset, "tensor_info"), "w") as f:
-        f.write("inp_0:0 {}\n".format(datas[0].size * datas[0].itemsize))
-        f.write("reshape_1:0 {}\n".format(golden[0].size * golden[0].itemsize))
-    """
-    target_options = codegen.to_tensorrt(
-        graph_infos,
-        codegen_config=codegen_config,
-        build_folder=build_folder,
-        output_folder=output_folder,
-    )
-    mod = tvm.transform.Sequential(
-        [
-            tvm.relax.transform.RunCodegen(target_options),
-        ]
-    )(mod)
+    # tranalte to tensorrt
+    mod = codegen.to_tensorrt(mod, graph_infos, output_folder=output_folder)
     tvm_datas = [tvm.nd.array(i, device=tvm.cuda()) for i in datas]
     results = build_and_run(mod, tvm_datas)
     for gol, res in zip(golden, results):
@@ -471,11 +442,11 @@ def test_binary():
     # Power
     class Power1(Module):
         def forward(self, lhs, rhs):
-            return lhs**rhs
+            return lhs ** rhs
 
     class Power2(Module):
         def forward(self, lhs):
-            return lhs**1.0
+            return lhs ** 1.0
 
     verify_model(Power1(), input_info1)
     verify_model(Power2(), input_info2)
@@ -790,6 +761,4 @@ def test_max():
 
 
 if __name__ == "__main__":
-    # tvm.testing.main()
-    # test_batchnorm2d()
-    test_expand()
+    tvm.testing.main()

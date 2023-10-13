@@ -27,10 +27,53 @@
 #include <string>
 
 #include "../../core/codegen/base_codegen.h"
+#include "../../core/codegen/codegen_utils.h"
 
 namespace tvm {
 namespace contrib {
 namespace msc {
+
+/*!
+ * \brief CodeGen helper for tensorrt codegen
+ */
+class TensorRTCodeGenHelper : public BaseCodeGenHelper {
+ public:
+  /*! \brief Get describe for default node input*/
+  const String IdxInputBase(const MSCJoint& node, const String& prefix = "", int idx = 0,
+                            const String& suffix = "") final {
+    const auto& pair = node->ProducerAndIdxOf(idx);
+    if (pair.first->optype == "input") {
+      return "*" + IdxNodeBase(pair.first, prefix, suffix);
+    }
+    if (pair.first->optype == "tuple" || pair.first->optype == "get_item") {
+      return IdxNodeBase(pair.first, prefix, suffix);
+    }
+    return "*" + IdxOutputBase(pair.first, prefix, pair.second, suffix);
+  }
+
+  /*! \brief Get describe for default node output*/
+  const String IdxOutputBase(const MSCJoint& node, const String& prefix = "", int idx = 0,
+                             const String& suffix = "") final {
+    if (node->optype == "argmax" || node->optype == "argmin") {
+      ICHECK_EQ(idx, 0) << "argmax and argmin only has 1 output, get " << idx;
+      return IdxNodeBase(node, prefix, suffix) + "->getOutput(1)";
+    }
+    if (node->optype == "tuple") {
+      return IdxNodeBase(node, prefix, suffix) + "[" + std::to_string(idx) + "]";
+    }
+    if (node->optype == "get_item") {
+      ICHECK_EQ(idx, 0) << "get item only has 1 output, get " << idx;
+      return IdxNodeBase(node, prefix, suffix);
+    }
+    return IdxNodeBase(node, prefix, suffix) + "->getOutput(" + std::to_string(idx) + ")";
+  }
+
+  /*! \brief Get describe for default node weight*/
+  const String IdxWeightBase(const MSCJoint& node, const String& wtype,
+                             const String& suffix = "") final {
+    return "mWeights[\"" + node->WeightAt(wtype)->name + "\"]";
+  }
+};
 
 /*!
  * \brief CodeGen config for tensorrt codegen

@@ -29,14 +29,14 @@
 
 #include "../../core/codegen/base_codegen.h"
 #include "../../core/codegen/cpp_codegen.h"
-#include "config.h"
+#include "codegen_utils.h"
 #include "tensorrt_opcode.h"
 
 namespace tvm {
 namespace contrib {
 namespace msc {
 
-class TensorRTCodeGen : public CppCodeGen<TensorRTCodeGenConfig> {
+class TensorRTCodeGen : public CppCodeGen<TensorRTCodeGenConfig, TensorRTCodeGenHelper> {
  public:
   /*!
    * \brief The constructor of TensorRTCodeGen
@@ -44,7 +44,7 @@ class TensorRTCodeGen : public CppCodeGen<TensorRTCodeGenConfig> {
    * \param config the options for codegen.
    */
   explicit TensorRTCodeGen(const MSCGraph& graph, const std::string& config = "")
-      : CppCodeGen<TensorRTCodeGenConfig>(graph, config) {}
+      : CppCodeGen<TensorRTCodeGenConfig, TensorRTCodeGenHelper>(graph, config) {}
 
   /*! \brief Stack the docs for the class declare*/
   void CodeGenClassDeclare() final;
@@ -57,39 +57,6 @@ class TensorRTCodeGen : public CppCodeGen<TensorRTCodeGenConfig> {
 
   /*! \brief Stack the docs for the class define*/
   void CodeGenCmake() final;
-
-  /*! \brief Get describe for default node input*/
-  const String IdxInputBase(const MSCJoint& node, int idx = 0, bool as_raw = false) final {
-    const auto& pair = node->ProducerAndIdxOf(idx);
-    if (pair.first->optype == "input") {
-      return "*" + IdxNodeBase(pair.first, as_raw);
-    }
-    if (pair.first->optype == "tuple" || pair.first->optype == "get_item") {
-      return IdxNodeBase(pair.first, as_raw);
-    }
-    return "*" + IdxOutputBase(pair.first, pair.second, as_raw);
-  }
-
-  /*! \brief Get describe for default node output*/
-  const String IdxOutputBase(const MSCJoint& node, int idx = 0, bool as_raw = false) final {
-    if (node->optype == "argmax" || node->optype == "argmin") {
-      ICHECK_EQ(idx, 0) << "argmax and argmin only has 1 output, get " << idx;
-      return IdxNodeBase(node, as_raw) + "->getOutput(1)";
-    }
-    if (node->optype == "tuple") {
-      return IdxNodeBase(node, as_raw) + "[" + std::to_string(idx) + "]";
-    }
-    if (node->optype == "get_item") {
-      ICHECK_EQ(idx, 0) << "get item only has 1 output, get " << idx;
-      return IdxNodeBase(node, as_raw);
-    }
-    return IdxNodeBase(node, as_raw) + "->getOutput(" + std::to_string(idx) + ")";
-  }
-
-  /*! \brief Get describe for default node weight*/
-  const String IdxWeightBase(const MSCJoint& node, const String& wtype, bool as_raw = false) final {
-    return "mWeights[\"" + node->WeightAt(wtype)->name + "\"]";
-  }
 
  protected:
   /*! \brief Get the docs for the op*/
