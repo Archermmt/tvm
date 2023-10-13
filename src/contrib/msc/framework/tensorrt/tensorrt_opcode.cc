@@ -34,7 +34,7 @@ namespace msc {
 const Array<Doc> TensorRTOpCode::GetDocs() {
   stack_.Config(this);
   CodeGenBuild();
-  if (node()->optype != "input") {
+  if (node()->optype != "input" && node()->optype != "tuple" && node()->optype != "get_item") {
     SetLayerByValue("Name", DocUtils::ToStrDoc(node()->name));
     for (size_t i = 0; i < node()->outputs.size(); i++) {
       stack_.func_call("setName", NullOpt, DocUtils::ToPtrDoc(IdxOutput(i)))
@@ -68,12 +68,11 @@ const String TensorRTOpCode::DeclareInputs(bool simplify) {
         .declare_arg(idx_input)
         .assign(inputs_ref, inputs_ref + "_vec.data()", "ITensor**");
   } else {
-    Array<String> idx_inputs;
+    stack_.declare("std::vector<ITensor*>", IdxNode(), 0, false);
     for (size_t i = 0; i < node()->inputs.size(); i++) {
       const auto& idx_input = StringUtils::Replace(IdxInput(i), "*", "");
-      idx_inputs.push_back(idx_input);
+      stack_.declare_arg(idx_input);
     }
-    stack_.assign(inputs_ref, DocUtils::ToListDoc(idx_inputs), "ITensor**");
   }
   return inputs_ref;
 }
@@ -287,8 +286,10 @@ class TensorRTConcatCodeGen : public TensorRTOpCode {
 
  protected:
   void CodeGenBuild() final {
-    const auto& inputs_def = DeclareInputs();
-    stack_.op_call().call_arg(inputs_def).call_arg(node()->inputs.size());
+    const auto& producer = node()->ProducerOf(0);
+    ICHECK(node()->parents.size() == 1 && producer->optype == "tuple")
+        << "Concat expect parent as tuple, get " << node();
+    stack_.op_call().call_arg(IdxNodeBase(producer) + ".data()").call_arg(producer->inputs.size());
     SetLayerByValue("Axis", AttrToAxis());
   }
 };
@@ -353,6 +354,18 @@ class TensorRTElemwiseCodeGen : public TensorRTOpCode {
 
  private:
   String symbol_;
+};
+
+class TensorRTGetItemCodeGen : public TensorRTOpCode {
+ public:
+  TENSORRT_OP_CODEGEN_METHODS(TensorRTGetItemCodeGen)
+
+ protected:
+  void CodeGenBuild() final {
+    int index = node()->GetTypeAttr<int>("index");
+    const auto& producer = node()->ProducerOf(0);
+    stack_.assign(IdxNode(), IdxOutputBase(producer, index), "auto");
+  }
 };
 
 class TensorRTInputCodeGen : public TensorRTOpCode {
@@ -646,6 +659,20 @@ class TensorRTTopkCodeGen : public TensorRTOpCode {
   }
 };
 
+class TensorRTTupleCodeGen : public TensorRTOpCode {
+ public:
+  TENSORRT_OP_CODEGEN_METHODS(TensorRTTupleCodeGen)
+
+ protected:
+  void CodeGenBuild() final {
+    stack_.declare("std::vector<ITensor*>", IdxNode(), 0, false);
+    for (size_t i = 0; i < node()->inputs.size(); i++) {
+      const auto& idx_input = StringUtils::Replace(IdxInput(i), "*", "");
+      stack_.declare_arg(idx_input);
+    }
+  }
+};
+
 class TensorRTUnaryCodeGen : public TensorRTOpCode {
  public:
   explicit TensorRTUnaryCodeGen(const String& symbol) : TensorRTOpCode("Unary") {
@@ -760,6 +787,10 @@ GetTensorRTOpCodes() {
   map->emplace("msc.conv2d_bias", std::make_shared<TensorRTConvCodeGen>("ConvolutionNd", true));
   map->emplace("msc.linear", std::make_shared<TensorRTLinearCodeGen>("FullyConnected", false));
   map->emplace("msc.linear_bias", std::make_shared<TensorRTLinearCodeGen>("FullyConnected", true));
+
+  // special op
+  map->emplace("get_item", std::make_shared<TensorRTGetItemCodeGen>(""));
+  map->emplace("tuple", std::make_shared<TensorRTTupleCodeGen>(""));
 
   return map;
 }

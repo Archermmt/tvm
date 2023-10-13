@@ -49,6 +49,10 @@ void RelaxFuncAttrGetter::VisitExpr_(const relax::CallNode* op) {
   }
 }
 
+void RelaxFuncAttrGetter::VisitExpr_(const relax::TupleGetItemNode* op) {
+  attrs_.Set("index", std::to_string(op->index));
+}
+
 void RelaxFuncValueGetter::VisitExpr_(const relax::CallNode* op) {
   for (const auto& arg : op->args) {
     if (const auto* s_node = arg.as<relax::PrimValueNode>()) {

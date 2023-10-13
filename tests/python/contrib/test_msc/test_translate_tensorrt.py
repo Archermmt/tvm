@@ -63,6 +63,9 @@ def verify_model(torch_model, input_info, allow_incomplete=False):
     output_folder = msc_utils.msc_dir()
     codegen_config = None
 
+    build_folder = msc_utils.msc_dir("msc_test")
+    output_folder = msc_utils.msc_dir("msc_output")
+
     """
     build_folder = msc_utils.msc_dir("msc_test")
     output_folder = msc_utils.msc_dir("msc_output")
@@ -629,7 +632,7 @@ def test_split():
             return torch.split(data, 1, dim=1)
 
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Split(), input_info, allow_incomplete=True)
+    verify_model(Split(), input_info)
 
 
 def test_chunk():
@@ -640,7 +643,7 @@ def test_chunk():
             return torch.chunk(data, 3, dim=1)
 
     input_info = [([1, 3, 10, 10], "float32")]
-    verify_model(Chunk(), input_info, allow_incomplete=True)
+    verify_model(Chunk(), input_info)
 
 
 def test_expand():
@@ -648,6 +651,7 @@ def test_expand():
 
     class Expand(Module):
         def forward(self, x):
+            x = x + 1.0
             return x.expand(4, 2, 3, 4)
 
     input_info = [([1, 2, 3, 4], "float32")]
@@ -787,4 +791,5 @@ def test_max():
 
 if __name__ == "__main__":
     # tvm.testing.main()
-    test_batchnorm2d()
+    # test_batchnorm2d()
+    test_expand()

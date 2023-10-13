@@ -64,6 +64,9 @@ class TensorRTCodeGen : public CppCodeGen<TensorRTCodeGenConfig> {
     if (pair.first->optype == "input") {
       return "*" + IdxNodeBase(pair.first, as_raw);
     }
+    if (pair.first->optype == "tuple" || pair.first->optype == "get_item") {
+      return IdxNodeBase(pair.first, as_raw);
+    }
     return "*" + IdxOutputBase(pair.first, pair.second, as_raw);
   }
 
@@ -72,6 +75,13 @@ class TensorRTCodeGen : public CppCodeGen<TensorRTCodeGenConfig> {
     if (node->optype == "argmax" || node->optype == "argmin") {
       ICHECK_EQ(idx, 0) << "argmax and argmin only has 1 output, get " << idx;
       return IdxNodeBase(node, as_raw) + "->getOutput(1)";
+    }
+    if (node->optype == "tuple") {
+      return IdxNodeBase(node, as_raw) + "[" + std::to_string(idx) + "]";
+    }
+    if (node->optype == "get_item") {
+      ICHECK_EQ(idx, 0) << "get item only has 1 output, get " << idx;
+      return IdxNodeBase(node, as_raw);
     }
     return IdxNodeBase(node, as_raw) + "->getOutput(" + std::to_string(idx) + ")";
   }

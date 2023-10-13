@@ -210,10 +210,6 @@ class JSONSerializer : public relax::MemoizedExprTranslator<NodeEntries> {
         dtype.emplace_back(DType2String(tensor_sinfo->dtype));
       }
       node->SetNumOutput(tuple_sinfo->fields.size());
-    } else if (const auto* shape_sinfo = struct_info.as<ShapeStructInfoNode>()) {
-      ICHECK(shape_sinfo->values.defined()) << "Expect ShapeStructInfo with defined values";
-      shape.emplace_back(std::vector<int64_t>{shape_sinfo->ndim});
-      dtype.emplace_back("int32");
     } else {
       const auto* tensor_sinfo = struct_info.as<TensorStructInfoNode>();
       ICHECK(tensor_sinfo) << "Expect TensorStructInfo, but received: "

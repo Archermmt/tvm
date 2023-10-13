@@ -222,6 +222,14 @@ void CppPrinter::PrintTypedDoc(const DeclareDoc& doc) {
 
 void CppPrinter::PrintTypedDoc(const PointerDoc& doc) { output_ << doc->name << "->"; }
 
+void CppPrinter::PrintTypedDoc(const StrictListDoc& doc) {
+  if (doc->allow_empty || doc->list->elements.size() > 0) {
+    PrintDoc(doc->list, false);
+  } else {
+    output_ << "{}";
+  }
+}
+
 void CppPrinter::PrintIndentedBlock(const Array<StmtDoc>& docs) {
   IncreaseIndent();
   for (const StmtDoc& d : docs) {

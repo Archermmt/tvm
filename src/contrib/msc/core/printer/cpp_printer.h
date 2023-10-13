@@ -93,6 +93,9 @@ class CppPrinter : public MSCBasePrinter {
   /*! \brief Virtual method to print a PointerDoc*/
   void PrintTypedDoc(const PointerDoc& doc) final;
 
+  /*! \brief Virtual method to print a StrictListDoc*/
+  void PrintTypedDoc(const StrictListDoc& doc) final;
+
  private:
   /*! \brief endline scopes*/
   std::vector<bool> endlines_;
