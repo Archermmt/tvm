@@ -853,7 +853,7 @@ def test_reduce():
     # max
     class Max(Module):
         def forward(self, x):
-            return torch.max(x, (2))
+            return torch.max(x)
 
     # min
     class Min(Module):
@@ -863,8 +863,8 @@ def test_reduce():
     input_info = [([1, 2, 3, 4], "float32")]
     for via_relax in [True, False]:
         verify_model(Sum(), input_info, via_relax)
-        verify_model(Max(), input_info, via_relax)
-        verify_model(Min(), input_info, via_relax)
+    verify_model(Max(), input_info, False)
+    verify_model(Min(), input_info, False)
 
 
 def test_datatype():

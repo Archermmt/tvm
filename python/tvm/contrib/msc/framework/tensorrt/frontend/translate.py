@@ -39,7 +39,7 @@ def partition_for_tensorrt(
     mod: IRModule
         The IRModule of relax.
     trans_config: dict
-        The config for transfrorm IRModule.
+        The config for transform IRModule.
     params: dict of <string:tvm.ndarray>
         The parameters of the IRModule.
     build_config: dict

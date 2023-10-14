@@ -39,14 +39,13 @@ namespace msc {
 class TorchCodeGenHelper : public BaseCodeGenHelper {
  public:
   /*! \brief Get describe for default node input*/
-  const String IdxInputBase(const MSCJoint& node, const String& prefix = "", int idx = 0,
-                            const String& suffix = "") final {
-    const auto& pair = node->ProducerAndIdxOf(idx);
-    const auto& idx_input = BaseCodeGenHelper::IdxInputBase(node, prefix, idx, suffix);
-    if (pair.first->optype == "max" || pair.first->optype == "min") {
-      return idx_input + ".values";
+  const String IdxOutputBase(const MSCJoint& node, const String& prefix = "", int idx = 0,
+                             const String& suffix = "") final {
+    if ((node->optype == "max" || node->optype == "min") && node->OutputAt(0)->Ndim() > 0) {
+      ICHECK(idx == 0) << "max and min op only support 1 outputs, get " << node;
+      return IdxNodeBase(node, prefix, suffix) + ".values";
     }
-    return idx_input;
+    return BaseCodeGenHelper::IdxOutputBase(node, prefix, idx, suffix);
   }
 };
 

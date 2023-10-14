@@ -429,9 +429,8 @@ class TorchReduceAxesCodeGen : public TorchOpCode {
       has_axes = true;
     }
     if (has_axes) {
-      stack_.call_arg(DocUtils::ToListDoc(axes), "dim");
+      stack_.call_arg(DocUtils::ToListDoc(axes), "dim").op_arg<bool>("keepdims", "keepdim");
     }
-    stack_.op_arg<bool>("keepdims", "keepdim");
   }
 };
 
