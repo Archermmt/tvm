@@ -270,7 +270,6 @@ def byoc_partition(
     params: Optional[Dict[str, tvm.nd.array]] = None,
     trans_config: Optional[Dict[str, str]] = None,
     build_config: Optional[Dict[str, str]] = None,
-    allow_incomplete: bool = True,
 ) -> Tuple[tvm.IRModule, List[Tuple[str, MSCGraph, Dict[str, tvm.nd.array]]]]:
     """Partition module to target sub functions.
 
@@ -286,9 +285,6 @@ def byoc_partition(
         The parameters of the IRModule.
     build_config: dict
         The config for build MSCGraph.
-    allow_incomplete: bool
-        Whether allow some ops not on tensorrt
-
 
     Returns
     -------
@@ -330,7 +326,7 @@ def byoc_partition(
     msc_mod = _partition_mod(mod)
     func_names = [var.name_hint for var, func in msc_mod.functions.items() if _is_target_func(func)]
 
-    if not allow_incomplete:
+    if not trans_config.get("allow_incomplete", False):
         assert len(func_names) == 1, "More than 1 target func is found: " + str(msc_mod)
         BYOCChecker().check(func_names, msc_mod[entry])
 

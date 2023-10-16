@@ -55,7 +55,8 @@ def verify_model(torch_model, input_info, allow_incomplete=False):
         golden = [golden]
     golden = [g.detach().cpu().numpy() for g in golden]
     # partition module for tensorrt
-    mod, graph_infos = translate.partition_for_tensorrt(mod, allow_incomplete=allow_incomplete)
+    trans_config = {"allow_incomplete": allow_incomplete}
+    mod, graph_infos = translate.partition_for_tensorrt(mod, trans_config=trans_config)
     output_folder = msc_utils.msc_dir()
     # tranalte to tensorrt
     mod = codegen.to_tensorrt(mod, graph_infos, output_folder=output_folder)
@@ -442,11 +443,11 @@ def test_binary():
     # Power
     class Power1(Module):
         def forward(self, lhs, rhs):
-            return lhs ** rhs
+            return lhs**rhs
 
     class Power2(Module):
         def forward(self, lhs):
-            return lhs ** 1.0
+            return lhs**1.0
 
     verify_model(Power1(), input_info1)
     verify_model(Power2(), input_info2)

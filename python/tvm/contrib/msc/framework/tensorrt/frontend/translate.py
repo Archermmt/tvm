@@ -30,7 +30,6 @@ def partition_for_tensorrt(
     params: Optional[Dict[str, tvm.nd.array]] = None,
     trans_config: Optional[Dict[str, str]] = None,
     build_config: Optional[Dict[str, str]] = None,
-    allow_incomplete: bool = True,
 ) -> Tuple[tvm.IRModule, List[Tuple[str, MSCGraph, Dict[str, tvm.nd.array]]]]:
     """Partition module to tensorrt sub functions.
 
@@ -44,8 +43,6 @@ def partition_for_tensorrt(
         The parameters of the IRModule.
     build_config: dict
         The config for build MSCGraph.
-    allow_incomplete: bool
-        Whether allow some ops not on tensorrt
 
     Returns
     -------
@@ -63,4 +60,4 @@ def partition_for_tensorrt(
             relax.transform.FoldConstant(),
         ]
     )(mod)
-    return byoc_partition("msc_tensorrt", mod, params, trans_config, build_config, allow_incomplete)
+    return byoc_partition("msc_tensorrt", mod, params, trans_config, build_config)

@@ -14,12 +14,8 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""tvm.contrib.msc.core.utils"""
+"""tvm.contrib.msc.core.utils.log"""
 
-from .expr import *
-from .info import *
-from .file import *
-from .namespace import *
-from .register import *
-from .dataset import *
-from .log import *
+
+def set_global_logger(path: str = None) -> logging.logger:
+    return None
