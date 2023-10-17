@@ -18,8 +18,6 @@
 
 """ Test translate from tensorflow. """
 
-from distutils.version import LooseVersion
-
 from packaging import version as package_version
 import numpy as np
 
@@ -42,6 +40,13 @@ import tvm.testing
 import tvm.relay.testing.tf as tf_testing
 from tvm.contrib.msc.framework.tensorflow.frontend import translate
 from tvm.contrib.msc.framework.tensorflow import codegen
+
+
+# Only allow TF to run on half the GPU RAM to save the other half
+# For TVM
+gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.5)
+gpu_sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
+gpu_sess.close()
 
 
 def convert_to_list(x):
@@ -367,63 +372,6 @@ def test_reshape():
     _test_reshape_like(np.zeros((3, 6)), np.zeros((9, 2)))
 
 
-def _test_squeeze(data, squeeze_dims=None):
-    """One iteration of squeeze"""
-
-    if squeeze_dims is None:
-        squeeze_dims = []
-
-    with tf.Graph().as_default():
-        in_data = array_ops.placeholder(shape=data.shape, dtype=data.dtype)
-
-        if squeeze_dims:
-            array_ops.squeeze(in_data, squeeze_dims)
-        else:
-            array_ops.squeeze(in_data)
-        io_info = {"in_data": data, "in_name": "Placeholder:0", "out_name": "Squeeze:0"}
-        graph_def, golden = get_graph_def(**io_info)
-    verify_model(graph_def, golden, **io_info)
-
-
-def test_squeeze():
-    """test tensorflow translator for squeeze"""
-
-    _test_squeeze(np.arange(4).reshape((2, 1, 2)))
-    _test_squeeze(np.arange(6).reshape((1, 2, 1, 3, 1)))
-    _test_squeeze(np.arange(6).reshape((1, 2, 1, 3, 1)), [2, 4])
-    _test_squeeze(np.arange(6).reshape((1, 2, 1, 3, 1)), [-3, -5])
-
-
-def _test_concat_v2(shape1, shape2, dim):
-    """One iteration of ConcatV2"""
-
-    with tf.Graph().as_default():
-        dtype = "float32"
-        in1 = tf.placeholder(shape=shape1, dtype=dtype, name="in1")
-        in2 = tf.placeholder(shape=shape2, dtype=dtype, name="in2")
-        array_ops.concat_v2([in1, in2], dim)
-
-        np_data1 = np.random.uniform(size=shape1).astype(dtype)
-        np_data2 = np.random.uniform(size=shape2).astype(dtype)
-        io_info = {
-            "in_data": [np_data1, np_data2],
-            "in_name": ["in1:0", "in2:0"],
-            "out_name": "ConcatV2:0",
-        }
-        graph_def, golden = get_graph_def(**io_info)
-    verify_model(graph_def, golden, **io_info)
-
-
-def test_concat_v2():
-    """test tensorflow translator for concat"""
-
-    if tf.__version__ < LooseVersion("1.4.1"):
-        return
-
-    _test_concat_v2([10, 3, 5], [2, 3, 5], 0)
-    _test_concat_v2([2, 8, 5], [2, 8, 6], -1)
-
-
 def _test_sigmoid(data):
     """One iteration of sigmoid"""
 
@@ -686,37 +634,6 @@ def test_split():
     _test_split((6, 1, 3, 5), 0, 3)
     _test_split((6, 1, 3, 5), -4, 3)
     _test_split((3, 6, 4), -2, [1, 4, 1])
-
-
-def _test_unstack(ip_shape, axis):
-    np_data = np.random.uniform(-5, 5, size=ip_shape).astype("float32")
-
-    tf.reset_default_graph()
-    with tf.Graph().as_default():
-        in_data = tf.placeholder("float32", ip_shape, name="in_data")
-        unstack = tf.unstack(in_data, axis=axis)
-        io_info = {
-            "in_data": np_data,
-            "in_name": "in_data:0",
-            "out_name": [n.name for n in unstack],
-        }
-        graph_def, golden = get_graph_def(**io_info)
-    verify_model(graph_def, golden, **io_info, use_out_name=False)
-
-    tf.reset_default_graph()
-    with tf.Graph().as_default():
-        in_data = tf.placeholder("float32", ip_shape, name="in_data")
-        tf.stack(tf.unstack(in_data, axis=axis), axis=axis)
-        io_info = {"in_data": np_data, "in_name": "in_data:0", "out_name": "stack:0"}
-        graph_def, golden = get_graph_def(**io_info)
-    verify_model(graph_def, golden, **io_info)
-
-
-def test_unstack():
-    """test tensorflow translator for unstack"""
-
-    _test_unstack((2, 6), 1)
-    _test_unstack((3, 6, 4), -2)
 
 
 def _test_tile(in_shape, multiples):

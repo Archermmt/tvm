@@ -17,6 +17,7 @@
 
 """ Test SetExprLayout Pass. """
 
+import numpy as np
 import torch
 from torch import fx
 
@@ -43,15 +44,22 @@ def test_relax_runner():
 
     torch_model = _get_module_from_torch("resnet50")
     if torch_model:
-        msc_utils.set_workspace("msc_test")
+        workspace = msc_utils.set_workspace("msc_test")
         graph_model = fx.symbolic_trace(torch_model)
         input_info = [([1, 3, 224, 224], "float32")]
+        datas = [np.random.rand(*i[0]).astype(i[1]) for i in input_info]
+        torch_datas = [torch.from_numpy(d) for d in datas]
         with torch.no_grad():
+            golden = torch_model(*torch_datas)
             mod = from_fx(graph_model, input_info)
         runner = RelaxRunner(mod)
-        print("runner " + str(runner))
+        runner.build()
+        outputs = runner.run(datas, ret_type="list")
+        golden = [msc_utils.cast_array(golden)]
+        for gol_r, out_r in zip(golden, outputs):
+            tvm.testing.assert_allclose(gol_r, out_r, atol=1e-3, rtol=1e-3)
+        workspace.destory()
 
 
 if __name__ == "__main__":
-    # tvm.testing.main()
-    test_relax_runner()
+    tvm.testing.main()

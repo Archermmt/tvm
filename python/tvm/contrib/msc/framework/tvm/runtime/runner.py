@@ -16,6 +16,9 @@
 # under the License.
 """tvm.contrib.msc.core.runtime.runner"""
 
+import numpy as np
+from typing import Dict, List, Union
+
 import tvm
 from tvm.contrib.msc.core.runtime import ModelRunner
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
@@ -66,6 +69,35 @@ class RelaxRunner(ModelRunner):
             else:
                 raise NotImplementedError("Unsupported device " + str(device))
         return runnable
+
+    def _run_model(
+        self, model: object, inputs: Dict[str, np.ndarray], device: str
+    ) -> Union[List[np.ndarray], Dict[str, np.ndarray]]:
+        """Run the model to get outputs
+
+        Parameters
+        -------
+        model:
+            The runnable model.
+        inputs: dict<str, data>
+            The inputs in dict.
+        device: str
+            The device.
+
+        Returns
+        -------
+        outputs: list<data> or dict<str, data>
+            The outputs in list or dict.
+        """
+
+        model_inputs = self.get_inputs()
+        if device == "cpu":
+            tvm_datas = [tvm.nd.array(inputs[i["name"]]) for i in model_inputs]
+        elif device == "gpu":
+            tvm_datas = [tvm.nd.array(inputs[i["name"]], device=tvm.cuda()) for i in model_inputs]
+        else:
+            raise NotImplementedError("Unsupported device " + str(device))
+        return model["main"](*tvm_datas)
 
     def _device_enabled(self, device: str) -> bool:
         """Check if the device is enabled

@@ -69,7 +69,6 @@ def create_file_logger(level=logging.INFO, path: str = None) -> logging.Logger:
     path = path or os.path.join(get_workspace(), "MSC_LOG")
     log_name = os.path.basename(path)
     logger = logging.getLogger(log_name)
-    print("set level {}({})".format(level, type(level)))
     logger.setLevel(level)
     if any(isinstance(h, logging.FileHandler) and h.baseFilename == path for h in logger.handlers):
         return logger
@@ -102,7 +101,7 @@ def set_global_logger(level=logging.INFO, path: str = None) -> logging.Logger:
     return logger
 
 
-def get_globale_logger() -> logging.Logger:
+def get_global_logger() -> logging.Logger:
     """Get the global logger
 
     Returns
@@ -112,5 +111,5 @@ def get_globale_logger() -> logging.Logger:
     """
 
     if not MSCMap.get(MSCKey.GLOBALE_LOGGER):
-        MSCMap.set(MSCKey.GLOBALE_LOGGER, IOLogger)
+        MSCMap.set(MSCKey.GLOBALE_LOGGER, IOLogger())
     return MSCMap.get(MSCKey.GLOBALE_LOGGER)

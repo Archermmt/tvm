@@ -17,12 +17,14 @@
 """tvm.contrib.msc.core.runtime.runner"""
 
 import logging
-from typing import Dict, Optional, Any, List, Tuple
+import numpy as np
+from typing import Dict, Optional, Any, List, Tuple, Union
 
 import tvm
 from tvm.contrib.msc.core.ir import MSCGraph, from_relax
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
+from tvm.contrib.msc.core import _ffi_api
 
 
 class BaseRunner(object):
@@ -59,13 +61,13 @@ class BaseRunner(object):
         logger: logging.Logger = None,
     ):
         self._mod = mod
-        self._tools_config = tools_config
-        self._translate_config = translate_config
-        self._load_config = load_config
+        self._tools_config = tools_config or {}
+        self._translate_config = translate_config or {}
+        self._load_config = load_config or {}
         self._name = name
         self._device = device if self._device_enabled(device) else "cpu"
         self._graphs, self._weights = [], []
-        self._model = None
+        self._model, self._model_info = None, {}
         self._logger = logger or msc_utils.get_global_logger()
 
     def build(self, build_graph: bool = False) -> object:
@@ -87,12 +89,16 @@ class BaseRunner(object):
             self._graphs, self._weights = self._translate()
             self._logger.info("Translate {} graphs from module".format(len(self._graphs)))
 
-        # create tools
+        # Save graphs for debug
+        for graph in self._graphs:
+            graph.visualize(msc_utils.get_debug_dir().relpath(graph.name + ".prototxt"))
+
+        # Create tools
         if self._tools_config:
             raise NotImplementedError("Build runner with tools is not supported")
 
-        # load model
-        model = self._load()
+        # Load model
+        model = self._generate_model()
         if "loader" in self._load_config:
             loader, load_config = self._load_config["loader"]
             model = loader(model, **load_config)
@@ -102,7 +108,99 @@ class BaseRunner(object):
                 )
             )
         self._model = self._to_device(model, self._device)
-        self._logger.info("Model({}) loaded on device {}".format(self.framework, len(self._device)))
+
+        # inspect model info
+        self._model_info = self._inspect_model()
+        self._logger.info("Model({}) loaded on device {}".format(self.framework, self._device))
+        return self._model
+
+    def run(
+        self, inputs: Union[List[np.ndarray], Dict[str, np.ndarray]], ret_type="dict"
+    ) -> Union[List[np.ndarray], Dict[str, np.ndarray]]:
+        """Run the model to get outputs
+
+        Parameters
+        -------
+        inputs: list<data> or dict<str, data>
+            The inputs in list or dict.
+        ret_type: str
+            The return type list| dict
+
+        Returns
+        -------
+        outputs: dict<str, data>
+            The outputs in dict.
+        """
+
+        model_inputs = self.get_inputs()
+        model_outputs = self.get_outputs()
+        if isinstance(inputs, (list, tuple)):
+            assert len(inputs) == len(
+                model_inputs
+            ), "inputs({}) mismatch with model inputs {}".format(len(inputs), model_inputs)
+            inputs = {info["name"]: data for info, data in zip(model_inputs, inputs)}
+        assert isinstance(inputs, dict), "Expect inputs as list or dict, get {}({})".format(
+            inputs, type(inputs)
+        )
+        assert all(
+            isinstance(data, np.ndarray) for data in inputs.values()
+        ), "Expected all inputs as np.ndarray"
+        inputs = {i["name"]: inputs[i["name"]] for i in model_inputs}
+        outputs = self._run_model(self._model, inputs, self._device)
+        if ret_type == "dict":
+            if isinstance(outputs, (list, tuple)):
+                assert len(outputs) == len(
+                    model_outputs
+                ), "outputs({}) mismatch with model outputs {}".format(len(outputs), model_outputs)
+                outputs = {info["name"]: data for info, data in zip(model_outputs, outputs)}
+            if not isinstance(outputs, dict):
+                assert len(model_outputs) == 1, "Expect model_outputs with len 1, get " + str(
+                    model_outputs
+                )
+                outputs = {model_outputs[0]["name"]: outputs}
+            outputs = {name: msc_utils.cast_array(data) for name, data in outputs.items()}
+        elif ret_type == "list":
+            if isinstance(outputs, dict):
+                assert len(outputs) == len(
+                    model_outputs
+                ), "outputs({}) mismatch with model outputs {}".format(len(outputs), model_outputs)
+                outputs = [outputs[o["name"]] for o in model_outputs]
+            if not isinstance(outputs, (list, tuple)):
+                outputs = [outputs]
+            outputs = [msc_utils.cast_array(data) for data in outputs]
+        return outputs
+
+    def get_inputs(self) -> List[Dict[str, str]]:
+        """Get the inputs of the model
+
+        Returns
+        -------
+        inputs: list<tensor_des>
+            The inputs info.
+        """
+
+        return self._model_info["inputs"]
+
+    def get_outputs(self) -> List[Dict[str, str]]:
+        """Get the outputs of the model
+
+        Returns
+        -------
+        outputs: list<tensor_des>
+            The outputs info.
+        """
+
+        return self._model_info["outputs"]
+
+    def get_model(self) -> object:
+        """Get the model
+
+        Returns
+        -------
+        model:
+            The runnable model.
+        """
+
         return self._model
 
     def _translate(self) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:
@@ -118,7 +216,7 @@ class BaseRunner(object):
 
         raise NotImplementedError("_translate is not implemented for " + str(self.__class__))
 
-    def _load(self) -> object:
+    def _generate_model(self) -> object:
         """Codegen the model according to framework
 
         Returns
@@ -146,6 +244,39 @@ class BaseRunner(object):
         """
 
         raise NotImplementedError("_to_device is not implemented for " + str(self.__class__))
+
+    def _inspect_model(self) -> dict:
+        """Inspect the model
+
+        Returns
+        -------
+        model_info: dict
+            The inspected model info
+        """
+
+        raise NotImplementedError("_inspect_model is not implemented for " + str(self.__class__))
+
+    def _run_model(
+        self, model: object, inputs: Dict[str, np.ndarray], device: str
+    ) -> Union[List[np.ndarray], Dict[str, np.ndarray]]:
+        """Run the model to get outputs
+
+        Parameters
+        -------
+        model:
+            The runnable model.
+        inputs: dict<str, data>
+            The inputs in dict.
+        device: str
+            The device.
+
+        Returns
+        -------
+        outputs: list<data> or dict<str, data>
+            The outputs in list or dict.
+        """
+
+        raise NotImplementedError("_run_model is not implemented for " + str(self.__class__))
 
     def _device_enabled(self, device: str) -> bool:
         """Check if the device is enabled
@@ -189,7 +320,7 @@ class ModelRunner(BaseRunner):
         )
         return [graph], [weights]
 
-    def _load(self):
+    def _generate_model(self) -> object:
         """Codegen the model according to framework
 
         Returns
@@ -205,6 +336,17 @@ class ModelRunner(BaseRunner):
             print_config=self._load_config.get("build"),
             build_folder=msc_utils.get_build_dir(),
         )
+
+    def _inspect_model(self) -> dict:
+        """Inspect the model
+
+        Returns
+        -------
+        model_info: dict
+            The inspected model info
+        """
+
+        return self._graphs[0].inspect()
 
 
 class BYOCRunner(BaseRunner):
@@ -242,15 +384,20 @@ class BYOCRunner(BaseRunner):
         for _, graph, sub_weights in self._graph_infos:
             graphs.append(graph)
             weights.append(sub_weights)
+        self._byoc_graph = _ffi_api.BuildFromRelax(
+            self._byoc_mod,
+            "main",
+            build_config=self._translate_config.get("build"),
+        )
         return graphs, weights
 
-    def _load(self):
+    def _generate_model(self) -> tvm.IRModule:
         """Codegen the model according to framework
 
         Returns
         -------
-        model: object
-            The runnable model
+        model: tvm.IRModule
+            The relax module
         """
 
         mod = self.codegen_func(
@@ -294,6 +441,17 @@ class BYOCRunner(BaseRunner):
         else:
             raise NotImplementedError("Unsupported device " + str(device))
         return runnable
+
+    def _inspect_model(self) -> dict:
+        """Inspect the model
+
+        Returns
+        -------
+        model_info: dict
+            The inspected model info
+        """
+
+        return self._byoc_graph.inspect()
 
     def _device_enabled(self, device: str) -> bool:
         """Check if the device is enabled
