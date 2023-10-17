@@ -39,9 +39,7 @@ def _get_module_from_torch(name):
         return None
 
 
-def test_relax_runner():
-    """Test runner for relax"""
-
+def _test_relax_runner(device):
     torch_model = _get_module_from_torch("resnet50")
     if torch_model:
         workspace = msc_utils.set_workspace("msc_test")
@@ -52,13 +50,26 @@ def test_relax_runner():
         with torch.no_grad():
             golden = torch_model(*torch_datas)
             mod = from_fx(graph_model, input_info)
-        runner = RelaxRunner(mod)
+        runner = RelaxRunner(mod, device=device)
         runner.build()
         outputs = runner.run(datas, ret_type="list")
         golden = [msc_utils.cast_array(golden)]
         for gol_r, out_r in zip(golden, outputs):
             tvm.testing.assert_allclose(gol_r, out_r, atol=1e-3, rtol=1e-3)
         workspace.destory()
+
+
+def test_relax_runner_cpu():
+    """Test runner for relax on cpu"""
+
+    _test_relax_runner("cpu")
+
+
+@tvm.testing.requires_gpu
+def test_relax_runner_gpu():
+    """Test runner for relax on gpu"""
+
+    _test_relax_runner("gpu")
 
 
 if __name__ == "__main__":
