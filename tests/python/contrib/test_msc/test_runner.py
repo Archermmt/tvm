@@ -22,9 +22,8 @@ from torch import fx
 
 import tvm.testing
 from tvm.relax.frontend.torch import from_fx
-from tvm.relax import PyExprVisitor
-from tvm.contrib.msc.core import _ffi_api
-from tvm.contrib.msc.core import transform as msc_transform
+from tvm.contrib.msc.framework.tvm.runtime import RelaxRunner
+from tvm.contrib.msc.core import utils as msc_utils
 
 
 def _get_module_from_torch(name):
@@ -44,11 +43,13 @@ def test_relax_runner():
 
     torch_model = _get_module_from_torch("resnet50")
     if torch_model:
+        msc_utils.set_workspace("msc_test")
         graph_model = fx.symbolic_trace(torch_model)
         input_info = [([1, 3, 224, 224], "float32")]
         with torch.no_grad():
             mod = from_fx(graph_model, input_info)
-        print("mod " + str(mod))
+        runner = RelaxRunner(mod)
+        print("runner " + str(runner))
 
 
 if __name__ == "__main__":

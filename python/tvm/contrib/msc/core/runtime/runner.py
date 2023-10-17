@@ -16,6 +16,7 @@
 # under the License.
 """tvm.contrib.msc.core.runtime.runner"""
 
+import logging
 from typing import Dict, Optional, Any, List, Tuple
 
 import tvm
@@ -43,6 +44,8 @@ class BaseRunner(object):
         The name of the runner
     device: str
         The device of the model, cpu| gpu
+    logger: logging.Logger
+        The logger
     """
 
     def __init__(
@@ -53,6 +56,7 @@ class BaseRunner(object):
         load_config: Optional[Dict[str, str]] = None,
         name: str = "main",
         device: str = "cpu",
+        logger: logging.Logger = None,
     ):
         self._mod = mod
         self._tools_config = tools_config
@@ -62,7 +66,7 @@ class BaseRunner(object):
         self._device = device if self._device_enabled(device) else "cpu"
         self._graphs, self._weights = [], []
         self._model = None
-        self._logger = msc_utils.get_global_logger()
+        self._logger = logger or msc_utils.get_global_logger()
 
     def build(self, build_graph: bool = False) -> object:
         """Build the runnable object
@@ -89,12 +93,11 @@ class BaseRunner(object):
 
         # load model
         model = self._load()
-        if "post_loader" in self._load_config:
-            loader = self._load_config["post_loader"]
-            load_config = self._load_config.get("post_load_config")
-            model = loader(**load_config)
+        if "loader" in self._load_config:
+            loader, load_config = self._load_config["loader"]
+            model = loader(model, **load_config)
             self._logger.info(
-                "Model({}) processed by post_loader {}({})".format(
+                "Model({}) processed by customize loader {}({})".format(
                     self.framework, loader, load_config
                 )
             )
