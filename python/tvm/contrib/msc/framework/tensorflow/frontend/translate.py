@@ -35,6 +35,7 @@ def from_tensorflow(
     trans_config: Optional[Dict[str, str]] = None,
     build_config: Optional[Dict[str, str]] = None,
     opt_config: Optional[Dict[str, str]] = None,
+    as_msc: bool = True,
 ) -> Tuple[MSCGraph, Dict[str, tvm.nd.array]]:
     """Change tensorflow GraphDef to MSCGraph.
 
@@ -54,6 +55,9 @@ def from_tensorflow(
         The config for build MSCGraph.
     opt_config: dict
         The config for optimize the relay before translate.
+    as_msc: bool
+        Set to to return msc graph, otherwise relax mod
+
 
     Returns
     -------
@@ -70,6 +74,8 @@ def from_tensorflow(
     passes = [msc_transform.BindExprName()]
     relay_mod = tvm.transform.Sequential(passes)(relay_mod)
     relax_mod = relay_to_relax(relay_mod, params, trans_config, build_config, opt_config)
+    if not as_msc:
+        return relax_mod, params
     build_config = build_config or {}
     build_config["use_var_name"] = True
     graph, weights = from_relax(relax_mod, trans_config=trans_config, build_config=build_config)

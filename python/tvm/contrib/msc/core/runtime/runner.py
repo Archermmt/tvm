@@ -69,6 +69,11 @@ class BaseRunner(object):
         self._graphs, self._weights = [], []
         self._model, self._model_info = None, {}
         self._logger = logger or msc_utils.get_global_logger()
+        self.setup()
+
+    def setup(self):
+        """Setup the runner"""
+        pass
 
     def build(self, build_graph: bool = False) -> object:
         """Build the runnable object
@@ -352,15 +357,12 @@ class ModelRunner(BaseRunner):
 class BYOCRunner(BaseRunner):
     """BYOC runner of MSC"""
 
-    def __init__(
-        self,
-        mod: tvm.IRModule,
-        tools_config: Optional[Dict[str, Any]] = None,
-        translate_config: Optional[Dict[str, str]] = None,
-        load_config: Optional[Dict[str, str]] = None,
-    ):
-        super().__init__(mod, tools_config, translate_config, load_config)
-        self._byoc_mod, self._graph_infos = None, {}
+    def setup(self):
+        """Setup the runner"""
+
+        super().setup()
+        self._byoc_mod, self._byoc_graph = None, None
+        self._graph_infos = {}
 
     def _translate(self) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:
         """Translate IRModule to MSCgraphs
@@ -400,14 +402,13 @@ class BYOCRunner(BaseRunner):
             The relax module
         """
 
-        mod = self.codegen_func(
+        return self.codegen_func(
             self._graph_infos,
             codegen_config=self._load_config.get("codegen"),
             print_config=self._load_config.get("build"),
             build_folder=msc_utils.get_build_dir(),
             output_folder=msc_utils.get_output_dir(),
         )
-        return mod
 
     def _to_device(self, model: object, device: str) -> object:
         """Place model on device

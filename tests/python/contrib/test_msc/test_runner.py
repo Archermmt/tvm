@@ -22,8 +22,13 @@ import torch
 from torch import fx
 
 import tvm.testing
+import tvm.relay.testing.tf as tf_testing
 from tvm.relax.frontend.torch import from_fx
-from tvm.contrib.msc.framework.tvm.runtime import RelaxRunner
+from tvm.contrib.msc.framework.tvm.runtime import TVMRunner
+from tvm.contrib.msc.framework.torch.runtime import TorchRunner
+from tvm.contrib.msc.framework.tensorflow import tf_v1
+from tvm.contrib.msc.framework.tensorflow.frontend import from_tensorflow
+from tvm.contrib.msc.framework.tensorflow.runtime import TensorflowRunner
 from tvm.contrib.msc.core import utils as msc_utils
 
 
@@ -39,7 +44,23 @@ def _get_module_from_torch(name):
         return None
 
 
-def _test_relax_runner(device):
+def _get_graph_from_tf():
+    try:
+        tf_graph = tf_v1.Graph()
+        with tf_graph.as_default():
+            graph_def = tf_testing.get_workload(
+                "https://storage.googleapis.com/mobilenet_v2/checkpoints/mobilenet_v2_1.4_224.tgz",
+                "mobilenet_v2_1.4_224_frozen.pb",
+            )
+            # Call the utility to import the graph definition into default graph.
+            graph_def = tf_testing.ProcessGraphDefParam(graph_def)
+        return tf_graph, graph_def
+    except:
+        print("please install tensorflow package")
+        return None, None
+
+
+def _test_runner_from_torch(runner_cls, device):
     torch_model = _get_module_from_torch("resnet50")
     if torch_model:
         workspace = msc_utils.set_workspace("msc_test")
@@ -50,7 +71,7 @@ def _test_relax_runner(device):
         with torch.no_grad():
             golden = torch_model(*torch_datas)
             mod = from_fx(graph_model, input_info)
-        runner = RelaxRunner(mod, device=device)
+        runner = TVMRunner(mod, device=device)
         runner.build()
         outputs = runner.run(datas, ret_type="list")
         golden = [msc_utils.cast_array(golden)]
@@ -59,18 +80,54 @@ def _test_relax_runner(device):
         workspace.destory()
 
 
-def test_relax_runner_cpu():
-    """Test runner for relax on cpu"""
+def test_tvm_runner_cpu():
+    """Test runner for tvm on cpu"""
 
-    _test_relax_runner("cpu")
+    _test_runner_from_torch(TVMRunner, "cpu")
 
 
 @tvm.testing.requires_gpu
-def test_relax_runner_gpu():
-    """Test runner for relax on gpu"""
+def test_tvm_runner_gpu():
+    """Test runner for tvm on gpu"""
 
-    _test_relax_runner("gpu")
+    _test_runner_from_torch(TVMRunner, "gpu")
+
+
+def test_torch_runner_cpu():
+    """Test runner for torch on cpu"""
+
+    _test_runner_from_torch(TorchRunner, "cpu")
+
+
+@tvm.testing.requires_gpu
+def test_torch_runner_gpu():
+    """Test runner for torch on gpu"""
+
+    _test_runner_from_torch(TorchRunner, "gpu")
+
+
+def test_tensorflow_runner():
+    tf_graph, graph_def = _get_graph_from_tf()
+    if tf_graph and graph_def:
+        workspace = msc_utils.set_workspace("msc_test")
+        data = np.random.uniform(size=(1, 224, 224, 3)).astype("float32")
+        out_name = "MobilenetV2/Predictions/Reshape_1:0"
+        # get golden
+        with tf_v1.Session(graph=tf_graph) as sess:
+            golden = sess.run([out_name], {"input:0": data})
+        print("golden " + str(golden))
+        shape_dict = {"input": data.shape}
+        mod, _ = from_tensorflow(graph_def, shape_dict, [out_name], as_msc=False)
+        print("mod " + str(mod))
+        runner = TensorflowRunner(mod)
+        runner.build()
+        outputs = runner.run([data], ret_type="list")
+        print("outputs " + str(outputs))
+        for gol_r, out_r in zip(golden, outputs):
+            tvm.testing.assert_allclose(gol_r, out_r, atol=1e-3, rtol=1e-3)
+        workspace.destory()
 
 
 if __name__ == "__main__":
-    tvm.testing.main()
+    # tvm.testing.main()
+    test_tensorflow_runner()

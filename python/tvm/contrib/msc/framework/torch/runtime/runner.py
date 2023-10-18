@@ -17,68 +17,66 @@
 """tvm.contrib.msc.core.runtime.runner"""
 
 import numpy as np
-from typing import Dict, List, Union
+from typing import Dict, List, Union, Tuple
 
+import torch
 import tvm
 from tvm.contrib.msc.core.runtime import ModelRunner
+from tvm.contrib.msc.core.ir import MSCGraph
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
-from tvm.contrib.msc.framework.tvm.codegen import to_relax
+from tvm.contrib.msc.framework.torch.codegen import to_torch
+from tvm.contrib.msc.framework.torch.frontend import set_weight_alias
 
 
-class TVMRunner(ModelRunner):
-    """Runner of Relax"""
+class TorchRunner(ModelRunner):
+    """Runner of Torch"""
 
-    def _to_device(self, model: tvm.IRModule, device: str) -> object:
+    def _translate(self) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:
+        """Translate IRModule to MSCgraphs
+
+        Returns
+        -------
+        graph_list: list<MSCGraph>
+            The translated graphs
+        weights_list: list<dict<str, tvm.nd.array>>
+            The translated weights
+        """
+        graphs, weights = super()._translate()
+        return [set_weight_alias(graphs[0])], weights
+
+    def _to_device(self, model: torch.nn.Module, device: str) -> object:
         """Place model on device
 
         Parameters
         -------
-        model: tvm.IRModule
-            The IRModule.
+        model: torch.nn.Module
+            The runnable model.
         device: str
             The device for place model
 
         Returns
         -------
-        model: object
+        model: torch.nn.Module
             The runnable model
         """
 
-        if "builder" in self._load_config:
-            builder, build_config = self._load_config["builder"]
-            runnable = builder(model, **build_config)
-            self._logger.info(
-                "Model({}) processed by customize builder {}({})".format(
-                    self.framework, builder, build_config
-                )
-            )
+        if device == "cpu":
+            pass
+        elif device == "gpu":
+            model = model.to(torch.cuda())
         else:
-            model = tvm.relax.transform.LegalizeOps()(model)
-            if device == "cpu":
-                target = tvm.target.Target("llvm")
-                with tvm.transform.PassContext(opt_level=3):
-                    relax_exec = tvm.relax.build(model, target)
-                    runnable = tvm.relax.VirtualMachine(relax_exec, tvm.cpu())
-            elif device == "gpu":
-                target = tvm.target.Target("cuda")
-                with target:
-                    model = tvm.tir.transform.DefaultGPUSchedule()(model)
-                with tvm.transform.PassContext(opt_level=3):
-                    exec = tvm.relax.build(model, target)
-                    runnable = tvm.relax.VirtualMachine(exec, tvm.cuda())
-            else:
-                raise NotImplementedError("Unsupported device " + str(device))
-        return runnable
+            raise NotImplementedError("Unsupported device " + str(device))
+        return model
 
     def _run_model(
-        self, model: tvm.relax.VirtualMachine, inputs: Dict[str, np.ndarray], device: str
+        self, model: torch.nn.Module, inputs: Dict[str, np.ndarray], device: str
     ) -> Union[List[np.ndarray], Dict[str, np.ndarray]]:
         """Run the model to get outputs
 
         Parameters
         -------
-        model: tvm.relax.VirtualMachine
-            The virtual machine.
+        model: torch.nn.Module
+            The runnable model.
         inputs: dict<str, data>
             The inputs in dict.
         device: str
@@ -86,18 +84,22 @@ class TVMRunner(ModelRunner):
 
         Returns
         -------
-        outputs: list<data>
+        outputs: list<torch.Tensor>
             The outputs in list.
         """
 
         model_inputs = self.get_inputs()
-        if device == "cpu":
-            tvm_inputs = [tvm.nd.array(inputs[i["name"]]) for i in model_inputs]
+        parameters = list(model.parameters())
+        if parameters:
+            in_dev = parameters[0].device
+        elif device == "cpu":
+            in_dev = torch.cpu()
         elif device == "gpu":
-            tvm_inputs = [tvm.nd.array(inputs[i["name"]], device=tvm.cuda()) for i in model_inputs]
+            in_dev = torch.cuda()
         else:
             raise NotImplementedError("Unsupported device " + str(device))
-        return model["main"](*tvm_inputs)
+        torch_inputs = [torch.from_numpy(inputs[i["name"]]).to(in_dev) for i in model_inputs]
+        return model(*torch_inputs)
 
     def _device_enabled(self, device: str) -> bool:
         """Check if the device is enabled
@@ -111,13 +113,13 @@ class TVMRunner(ModelRunner):
         if device == "cpu":
             return True
         if device == "gpu":
-            return tvm.cuda().exist
+            return torch.cuda.is_available()
         return False
 
     @property
     def codegen_func(self):
-        return to_relax
+        return to_torch
 
     @property
     def framework(self):
-        return MSCFramework.TVM
+        return MSCFramework.TORCH
