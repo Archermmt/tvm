@@ -14,6 +14,25 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""tvm.contrib.msc.framework.tensorrt.frontend"""
+"""tvm.contrib.msc.framework.tensorrt.runtime.runner"""
 
-from .translate import *
+from tvm.contrib.msc.core.runtime import BYOCRunner
+from tvm.contrib.msc.core.utils.namespace import MSCFramework
+from tvm.contrib.msc.framework.tensorrt.frontend import partition_for_tensorrt
+from tvm.contrib.msc.framework.tensorrt.codegen import to_tensorrt
+
+
+class TensorRTRunner(BYOCRunner):
+    """Runner of tensorrt"""
+
+    @property
+    def codegen_func(self):
+        return to_tensorrt
+
+    @property
+    def partition_func(self):
+        return partition_for_tensorrt
+
+    @property
+    def framework(self):
+        return MSCFramework.TENSORRT

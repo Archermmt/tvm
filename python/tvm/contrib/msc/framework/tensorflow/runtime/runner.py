@@ -14,10 +14,10 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""tvm.contrib.msc.core.runtime.runner"""
+"""tvm.contrib.msc.framework.tensorflow.runtime.runner"""
 
 import numpy as np
-from typing import Dict, List, Union, Tuple
+from typing import Dict, List, Union
 
 from tensorflow.python.client import device_lib
 from tensorflow.python.ops import variables
@@ -50,7 +50,7 @@ class WrapSession(tf_v1.Session):
         self._inputs = inputs
         self._outputs = outputs
 
-    def run(self, fetches, feed_dict, *args, **kwargs):
+    def run(self, fetches, feed_dict=None, *args, **kwargs):
         return super().run(fetches, feed_dict, *args, **kwargs)
 
 
@@ -102,7 +102,7 @@ class TensorflowRunner(ModelRunner):
             del self._session
         self._session = WrapSession(graph=self._tf_graph)
         self._session.set_bindings(self.get_inputs(), self.get_outputs())
-        with self._session:
+        with self._tf_graph.as_default():
             self._session.run(variables.global_variables_initializer())
         return self._session
 

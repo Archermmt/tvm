@@ -92,6 +92,7 @@ class BaseRunner(object):
         # Get or rebuild graphs
         if build_graph or not self._graphs:
             self._graphs, self._weights = self._translate()
+            self._model_info = self._inspect_model()
             self._logger.info("Translate {} graphs from module".format(len(self._graphs)))
 
         # Save graphs for debug
@@ -114,8 +115,6 @@ class BaseRunner(object):
             )
         self._model = self._to_device(model, self._device)
 
-        # inspect model info
-        self._model_info = self._inspect_model()
         self._logger.info("Model({}) loaded on device {}".format(self.framework, self._device))
         return self._model
 
@@ -437,11 +436,40 @@ class BYOCRunner(BaseRunner):
             with target:
                 model = tvm.tir.transform.DefaultGPUSchedule()(model)
             with tvm.transform.PassContext(opt_level=3):
-                exec = tvm.relax.build(model, target)
-                runnable = tvm.relax.VirtualMachine(exec, tvm.cuda())
+                relax_exec = tvm.relax.build(model, target)
+                runnable = tvm.relax.VirtualMachine(relax_exec, tvm.cuda())
         else:
             raise NotImplementedError("Unsupported device " + str(device))
         return runnable
+
+    def _run_model(
+        self, model: tvm.relax.VirtualMachine, inputs: Dict[str, np.ndarray], device: str
+    ) -> Union[List[np.ndarray], Dict[str, np.ndarray]]:
+        """Run the model to get outputs
+
+        Parameters
+        -------
+        model: tvm.relax.VirtualMachine
+            The virtual machine.
+        inputs: dict<str, data>
+            The inputs in dict.
+        device: str
+            The device.
+
+        Returns
+        -------
+        outputs: list<data>
+            The outputs in list.
+        """
+
+        model_inputs = self.get_inputs()
+        if device == "cpu":
+            tvm_inputs = [tvm.nd.array(inputs[i["name"]]) for i in model_inputs]
+        elif device == "gpu":
+            tvm_inputs = [tvm.nd.array(inputs[i["name"]], device=tvm.cuda()) for i in model_inputs]
+        else:
+            raise NotImplementedError("Unsupported device " + str(device))
+        return model["main"](*tvm_inputs)
 
     def _inspect_model(self) -> dict:
         """Inspect the model

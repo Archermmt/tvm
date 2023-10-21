@@ -58,7 +58,6 @@ def from_tensorflow(
     as_msc: bool
         Set to to return msc graph, otherwise relax mod
 
-
     Returns
     -------
     graph: tvm.contrib.msc.core.ir.MSCGraph

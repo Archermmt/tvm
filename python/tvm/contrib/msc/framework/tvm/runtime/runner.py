@@ -14,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""tvm.contrib.msc.core.runtime.runner"""
+"""tvm.contrib.msc.framework.runtime.tvm.runner"""
 
 import numpy as np
 from typing import Dict, List, Union
@@ -64,8 +64,8 @@ class TVMRunner(ModelRunner):
                 with target:
                     model = tvm.tir.transform.DefaultGPUSchedule()(model)
                 with tvm.transform.PassContext(opt_level=3):
-                    exec = tvm.relax.build(model, target)
-                    runnable = tvm.relax.VirtualMachine(exec, tvm.cuda())
+                    relax_exec = tvm.relax.build(model, target)
+                    runnable = tvm.relax.VirtualMachine(relax_exec, tvm.cuda())
             else:
                 raise NotImplementedError("Unsupported device " + str(device))
         return runnable

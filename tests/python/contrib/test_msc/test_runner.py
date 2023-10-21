@@ -115,14 +115,12 @@ def test_tensorflow_runner():
         # get golden
         with tf_v1.Session(graph=tf_graph) as sess:
             golden = sess.run([out_name], {"input:0": data})
-        print("golden " + str(golden))
+        # get outputs
         shape_dict = {"input": data.shape}
         mod, _ = from_tensorflow(graph_def, shape_dict, [out_name], as_msc=False)
-        print("mod " + str(mod))
         runner = TensorflowRunner(mod)
         runner.build()
         outputs = runner.run([data], ret_type="list")
-        print("outputs " + str(outputs))
         for gol_r, out_r in zip(golden, outputs):
             tvm.testing.assert_allclose(gol_r, out_r, atol=1e-3, rtol=1e-3)
         workspace.destory()
