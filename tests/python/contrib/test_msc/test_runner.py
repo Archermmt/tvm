@@ -15,21 +15,29 @@
 # specific language governing permissions and limitations
 # under the License.
 
-""" Test SetExprLayout Pass. """
+""" Test Runners in MSC. """
 
+import pytest
 import numpy as np
+
 import torch
 from torch import fx
+from tvm.contrib.msc.framework.tensorflow import tf_v1
 
 import tvm.testing
 import tvm.relay.testing.tf as tf_testing
 from tvm.relax.frontend.torch import from_fx
 from tvm.contrib.msc.framework.tvm.runtime import TVMRunner
 from tvm.contrib.msc.framework.torch.runtime import TorchRunner
-from tvm.contrib.msc.framework.tensorflow import tf_v1
+from tvm.contrib.msc.framework.tensorrt.runtime import TensorRTRunner
 from tvm.contrib.msc.framework.tensorflow.frontend import from_tensorflow
 from tvm.contrib.msc.framework.tensorflow.runtime import TensorflowRunner
 from tvm.contrib.msc.core import utils as msc_utils
+
+requires_tensorrt = pytest.mark.skipif(
+    tvm.get_global_func("relax.ext.tensorrt", True) is None,
+    reason="TENSORRT is not enabled",
+)
 
 
 def _get_module_from_torch(name):
@@ -63,7 +71,7 @@ def _get_graph_from_tf():
 def _test_runner_from_torch(runner_cls, device):
     torch_model = _get_module_from_torch("resnet50")
     if torch_model:
-        workspace = msc_utils.set_workspace("msc_test")
+        workspace = msc_utils.set_workspace()
         graph_model = fx.symbolic_trace(torch_model)
         input_info = [([1, 3, 224, 224], "float32")]
         datas = [np.random.rand(*i[0]).astype(i[1]) for i in input_info]
@@ -71,7 +79,7 @@ def _test_runner_from_torch(runner_cls, device):
         with torch.no_grad():
             golden = torch_model(*torch_datas)
             mod = from_fx(graph_model, input_info)
-        runner = TVMRunner(mod, device=device)
+        runner = runner_cls(mod, device=device)
         runner.build()
         outputs = runner.run(datas, ret_type="list")
         golden = [msc_utils.cast_array(golden)]
@@ -106,10 +114,17 @@ def test_torch_runner_gpu():
     _test_runner_from_torch(TorchRunner, "gpu")
 
 
+@requires_tensorrt
+def test_tensorrt_runner():
+    """Test runner for tensorrt"""
+
+    _test_runner_from_torch(TensorRTRunner, "gpu")
+
+
 def test_tensorflow_runner():
     tf_graph, graph_def = _get_graph_from_tf()
     if tf_graph and graph_def:
-        workspace = msc_utils.set_workspace("msc_test")
+        workspace = msc_utils.set_workspace()
         data = np.random.uniform(size=(1, 224, 224, 3)).astype("float32")
         out_name = "MobilenetV2/Predictions/Reshape_1:0"
         # get golden
@@ -127,5 +142,4 @@ def test_tensorflow_runner():
 
 
 if __name__ == "__main__":
-    # tvm.testing.main()
-    test_tensorflow_runner()
+    tvm.testing.main()

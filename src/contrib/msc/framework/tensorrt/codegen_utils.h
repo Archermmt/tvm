@@ -18,11 +18,11 @@
  */
 
 /*!
- * \file src/contrib/msc/framework/tensorrt/config.h
+ * \file src/contrib/msc/framework/tensorrt/codegen_utils.h
  * \brief TensorRT config for codegen.
  */
-#ifndef TVM_CONTRIB_MSC_FRAMEWORK_TENSORRT_CONFIG_H_
-#define TVM_CONTRIB_MSC_FRAMEWORK_TENSORRT_CONFIG_H_
+#ifndef TVM_CONTRIB_MSC_FRAMEWORK_TENSORRT_CODEGEN_UTILS_H_
+#define TVM_CONTRIB_MSC_FRAMEWORK_TENSORRT_CODEGEN_UTILS_H_
 
 #include <string>
 
@@ -115,4 +115,4 @@ struct TensorRTCodeGenConfig {
 }  // namespace msc
 }  // namespace contrib
 }  // namespace tvm
-#endif  // TVM_CONTRIB_MSC_FRAMEWORK_TENSORRT_CONFIG_H_
+#endif  // TVM_CONTRIB_MSC_FRAMEWORK_TENSORRT_CODEGEN_UTILS_H_

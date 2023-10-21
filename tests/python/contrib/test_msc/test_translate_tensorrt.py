@@ -17,6 +17,7 @@
 
 """ Test translate for TensorrRT. """
 
+import pytest
 import numpy as np
 
 import torch
@@ -29,15 +30,22 @@ from tvm.contrib.msc.framework.tensorrt.frontend import translate
 from tvm.contrib.msc.framework.tensorrt import codegen
 from tvm.contrib.msc.core import utils as msc_utils
 
+requires_tensorrt = pytest.mark.skipif(
+    tvm.get_global_func("relax.ext.tensorrt", True) is None,
+    reason="TENSORRT is not enabled",
+)
+
 
 def build_and_run(mod, inputs):
+    """Build and run the virtual machine"""
+
     target = tvm.target.Target("cuda")
     mod = tvm.relax.transform.LegalizeOps()(mod)
     with target:
         mod = tvm.tir.transform.DefaultGPUSchedule()(mod)
     with tvm.transform.PassContext(opt_level=3):
-        exec = tvm.relax.build(mod, target)
-        runnable = tvm.relax.VirtualMachine(exec, tvm.cuda())
+        rt_mod = tvm.relax.build(mod, target)
+        runnable = tvm.relax.VirtualMachine(rt_mod, tvm.cuda())
     res = runnable["main"](*inputs)
     if isinstance(res, tvm.runtime.NDArray):
         return [res.asnumpy()]
@@ -45,6 +53,8 @@ def build_and_run(mod, inputs):
 
 
 def verify_model(torch_model, input_info, allow_incomplete=False):
+    """Build model and verify results"""
+
     graph_model = fx.symbolic_trace(torch_model)
     datas = [np.random.rand(*i[0]).astype(i[1]) for i in input_info]
     torch_datas = [torch.from_numpy(i) for i in datas]
@@ -55,8 +65,7 @@ def verify_model(torch_model, input_info, allow_incomplete=False):
         golden = [golden]
     golden = [g.detach().cpu().numpy() for g in golden]
     # partition module for tensorrt
-    trans_config = {"allow_incomplete": allow_incomplete}
-    mod, graph_infos = translate.partition_for_tensorrt(mod, trans_config=trans_config)
+    mod, graph_infos = translate.partition_for_tensorrt(mod, allow_incomplete=allow_incomplete)
     output_folder = msc_utils.msc_dir()
     # tranalte to tensorrt
     mod = codegen.to_tensorrt(mod, graph_infos, output_folder=output_folder)
@@ -67,6 +76,7 @@ def verify_model(torch_model, input_info, allow_incomplete=False):
     output_folder.destory()
 
 
+@requires_tensorrt
 def test_conv1d():
     """test tensorrt translator for conv1d"""
 
@@ -91,6 +101,7 @@ def test_conv1d():
     verify_model(Conv1D2(), input_info)
 
 
+@requires_tensorrt
 def test_conv2d():
     """test tensorrt translator for conv2d"""
 
@@ -115,6 +126,7 @@ def test_conv2d():
     verify_model(Conv2D2(), input_info)
 
 
+@requires_tensorrt
 def test_linear():
     """test tensorrt translator for linear"""
 
@@ -144,6 +156,7 @@ def test_linear():
     verify_model(MatMul1(), [([10, 10], "float32"), ([10, 10], "float32")])
 
 
+@requires_tensorrt
 def test_bmm():
     """test tensorrt translator for bmm"""
 
@@ -155,6 +168,7 @@ def test_bmm():
     verify_model(BMM(), input_info)
 
 
+@requires_tensorrt
 def test_baddbmm():
     """test tensorrt translator for baddbmm"""
 
@@ -175,6 +189,7 @@ def test_baddbmm():
     verify_model(BAddBMM2(), input_info)
 
 
+@requires_tensorrt
 def test_relu():
     """test tensorrt translator for relu"""
 
@@ -190,6 +205,7 @@ def test_relu():
     verify_model(ReLU(), input_info)
 
 
+@requires_tensorrt
 def test_relu6():
     """test tensorrt translator for relu6"""
 
@@ -205,6 +221,7 @@ def test_relu6():
     verify_model(ReLU6(), input_info)
 
 
+@requires_tensorrt
 def test_maxpool2d():
     """test tensorrt translator for maxpool2d"""
 
@@ -229,6 +246,7 @@ def test_maxpool2d():
     verify_model(MaxPool2d2(), input_info)
 
 
+@requires_tensorrt
 def test_avgpool2d():
     """test tensorrt translator for avgpool2d"""
 
@@ -253,6 +271,7 @@ def test_avgpool2d():
     verify_model(AvgPool2d2(), input_info)
 
 
+@requires_tensorrt
 def test_adaptive_avgpool2d():
     """test tensorrt translator for adaptive_avgpool2d"""
 
@@ -268,6 +287,7 @@ def test_adaptive_avgpool2d():
     verify_model(AdaptiveAvgPool2d0(), input_info)
 
 
+@requires_tensorrt
 def test_flatten():
     """test tensorrt translator for flatten"""
 
@@ -284,6 +304,7 @@ def test_flatten():
     verify_model(torch.nn.Flatten(2, -1), input_info)
 
 
+@requires_tensorrt
 def test_batchnorm2d():
     """test tensorrt translator for batchnorm2d"""
 
@@ -299,6 +320,7 @@ def test_batchnorm2d():
     verify_model(BatchNorm2d().eval(), input_info)
 
 
+@requires_tensorrt
 def test_embedding():
     """test tensorrt translator for embedding"""
 
@@ -314,6 +336,7 @@ def test_embedding():
     verify_model(Embedding(), [([4, 5], "int64")], allow_incomplete=True)
 
 
+@requires_tensorrt
 def test_layernorm():
     """test tensorrt translator for layernorm"""
 
@@ -329,6 +352,7 @@ def test_layernorm():
     verify_model(LayerNorm(), input_info)
 
 
+@requires_tensorrt
 def test_silu():
     """test tensorrt translator for silu"""
 
@@ -344,6 +368,7 @@ def test_silu():
     verify_model(SiLU(), input_info)
 
 
+@requires_tensorrt
 def test_groupnorm():
     """test tensorrt translator for groupnorm"""
 
@@ -359,6 +384,7 @@ def test_groupnorm():
     verify_model(GroupNorm(), input_info)
 
 
+@requires_tensorrt
 def test_softmax():
     """test tensorrt translator for softmax"""
 
@@ -374,6 +400,7 @@ def test_softmax():
     verify_model(Softmax(), input_info)
 
 
+@requires_tensorrt
 def test_binary():
     """test tensorrt translator for binary"""
 
@@ -453,6 +480,7 @@ def test_binary():
     verify_model(Power2(), input_info2)
 
 
+@requires_tensorrt
 def test_squeeze():
     """test tensorrt translator for squeeze"""
 
@@ -469,6 +497,7 @@ def test_squeeze():
     verify_model(Squeeze2(), input_info)
 
 
+@requires_tensorrt
 def test_unsqueeze():
     """test tensorrt translator for unsqueeze"""
 
@@ -485,6 +514,7 @@ def test_unsqueeze():
     verify_model(Unsqueeze2(), input_info)
 
 
+@requires_tensorrt
 def test_getitem():
     """test tensorrt translator for getitem"""
 
@@ -500,6 +530,7 @@ def test_getitem():
     verify_model(Slice2(), [([8, 16], "float32")])
 
 
+@requires_tensorrt
 def test_unary():
     """test tensorrt translator for unary"""
 
@@ -548,6 +579,7 @@ def test_unary():
     verify_model(Round(), input_info)
 
 
+@requires_tensorrt
 def test_tanh():
     """test tensorrt translator for tanh"""
 
@@ -559,6 +591,7 @@ def test_tanh():
     verify_model(Tanh(), input_info)
 
 
+@requires_tensorrt
 def test_clamp():
     """test tensorrt translator for clamp"""
 
@@ -570,6 +603,7 @@ def test_clamp():
     verify_model(Clamp(), input_info)
 
 
+@requires_tensorrt
 def test_interpolate():
     """test tensorrt translator for interpolate"""
 
@@ -581,6 +615,7 @@ def test_interpolate():
     verify_model(Interpolate(), input_info)
 
 
+@requires_tensorrt
 def test_addmm():
     """test tensorrt translator for addmm"""
 
@@ -596,6 +631,7 @@ def test_addmm():
     verify_model(Addmm(), input_info)
 
 
+@requires_tensorrt
 def test_split():
     """test tensorrt translator for split"""
 
@@ -607,6 +643,7 @@ def test_split():
     verify_model(Split(), input_info)
 
 
+@requires_tensorrt
 def test_chunk():
     """test tensorrt translator for chunk"""
 
@@ -618,6 +655,7 @@ def test_chunk():
     verify_model(Chunk(), input_info)
 
 
+@requires_tensorrt
 def test_expand():
     """test tensorrt translator for expand"""
 
@@ -630,6 +668,7 @@ def test_expand():
     verify_model(Expand(), input_info)
 
 
+@requires_tensorrt
 def test_reduce():
     """test tensorrt translator for reduce"""
 
@@ -642,6 +681,7 @@ def test_reduce():
     verify_model(Sum(), input_info)
 
 
+@requires_tensorrt
 def test_permute():
     """test tensorrt translator for permute"""
 
@@ -653,6 +693,7 @@ def test_permute():
     verify_model(Permute(), input_info)
 
 
+@requires_tensorrt
 def test_reshape():
     """test tensorrt translator for reshape"""
 
@@ -664,6 +705,7 @@ def test_reshape():
     verify_model(Reshape(), input_info)
 
 
+@requires_tensorrt
 def test_transpose():
     """test tensorrt translator for transpose"""
 
@@ -675,6 +717,7 @@ def test_transpose():
     verify_model(Transpose(), input_info)
 
 
+@requires_tensorrt
 def test_view():
     """test tensorrt translator for view"""
 
@@ -686,6 +729,7 @@ def test_view():
     verify_model(View(), input_info)
 
 
+@requires_tensorrt
 def test_argmax():
     """test tensorrt translator for argmax"""
 
@@ -701,6 +745,7 @@ def test_argmax():
     verify_model(Argmax2(), [([256, 256], "float32")], allow_incomplete=True)
 
 
+@requires_tensorrt
 def test_argmin():
     """test tensorrt translator for argmin"""
 
@@ -716,6 +761,7 @@ def test_argmin():
     verify_model(Argmin2(), [([256, 256], "float32")], allow_incomplete=True)
 
 
+@requires_tensorrt
 def test_mean():
     """test tensorrt translator for mean"""
 
@@ -731,6 +777,7 @@ def test_mean():
     verify_model(MeanKeepDim(), [([256, 256], "float32")])
 
 
+@requires_tensorrt
 def test_rsqrt():
     """test tensorrt translator for rsqrt"""
 
@@ -741,6 +788,7 @@ def test_rsqrt():
     verify_model(Rsqrt(), [([256, 256], "float32")])
 
 
+@requires_tensorrt
 def test_neg():
     """test tensorrt translator for neg"""
 
@@ -751,6 +799,7 @@ def test_neg():
     verify_model(Neg(), [([256, 256], "float32")])
 
 
+@requires_tensorrt
 def test_max():
     """test tensorrt translator for max"""
 

@@ -169,43 +169,6 @@ Expr RewriteAttention(BlockBuilder builder, const Var& var, const Call& src_call
   const auto& in_dtype = Downcast<TensorStructInfo>(GetStructInfo(call->args[0]))->dtype;
   const auto* src_attrs = src_call->attrs.as<AttentionAttrs>();
 
-  /*
-  batch_size, seq_len, num_head, head_dim = q.shape
-  _, seq_len_kv, _, head_dim_v = v.shape
-  q = topi.transpose(q, [0, 2, 1, 3])
-  k = topi.transpose(k, [0, 2, 1, 3])
-  v = topi.transpose(v, [0, 2, 1, 3])
-  q = topi.reshape(q, [batch_size * num_head, seq_len, head_dim])
-  k = topi.reshape(k, [batch_size * num_head, seq_len_kv, head_dim])
-  v = topi.reshape(v, [batch_size * num_head, seq_len_kv, head_dim_v])
-  p = topi.nn.batch_matmul(q, k)
-  if scale is not None:
-      p = topi.multiply(p, scale)
-  else:
-      p = topi.divide(p, tir.sqrt(tir.Cast(p.dtype, head_dim)))
-  if bias is not None:
-      p = topi.reshape(p, [batch_size, num_head, seq_len, seq_len_kv])
-      p = topi.add(p, bias)
-      p = topi.reshape(p, [batch_size * num_head, seq_len, seq_len_kv])
-  if causal_mask is None:
-      s = topi.nn.softmax(p)
-  else:
-      if causal_mask == "TopLeft":
-          offset = tir.IntImm("int32", 0)
-      elif causal_mask == "BottomRight":
-          offset = tir.IntImm("int32", abs(seq_len - seq_len_kv))
-      else:
-          raise NotImplementedError()
-      p_masked = topi.trilu(p, k=offset, upper=False)
-      p_masked_exp = topi.trilu(
-          topi.exp(p_masked - topi.max(p_masked, axis=-1, keepdims=True)), k=offset, upper=False
-      )
-      p_masked_sum = topi.sum(p_masked_exp, axis=-1, keepdims=True)
-      s = topi.divide(p_masked_exp, p_masked_sum)
-  o = topi.nn.batch_matmul(s, v, transpose_b=False)
-  o = topi.reshape(o, [batch_size, num_head, seq_len, head_dim_v])
-  return topi.transpose(o, [0, 2, 1, 3])
-  */
   // define dims
   const auto& in_q_shape = GetShape(call->args[0]);
   const auto& in_v_shape = GetShape(call->args[2]);
@@ -264,15 +227,15 @@ Expr RewriteAttention(BlockBuilder builder, const Var& var, const Call& src_call
                                  {q_reshape, k_reshape_trans}, Attrs(matmul_attrs));
   Expr p_scale;
   if (src_attrs->scale.defined()) {
-    const auto& scale = MakeConstant(double(src_attrs->scale.value()->value), in_dtype,
+    const auto& scale = MakeConstant(static_cast<double>(src_attrs->scale.value()->value), in_dtype,
                                      SpanUtils::GetAttr(call->span, "name") + "_scale");
     Array<PrimExpr> exp_shape(3, Integer(1));
     const auto& exp_scale =
         MakeCall(builder, call->span, "exp_scale", reshape_op, {scale, ShapeExpr(exp_shape)});
     p_scale = MakeCall(builder, call->span, "p_scale", multiply_op, {qk_prod, exp_scale});
   } else {
-    const auto& scale = MakeConstant(double(Downcast<Integer>(head_dim)->value), in_dtype,
-                                     SpanUtils::GetAttr(call->span, "name") + "_scale");
+    const auto& scale = MakeConstant(static_cast<double>(Downcast<Integer>(head_dim)->value),
+                                     in_dtype, SpanUtils::GetAttr(call->span, "name") + "_scale");
     Array<PrimExpr> exp_shape(3, Integer(1));
     const auto& exp_scale =
         MakeCall(builder, call->span, "exp_scale", reshape_op, {scale, ShapeExpr(exp_shape)});

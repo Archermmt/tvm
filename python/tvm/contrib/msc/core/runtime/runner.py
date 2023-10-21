@@ -375,20 +375,16 @@ class BYOCRunner(BaseRunner):
         """
 
         self._byoc_mod, self._graph_infos = self.partition_func(
-            "msc_" + str(self.framework),
             self._mod,
             trans_config=self._translate_config.get("transform"),
             build_config=self._translate_config.get("build"),
-            opt_config=self._translate_config.get("optimize"),
         )
         graphs, weights = [], []
         for _, graph, sub_weights in self._graph_infos:
             graphs.append(graph)
             weights.append(sub_weights)
         self._byoc_graph = _ffi_api.BuildFromRelax(
-            self._byoc_mod,
-            "main",
-            build_config=self._translate_config.get("build"),
+            self._byoc_mod, "main", msc_utils.dump_dict(self._translate_config.get("build"))
         )
         return graphs, weights
 
@@ -402,6 +398,7 @@ class BYOCRunner(BaseRunner):
         """
 
         return self.codegen_func(
+            self._byoc_mod,
             self._graph_infos,
             codegen_config=self._load_config.get("codegen"),
             print_config=self._load_config.get("build"),

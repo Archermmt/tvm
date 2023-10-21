@@ -227,9 +227,14 @@ const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>
       optype = StringUtils::Replace(op_node->name, "relax.", "");
     } else if (const auto* v_node = call_node->op.as<GlobalVarNode>()) {
       const auto& func = Downcast<relax::Function>(ref_module_->Lookup(v_node->name_hint));
-      const auto& name_opt = func->GetAttr<runtime::String>(relax::attr::kComposite);
-      ICHECK(name_opt.defined()) << "Unexpected global func without composite";
-      optype = name_opt.value();
+      const auto& codegen_opt = func->GetAttr<runtime::String>(relax::attr::kCodegen);
+      if (codegen_opt.defined()) {
+        optype = codegen_opt.value();
+      } else {
+        const auto& name_opt = func->GetAttr<runtime::String>(relax::attr::kComposite);
+        ICHECK(name_opt.defined()) << "Unexpected global func without composite";
+        optype = name_opt.value();
+      }
     } else if (call_node->op->IsInstance<relax::VarNode>()) {
       ICHECK(target_funcs_.count(call_node->op)) << "Can not find target func: " << call_node->op;
       const auto& func = target_funcs_[call_node->op];
@@ -251,7 +256,12 @@ const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>
   if (const auto* call_node = expr.as<relax::CallNode>()) {
     if (const auto* v_node = call_node->op.as<GlobalVarNode>()) {
       const auto& func = Downcast<relax::Function>(ref_module_->Lookup(v_node->name_hint));
-      attrs = RelaxFuncAttrGetter().GetAttrs(func);
+      const auto& codegen_opt = func->GetAttr<runtime::String>(relax::attr::kCodegen);
+      if (codegen_opt.defined() && optype == codegen_opt.value()) {
+        attrs.Set("byoc_type", optype);
+      } else {
+        attrs = RelaxFuncAttrGetter().GetAttrs(func);
+      }
     } else if (call_node->op->IsInstance<relax::VarNode>()) {
       ICHECK(target_funcs_.count(call_node->op)) << "Can not find target func: " << call_node->op;
       attrs = RelaxFuncAttrGetter().GetAttrs(target_funcs_[call_node->op]);
