@@ -24,7 +24,7 @@ import tvm
 from tvm.relax.frontend.torch import from_fx
 
 from tvm.contrib.msc.core.ir.graph import MSCGraph
-from tvm.contrib.msc.core.ir.translate import from_relax
+from tvm.contrib.msc.core.frontend import from_relax
 from tvm.contrib.msc.core.codegen import relay_to_relax
 
 

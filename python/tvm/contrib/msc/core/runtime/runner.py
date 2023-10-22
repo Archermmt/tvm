@@ -21,7 +21,8 @@ import numpy as np
 from typing import Dict, Optional, Any, List, Tuple, Union
 
 import tvm
-from tvm.contrib.msc.core.ir import MSCGraph, from_relax
+from tvm.contrib.msc.core.ir import MSCGraph
+from tvm.contrib.msc.core.frontend import from_relax
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 from tvm.contrib.msc.core import _ffi_api
@@ -380,11 +381,14 @@ class BYOCRunner(BaseRunner):
             build_config=self._translate_config.get("build"),
         )
         graphs, weights = [], []
-        for _, graph, sub_weights in self._graph_infos:
+        for graph, sub_weights in self._graph_infos:
             graphs.append(graph)
             weights.append(sub_weights)
         self._byoc_graph = _ffi_api.BuildFromRelax(
             self._byoc_mod, "main", msc_utils.dump_dict(self._translate_config.get("build"))
+        )
+        self._byoc_graph.visualize(
+            msc_utils.get_debug_dir().relpath(self._byoc_graph.name + ".prototxt")
         )
         return graphs, weights
 

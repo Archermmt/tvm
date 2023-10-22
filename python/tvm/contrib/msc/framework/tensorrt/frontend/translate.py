@@ -21,7 +21,8 @@ from typing import Dict, Optional, Tuple, List
 import tvm
 from tvm import relax
 from tvm.contrib.msc.core import transform as msc_transform
-from tvm.contrib.msc.core.ir import MSCGraph, byoc_partition
+from tvm.contrib.msc.core.ir import MSCGraph
+from tvm.contrib.msc.core.frontend import byoc_partition
 from tvm.contrib.msc.framework.tensorrt import transform as trt_transform
 
 
@@ -30,7 +31,7 @@ def partition_for_tensorrt(
     params: Optional[Dict[str, tvm.nd.array]] = None,
     trans_config: Optional[Dict[str, str]] = None,
     build_config: Optional[Dict[str, str]] = None,
-) -> Tuple[tvm.IRModule, List[Tuple[str, MSCGraph, Dict[str, tvm.nd.array]]]]:
+) -> Tuple[tvm.IRModule, List[Tuple[MSCGraph, Dict[str, tvm.nd.array]]]]:
     """Partition module to tensorrt sub functions.
 
     Parameters
@@ -48,8 +49,8 @@ def partition_for_tensorrt(
     -------
     mod: IRModule
         The IRModule of partitioned relax.
-    graphs_info: list<<str, MSCGraph, weights>>
-        The func <name, MSCGraph and weights> list, each element for a sub graph.
+    graphs_info: list<<MSCGraph, weights>>
+        The func <MSCGraph and weights> list, each element for a sub graph.
     """
 
     trans_config = trans_config or {}

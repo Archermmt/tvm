@@ -114,7 +114,7 @@ def test_torch_runner_gpu():
     _test_runner_from_torch(TorchRunner, "gpu")
 
 
-@requires_tensorrt
+# @requires_tensorrt
 def test_tensorrt_runner():
     """Test runner for tensorrt"""
 
@@ -142,4 +142,5 @@ def test_tensorflow_runner():
 
 
 if __name__ == "__main__":
-    tvm.testing.main()
+    # tvm.testing.main()
+    test_tensorrt_runner()

@@ -22,7 +22,7 @@ import tvm
 
 from tvm.contrib.msc.core.ir.graph import MSCGraph
 from tvm.contrib.msc.core import transform as msc_transform
-from tvm.contrib.msc.core.ir.translate import from_relax
+from tvm.contrib.msc.core.frontend import from_relax
 from tvm.contrib.msc.core.codegen import relay_to_relax
 from tvm.contrib.msc.framework.tensorflow import tf_v1
 

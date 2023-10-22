@@ -14,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""tvm.contrib.msc.core.ir.translate"""
+"""tvm.contrib.msc.core.frontend.translate"""
 
 from typing import Dict, Optional, Tuple, List
 
@@ -28,7 +28,7 @@ from tvm.relay import dataflow_pattern as relay_pattern
 from tvm.contrib.msc.core import transform as msc_transform
 from tvm.contrib.msc.core import _ffi_api
 from tvm.contrib.msc.core import utils as msc_utils
-from .graph import MSCGraph, MSCTensor
+from tvm.contrib.msc.core.ir import MSCGraph, MSCTensor
 
 
 def normalize_weights(
@@ -270,7 +270,7 @@ def byoc_partition(
     params: Optional[Dict[str, tvm.nd.array]] = None,
     trans_config: Optional[Dict[str, str]] = None,
     build_config: Optional[Dict[str, str]] = None,
-) -> Tuple[tvm.IRModule, List[Tuple[str, MSCGraph, Dict[str, tvm.nd.array]]]]:
+) -> Tuple[tvm.IRModule, List[Tuple[MSCGraph, Dict[str, tvm.nd.array]]]]:
     """Partition module to target sub functions.
 
     Parameters
@@ -290,8 +290,8 @@ def byoc_partition(
     -------
     mod: IRModule
         The IRModule of partitioned relax.
-    graphs_info: list<<str, MSCGraph, weights>>
-        The func <name, MSCGraph and weights> list, each element for a sub graph.
+    graphs_info: list<<MSCGraph, weights>>
+        The func <MSCGraph and weights> list, each element for a sub graph.
     """
 
     trans_config = trans_config or {}
@@ -312,6 +312,7 @@ def byoc_partition(
                 msc_transform.BindShape(),
                 msc_transform.FuseTuple(target),
                 tvm.relax.transform.MergeCompositeFunctions(),
+                msc_transform.SetBYOCAttrs(target),
                 msc_transform.SetExprName(target=target),
                 msc_transform.SetExprLayout(trans_config.get("allow_layout_missing", True)),
             ]
@@ -331,8 +332,8 @@ def byoc_partition(
         BYOCChecker().check(func_names, msc_mod[entry])
 
     graphs_info, all_weights = [], _ffi_api.GetRelaxWeights(msc_mod, entry)
-    for idx, name in enumerate(func_names):
-        build_config.update({"graph_name": target + "_" + str(idx), "byoc_entry": name})
+    for name in func_names:
+        build_config.update({"graph_name": msc_mod[name].attrs["byoc_name"], "byoc_entry": name})
         graph = _ffi_api.BuildFromRelax(msc_mod, entry, msc_utils.dump_dict(build_config))
-        graphs_info.append((name, graph, normalize_weights(all_weights, graph)))
+        graphs_info.append((graph, normalize_weights(all_weights, graph)))
     return _partition_mod(mod, False), graphs_info
