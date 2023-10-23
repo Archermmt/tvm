@@ -81,20 +81,22 @@ class TensorflowRunner(ModelRunner):
             self._tf_outputs = super()._generate_model()
         return self._tf_graph
 
-    def _to_device(self, model: tf_v1.Graph, device: str) -> object:
+    def _to_device(self, model: object, device: str, is_training: bool) -> object:
         """Place model on device
 
         Parameters
         -------
-        model: tf_v1.Graph
-            The tensorflow graph.
+        model: object
+            The runnable model on cpu.
         device: str
             The device for place model
+        is_training: bool
+            Whether to load model for training
 
         Returns
         -------
-        model: WrapSession
-            The wrapped session
+        model: object
+            The runnable model
         """
 
         if self._session:

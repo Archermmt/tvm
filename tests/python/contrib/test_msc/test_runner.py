@@ -40,13 +40,18 @@ requires_tensorrt = pytest.mark.skipif(
 )
 
 
-def _get_module_from_torch(name):
+def _get_module_from_torch(name, is_training=False):
     """Get model from torch vision and parse to relax"""
     # pylint: disable=import-outside-toplevel
     try:
         import torchvision
 
-        return getattr(torchvision.models, name)().eval()
+        model = getattr(torchvision.models, name)(pretrained=True)
+        if is_training:
+            model = model.train()
+        else:
+            model = model.eval()
+        return model
     except:  # pylint: disable=bare-except
         print("please install torchvision package")
         return None
@@ -68,18 +73,18 @@ def _get_graph_from_tf():
         return None, None
 
 
-def _test_runner_from_torch(runner_cls, device, atol=1e-3, rtol=1e-3):
-    torch_model = _get_module_from_torch("resnet50")
+def _test_runner_from_torch(runner_cls, device, is_training=False, atol=1e-3, rtol=1e-3):
+    torch_model = _get_module_from_torch("resnet50", is_training)
     if torch_model:
         workspace = msc_utils.set_workspace()
-        graph_model = fx.symbolic_trace(torch_model)
         input_info = [([1, 3, 224, 224], "float32")]
         datas = [np.random.rand(*i[0]).astype(i[1]) for i in input_info]
         torch_datas = [torch.from_numpy(d) for d in datas]
+        graph_model = fx.symbolic_trace(torch_model)
         with torch.no_grad():
             golden = torch_model(*torch_datas)
             mod = from_fx(graph_model, input_info)
-        runner = runner_cls(mod, device=device)
+        runner = runner_cls(mod, device=device, is_training=is_training)
         runner.build()
         outputs = runner.run(datas, ret_type="list")
         golden = [msc_utils.cast_array(golden)]
@@ -91,14 +96,14 @@ def _test_runner_from_torch(runner_cls, device, atol=1e-3, rtol=1e-3):
 def test_tvm_runner_cpu():
     """Test runner for tvm on cpu"""
 
-    _test_runner_from_torch(TVMRunner, "cpu")
+    _test_runner_from_torch(TVMRunner, "cpu", is_training=True)
 
 
 @tvm.testing.requires_gpu
 def test_tvm_runner_gpu():
     """Test runner for tvm on gpu"""
 
-    _test_runner_from_torch(TVMRunner, "gpu")
+    _test_runner_from_torch(TVMRunner, "gpu", is_training=True)
 
 
 def test_torch_runner_cpu():
@@ -143,3 +148,4 @@ def test_tensorflow_runner():
 
 if __name__ == "__main__":
     tvm.testing.main()
+    # test_torch_runner_cpu()

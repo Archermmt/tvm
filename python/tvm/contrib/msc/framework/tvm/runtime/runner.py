@@ -28,15 +28,17 @@ from tvm.contrib.msc.framework.tvm.codegen import to_relax
 class TVMRunner(ModelRunner):
     """Runner of Relax"""
 
-    def _to_device(self, model: tvm.IRModule, device: str) -> object:
+    def _to_device(self, model: object, device: str, is_training: bool) -> object:
         """Place model on device
 
         Parameters
         -------
-        model: tvm.IRModule
-            The IRModule.
+        model: object
+            The runnable model on cpu.
         device: str
             The device for place model
+        is_training: bool
+            Whether to load model for training
 
         Returns
         -------

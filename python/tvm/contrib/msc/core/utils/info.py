@@ -153,6 +153,16 @@ class MSCArray(object):
     def __init__(self, data: object):
         self._type, self._data = self._analysis(data)
 
+    def __str__(self):
+        return "<{}>[S:{},D:{}] Max {:g}, Min {:g}, Avg {:g}".format(
+            self._type,
+            ";".join([str(s) for s in self._data.shape]),
+            self._data.dtype.name,
+            self._data.max(),
+            self._data.min(),
+            self._data.sum() / self._data.size,
+        )
+
     def _analysis(self, data: object) -> Tuple[str, np.ndarray]:
         if isinstance(data, np.ndarray):
             return "np", data

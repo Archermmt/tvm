@@ -44,19 +44,21 @@ class TorchRunner(ModelRunner):
         graphs, weights = super()._translate()
         return [set_weight_alias(graphs[0])], weights
 
-    def _to_device(self, model: torch.nn.Module, device: str) -> object:
+    def _to_device(self, model: object, device: str, is_training: bool) -> object:
         """Place model on device
 
         Parameters
         -------
-        model: torch.nn.Module
-            The runnable model.
+        model: object
+            The runnable model on cpu.
         device: str
             The device for place model
+        is_training: bool
+            Whether to load model for training
 
         Returns
         -------
-        model: torch.nn.Module
+        model: object
             The runnable model
         """
 
@@ -66,6 +68,10 @@ class TorchRunner(ModelRunner):
             model = model.to(torch.cuda())
         else:
             raise NotImplementedError("Unsupported device " + str(device))
+        if is_training:
+            model = model.train()
+        else:
+            model = model.eval()
         return model
 
     def _run_model(

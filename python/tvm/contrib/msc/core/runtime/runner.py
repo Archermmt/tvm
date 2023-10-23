@@ -47,6 +47,8 @@ class BaseRunner(object):
         The name of the runner
     device: str
         The device of the model, cpu| gpu
+    is_training: bool
+        Whether use model in training
     logger: logging.Logger
         The logger
     """
@@ -59,6 +61,7 @@ class BaseRunner(object):
         load_config: Optional[Dict[str, str]] = None,
         name: str = "main",
         device: str = "cpu",
+        is_training: bool = False,
         logger: logging.Logger = None,
     ):
         self._mod = mod
@@ -67,6 +70,7 @@ class BaseRunner(object):
         self._load_config = load_config or {}
         self._name = name
         self._device = device if self._device_enabled(device) else "cpu"
+        self._is_training = is_training
         self._graphs, self._weights = [], []
         self._model, self._model_info = None, {}
         self._logger = logger or msc_utils.get_global_logger()
@@ -114,9 +118,13 @@ class BaseRunner(object):
                     self.framework, loader, load_config
                 )
             )
-        self._model = self._to_device(model, self._device)
+        self._model = self._to_device(model, self._device, self._is_training)
 
-        self._logger.info("Model({}) loaded on device {}".format(self.framework, self._device))
+        self._logger.info(
+            "Model({}, is_training {}) loaded on device {}".format(
+                self.framework, self._is_training, self._device
+            )
+        )
         return self._model
 
     def run(
@@ -232,7 +240,7 @@ class BaseRunner(object):
 
         raise NotImplementedError("_load is not implemented for " + str(self.__class__))
 
-    def _to_device(self, model: object, device: str) -> object:
+    def _to_device(self, model: object, device: str, is_training: bool) -> object:
         """Place model on device
 
         Parameters
@@ -241,6 +249,8 @@ class BaseRunner(object):
             The runnable model on cpu.
         device: str
             The device for place model
+        is_training: bool
+            Whether to load model for training
 
         Returns
         -------
@@ -410,7 +420,7 @@ class BYOCRunner(BaseRunner):
             output_folder=msc_utils.get_output_dir(),
         )
 
-    def _to_device(self, model: object, device: str) -> object:
+    def _to_device(self, model: object, device: str, is_training: bool) -> object:
         """Place model on device
 
         Parameters
@@ -419,6 +429,8 @@ class BYOCRunner(BaseRunner):
             The runnable model on cpu.
         device: str
             The device for place model
+        is_training: bool
+            Whether to load model for training
 
         Returns
         -------
