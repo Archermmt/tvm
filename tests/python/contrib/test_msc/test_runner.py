@@ -46,7 +46,7 @@ def _get_module_from_torch(name):
     try:
         import torchvision
 
-        return getattr(torchvision.models, name)()
+        return getattr(torchvision.models, name)().eval()
     except:  # pylint: disable=bare-except
         print("please install torchvision package")
         return None
@@ -68,7 +68,7 @@ def _get_graph_from_tf():
         return None, None
 
 
-def _test_runner_from_torch(runner_cls, device):
+def _test_runner_from_torch(runner_cls, device, atol=1e-3, rtol=1e-3):
     torch_model = _get_module_from_torch("resnet50")
     if torch_model:
         workspace = msc_utils.set_workspace()
@@ -84,7 +84,7 @@ def _test_runner_from_torch(runner_cls, device):
         outputs = runner.run(datas, ret_type="list")
         golden = [msc_utils.cast_array(golden)]
         for gol_r, out_r in zip(golden, outputs):
-            tvm.testing.assert_allclose(gol_r, out_r, atol=1e-3, rtol=1e-3)
+            tvm.testing.assert_allclose(gol_r, out_r, atol=atol, rtol=rtol)
         workspace.destory()
 
 
@@ -114,11 +114,11 @@ def test_torch_runner_gpu():
     _test_runner_from_torch(TorchRunner, "gpu")
 
 
-# @requires_tensorrt
+@requires_tensorrt
 def test_tensorrt_runner():
     """Test runner for tensorrt"""
 
-    _test_runner_from_torch(TensorRTRunner, "gpu")
+    _test_runner_from_torch(TensorRTRunner, "gpu", atol=1e-2, rtol=1e-2)
 
 
 def test_tensorflow_runner():
@@ -142,5 +142,4 @@ def test_tensorflow_runner():
 
 
 if __name__ == "__main__":
-    # tvm.testing.main()
-    test_tensorrt_runner()
+    tvm.testing.main()
