@@ -65,7 +65,7 @@ class TorchRunner(ModelRunner):
         if device == "cpu":
             pass
         elif device == "gpu":
-            model = model.to(torch.cuda())
+            model = model.to(torch.device("cuda:0"))
         else:
             raise NotImplementedError("Unsupported device " + str(device))
         if is_training:
