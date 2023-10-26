@@ -15,18 +15,18 @@
 # specific language governing permissions and limitations
 # under the License.
 
-""" Test Runners in MSC. """
+""" Test Managers in MSC. """
 
 import pytest
 import numpy as np
 
 import torch
-from torch import fx
 from tvm.contrib.msc.framework.tensorflow import tf_v1
 
 import tvm.testing
 import tvm.relay.testing.tf as tf_testing
-from tvm.relax.frontend.torch import from_fx
+from tvm.contrib.msc.pipeline import MSCManager
+
 from tvm.contrib.msc.framework.tvm.runtime import TVMRunner
 from tvm.contrib.msc.framework.torch.runtime import TorchRunner
 from tvm.contrib.msc.framework.tensorrt.runtime import TensorRTRunner
@@ -57,7 +57,7 @@ def _get_torch_model(name, is_training=False):
         return None
 
 
-def _get_tf_graph():
+def _get_graph_from_tf():
     try:
         tf_graph = tf_v1.Graph()
         with tf_graph.as_default():
@@ -73,78 +73,34 @@ def _get_tf_graph():
         return None, None
 
 
-def _test_from_torch(runner_cls, device, is_training=False, atol=1e-3, rtol=1e-3):
+def _test_from_torch(deploy_type, is_training=False, atol=1e-2, rtol=1e-2):
     torch_model = _get_torch_model("resnet50", is_training)
     if torch_model:
-        workspace = msc_utils.set_workspace()
-        input_info = [([1, 3, 224, 224], "float32")]
-        datas = [np.random.rand(*i[0]).astype(i[1]) for i in input_info]
-        torch_datas = [torch.from_numpy(d) for d in datas]
-        graph_model = fx.symbolic_trace(torch_model)
-        with torch.no_grad():
-            golden = torch_model(*torch_datas)
-            mod = from_fx(graph_model, input_info)
-        runner = runner_cls(mod, device=device, is_training=is_training)
-        runner.build()
-        outputs = runner.run(datas, ret_type="list")
-        golden = [msc_utils.cast_array(golden)]
-        for gol_r, out_r in zip(golden, outputs):
-            tvm.testing.assert_allclose(gol_r, out_r, atol=atol, rtol=rtol)
-        workspace.destory()
+        if torch.cuda.is_available():
+            torch_model = torch_model.to(torch.device("cuda:0"))
+        config = {
+            "inputs": ["input_0", [1, 3, 224, 224], "float32"],
+            "outputs": ["output"],
+            "dataset": {"loader": "from_random", "config": {"max_iter": 5}},
+            "parse": {"type": "torch"},
+            "compile": {"type": deploy_type},
+            "profile": {
+                "baseline": {"benchmark": {"repeat": 10}},
+                "parse": {"check": {"atol": atol, "rtol": rtol}, "benchmark": {"repeat": 50}},
+                "compile": {"check": {"atol": atol, "rtol": rtol}, "benchmark": {"repeat": 50}},
+            },
+        }
+        manager = MSCManager(torch_model, config)
+        manager.run_pipe()
+        manager.destory()
 
 
-def test_tvm_runner_cpu():
-    """Test runner for tvm on cpu"""
+def test_tvm_manager():
+    """Test manager for tvm"""
 
-    _test_from_torch(TVMRunner, "cpu", is_training=True)
-
-
-@tvm.testing.requires_gpu
-def test_tvm_runner_gpu():
-    """Test runner for tvm on gpu"""
-
-    _test_from_torch(TVMRunner, "gpu", is_training=True)
-
-
-def test_torch_runner_cpu():
-    """Test runner for torch on cpu"""
-
-    _test_from_torch(TorchRunner, "cpu")
-
-
-@tvm.testing.requires_gpu
-def test_torch_runner_gpu():
-    """Test runner for torch on gpu"""
-
-    _test_from_torch(TorchRunner, "gpu", atol=1e-2, rtol=1e-2)
-
-
-@requires_tensorrt
-def test_tensorrt_runner():
-    """Test runner for tensorrt"""
-
-    _test_from_torch(TensorRTRunner, "gpu", atol=1e-2, rtol=1e-2)
-
-
-def test_tensorflow_runner():
-    tf_graph, graph_def = _get_tf_graph()
-    if tf_graph and graph_def:
-        workspace = msc_utils.set_workspace()
-        data = np.random.uniform(size=(1, 224, 224, 3)).astype("float32")
-        out_name = "MobilenetV2/Predictions/Reshape_1:0"
-        # get golden
-        with tf_v1.Session(graph=tf_graph) as sess:
-            golden = sess.run([out_name], {"input:0": data})
-        # get outputs
-        shape_dict = {"input": data.shape}
-        mod, _ = from_tensorflow(graph_def, shape_dict, [out_name], as_msc=False)
-        runner = TensorflowRunner(mod)
-        runner.build()
-        outputs = runner.run([data], ret_type="list")
-        for gol_r, out_r in zip(golden, outputs):
-            tvm.testing.assert_allclose(gol_r, out_r, atol=1e-3, rtol=1e-3)
-        workspace.destory()
+    _test_from_torch("tvm", is_training=True)
 
 
 if __name__ == "__main__":
-    tvm.testing.main()
+    # tvm.testing.main()
+    test_tvm_manager()

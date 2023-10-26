@@ -71,6 +71,21 @@ def dump_dict(dict_obj: dict, flavor: str = "dmlc") -> str:
         return ""
     if flavor == "dmlc":
         return json.dumps({k: int(v) if isinstance(v, bool) else v for k, v in dict_obj.items()})
+    if flavor == "table":
+
+        def _get_lines(value, indent=0):
+            lines = []
+            for k, v in value.items():
+                if isinstance(v, dict):
+                    lines.append("{}{}:".format(indent * " ", k))
+                    lines.extend(_get_lines(v, indent + 2))
+                elif isinstance(v, bool):
+                    lines.append("{}{}: {}".format(indent * " ", k, "true" if v else "false"))
+                else:
+                    lines.append("{}{}: {}".format(indent * " ", k, v))
+            return lines
+
+        return "\n".join(_get_lines(dict_obj))
     return json.dumps(dict_obj)
 
 

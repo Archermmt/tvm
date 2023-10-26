@@ -16,7 +16,7 @@
 # under the License.
 """tvm.contrib.msc.framework.torch.frontend.translate"""
 
-from typing import Dict, Optional, Tuple, List
+from typing import Dict, Optional, Tuple, List, Union
 import numpy as np
 
 import torch
@@ -70,7 +70,7 @@ def from_torch(
     build_config: Optional[Dict[str, str]] = None,
     opt_config: Optional[Dict[str, str]] = None,
     as_msc: bool = True,
-) -> Tuple[MSCGraph, Dict[str, tvm.nd.array]]:
+) -> Tuple[Union[MSCGraph, tvm.IRModule], Dict[str, tvm.nd.array]]:
     """Change torch nn.Module to MSCGraph.
 
     Parameters
@@ -94,8 +94,8 @@ def from_torch(
 
     Returns
     -------
-    graph: tvm.contrib.msc.core.ir.MSCGraph
-        The translated graph.
+    graph/mod: tvm.contrib.msc.core.ir.MSCGraph/tvm.IRModule
+        The translated graph/IRModule.
     weights: dict of <string:tvm.ndarray>
         The weights from the IRModule.
     """
