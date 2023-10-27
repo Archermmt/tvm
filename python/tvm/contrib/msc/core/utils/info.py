@@ -79,6 +79,14 @@ def dump_dict(dict_obj: dict, flavor: str = "dmlc") -> str:
                 if isinstance(v, dict):
                     lines.append("{}{}:".format(indent * " ", k))
                     lines.extend(_get_lines(v, indent + 2))
+                elif isinstance(v, (tuple, list)):
+                    lines.append("{}{}:".format(indent * " ", k))
+                    lines.extend(
+                        [
+                            "{}<{}>{}".format((indent + 2) * " ", idx, ele)
+                            for idx, ele in enumerate(v)
+                        ]
+                    )
                 elif isinstance(v, bool):
                     lines.append("{}{}: {}".format(indent * " ", k, "true" if v else "false"))
                 else:

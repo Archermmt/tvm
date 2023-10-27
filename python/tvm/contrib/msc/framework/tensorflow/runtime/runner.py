@@ -155,3 +155,37 @@ class TensorflowRunner(ModelRunner):
     @property
     def framework(self):
         return MSCFramework.TENSORFLOW
+
+    @classmethod
+    def run_native(
+        cls,
+        model: tf_v1.GraphDef,
+        inputs: Dict[str, np.ndarray],
+        input_names: List[str],
+        output_names: List[str],
+    ) -> Dict[str, np.ndarray]:
+        """Run the datas and get outputs
+
+        Parameters
+        -------
+        model: tf_v1.GraphDef
+            The graph def.
+        inputs: dict<str, data>
+            The inputs in dict.
+        input_names: list<str>
+            The input names.
+        output_names: list<str>
+            The outut names.
+
+        Returns
+        -------
+        outputs: dict<str, np.array>
+            The outputs in dict.
+        """
+
+        feed_dict = {i_name + ":0": inputs[i_name] for i_name in input_names}
+        with tf_v1.Graph().as_default():
+            tf_v1.import_graph_def(model, name="")
+            with tf_v1.Session() as sess:
+                outputs = sess.run(output_names, feed_dict)
+        return {o_name: o_data for o_name, o_data in zip(output_names, outputs)}

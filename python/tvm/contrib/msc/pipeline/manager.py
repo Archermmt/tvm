@@ -16,20 +16,24 @@
 # under the License.
 """tvm.contrib.msc.pipeline.manager"""
 
+import shutil
 from typing import Dict, Tuple
 import numpy as np
 import logging
+import torch
 
 import tvm
+from tvm.relax.transform import BindParams
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 from tvm.contrib.msc.framework.tvm.runtime import TVMRunner
 from tvm.contrib.msc.framework.torch.frontend import from_torch
 from tvm.contrib.msc.framework.torch.runtime import TorchRunner
+from tvm.contrib.msc.framework.tensorflow import tf_v1
 from tvm.contrib.msc.framework.tensorflow.frontend import from_tensorflow
 from tvm.contrib.msc.framework.tensorflow.runtime import TensorflowRunner
 from tvm.contrib.msc.framework.tensorrt.runtime import TensorRTRunner
-from .message import log_block, time_stamp
+from .message import msg_block, time_stamp
 
 
 class BaseManager(object):
@@ -44,6 +48,9 @@ class BaseManager(object):
     """
 
     def __init__(self, model, config):
+        # check config
+        for phase in ["inputs", "outputs", "dataset", "prepare", "compile"]:
+            assert phase in config, "{} should be given to run the pipeline".format(phase)
         self._model = model
         self._config = config
         workspace = msc_utils.set_workspace(config.get("workspace"), keep_history=False)
@@ -60,39 +67,30 @@ class BaseManager(object):
             raise Exception("Unexcept verbose {}, should be debug| info| warn")
         self._logger = msc_utils.set_global_logger(log_level, log_path)
         time_stamp("Init", self._logger)
-        log_block("MSC_CONFIG", self._config, self._logger)
-        self._runner = None
+        self._logger.info(msg_block("MSC_CONFIG", self._config))
+        self._relax_mod, self._runner = None, None
 
-    def run_pipe(self, ret_type: str = "runner") -> object:
+    def run_pipe(self) -> dict:
         """Run the pipeline and return object.
-
-        Parameters
-        ----------
-        ret_type: str
-            The return type runner| model.
 
         Returns
         -------
-        holder:
-            The runner or model.
+        summary:
+            The pipeline summary.
         """
 
         self.prepare()
-        self._mod, self._params = self.parse()
-
+        self._relax_mod = self.parse()
         if "optimize" in self._config:
             self.optimize()
-
-        return self.compile()
+        self.compile()
+        return self.summary()
 
     def prepare(self):
         """Prepare datas for the pipeline."""
 
-        time_stamp("Check Config", self._logger)
-        assert "inputs" in self._config, "inputs should be given to run the pipeline"
-        assert "outputs" in self._config, "outputs should be given to run the pipeline"
-        assert "dataset" in self._config, "dataset should be config to run the manager"
-        assert "compile" in self._config, "compile should be config to run the manager"
+        time_stamp("Prepare", self._logger)
+        # create loader
         loader = self._config["dataset"].get("loader")
         assert loader, "Dataset loader should be given for msc pipeline"
         if loader.startswith("from_random"):
@@ -111,6 +109,32 @@ class BaseManager(object):
             loader = get_inputs
         assert callable(loader), "Loader {} is not callable".format(loader)
 
+        # save golden
+        golden_folder, golden_cnt = msc_utils.get_dataset_dir().relpath("Golden"), 0
+        if "runner" in self._config["prepare"]:
+            max_num = self._config["dataset"].get("max_num", 5)
+            input_names = [i[0] for i in self._config["inputs"]]
+            with msc_utils.MSCDataSaver(
+                golden_folder, input_names, self._config["outputs"]
+            ) as saver:
+                for inputs in loader():
+                    if golden_cnt >= max_num:
+                        break
+                    outputs = self._config["prepare"]["runner"](
+                        self._model, inputs, input_names, self._config["outputs"]
+                    )
+                    golden_cnt = saver.save(inputs, outputs)
+            self._logger.info("Saved {} datas as golden -> {}".format(golden_cnt, golden_folder))
+        elif "golden" in self._config["prepare"]:
+            src_golden = self._config["prepare"]["golden"]
+            assert msc_utils.is_dataset(src_golden), "Golden folder {} is not msc dataset".format(
+                src_golden
+            )
+            shutil.copytree(src_golden, golden_folder)
+            self._logger.info("Copy golden {} ->{}".format(src_golden, golden_folder))
+        else:
+            raise Exception("golden or runner should given in prepare to save golden")
+
     def parse(self) -> Tuple[tvm.IRModule, Dict[str, tvm.nd.array]]:
         """Parse the model to IRModule.
 
@@ -123,6 +147,11 @@ class BaseManager(object):
         """
 
         time_stamp("Parse", self._logger)
+        parse_config = self._config["parse"].get("config", {})
+        mod, params = self._config["parse"]["parser"](self._model, as_msc=False, **parse_config)
+        if params:
+            mod = BindParams("main", params)(mod)
+        return mod
 
     def optimize(self, ret_type: str = "model") -> object:
         """Run the optimize and return object.
@@ -139,6 +168,11 @@ class BaseManager(object):
         """
 
         time_stamp("Optimize", self._logger)
+        run_config = self._config["optimize"].get("config", {})
+        self._runner = self._config["optimize"]["runner"](
+            self._relax_mod, logger=self._logger, **run_config
+        )
+        self._runner.build()
         return self.get_return(ret_type)
 
     def compile(self, ret_type: str = "model") -> object:
@@ -156,6 +190,11 @@ class BaseManager(object):
         """
 
         time_stamp("Compile", self._logger)
+        run_config = self._config["compile"].get("config", {})
+        self._runner = self._config["compile"]["runner"](
+            self._relax_mod, logger=self._logger, **run_config
+        )
+        self._runner.build()
         return self.get_return(ret_type)
 
     def get_return(self, ret_type: str = "runner") -> object:
@@ -183,14 +222,57 @@ class MSCManager(BaseManager):
     """Normal manager in MSC"""
 
     def __init__(self, model, config):
-        if "type" in config.get("parse", {}):
-            parse_type = config["parse"].pop("type")
-            if parse_type == MSCFramework.TORCH:
-                config["parse"]["parser"] = from_torch
-            elif parse_type == MSCFramework.TENSORFLOW:
-                config["parse"]["parser"] = from_tensorflow
-            else:
-                raise Exception("Unexpect parse_type " + str(parse_type))
+        assert "model_type" in config, "model_type should be given for msc pipeline"
+        for phase in ["parse", "prepare"]:
+            if phase not in config:
+                config[phase] = {}
+        if config["model_type"] == MSCFramework.TORCH:
+            assert isinstance(
+                model, torch.nn.Module
+            ), "Model for torch should be nn.Module, get {}({})".format(model, type(model))
+            config["prepare"]["runner"] = TorchRunner.run_native
+            config["parse"]["parser"] = from_torch
+            parse_config = config["parse"].get("config", {})
+            assert "inputs" in config, "inputs should be given to parse torch model"
+            parse_config.update(
+                {
+                    "input_info": [[i[1], i[2]] for i in config["inputs"]],
+                    "input_names": [i[0] for i in config["inputs"]],
+                }
+            )
+            config["parse"]["config"] = parse_config
+            for phase in ["optimize", "compile"]:
+                if phase in config:
+                    run_config = config[phase].get("config", {})
+                    parameters = list(model.parameters())
+                    if parameters:
+                        dev_type = parameters[0].device.type
+                        if dev_type == "cpu":
+                            device = "cpu"
+                        else:
+                            device = "{}:{}".format(dev_type, parameters[0].device.index)
+                    else:
+                        device = "cpu"
+                    run_config.update({"device": device, "is_training": model.training})
+                    config[phase]["config"] = run_config
+        elif config["model_type"] == MSCFramework.TENSORFLOW:
+            assert isinstance(
+                model, tf_v1.GraphDef
+            ), "Model for tenosrflow should be tf.GraphDef, get {}({})".format(model, type(model))
+            config["prepare"]["runner"] = TensorflowRunner.run_native
+            config["parse"]["parser"] = from_tensorflow
+            parse_config = config["parse"].get("config", {})
+            assert "inputs" in config, "inputs should be given to parse torch model"
+            assert "outputs" in config, "outputs should be given to parse torch model"
+            parse_config.update(
+                {
+                    "shape_dict": {i[0] + ":0": i[1] for i in config["inputs"]},
+                    "outputs": config["outputs"],
+                }
+            )
+            config["parse"]["config"] = parse_config
+        else:
+            raise Exception("Unexpect model_type " + str(config["model_type"]))
         for phase in ["optimize", "compile"]:
             if "type" in config.get(phase, {}):
                 run_type = config[phase].pop("type")

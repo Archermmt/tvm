@@ -181,7 +181,7 @@ class MSCDirectory(object):
             os.remove(dir_path)
         return self.__class__(dir_path, keep_history=keep_history, cleanup=cleanup)
 
-    def relpath(self, name: str) -> str:
+    def relpath(self, name: str, keep_history: bool = False) -> str:
         """Relative path in dir
 
         Parameters
@@ -195,7 +195,12 @@ class MSCDirectory(object):
             The concatenated path.
         """
 
-        return os.path.join(self._path, name)
+        f_path = os.path.join(self._path, name)
+        if os.path.isfile(f_path) and not keep_history:
+            os.remove(f_path)
+        if os.path.isdir(f_path) and not keep_history:
+            shutil.rmtree(f_path)
+        return f_path
 
     def listdir(self) -> List[str]:
         """List contents in the dir.

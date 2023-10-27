@@ -79,15 +79,17 @@ def _test_from_torch(deploy_type, is_training=False, atol=1e-2, rtol=1e-2):
         if torch.cuda.is_available():
             torch_model = torch_model.to(torch.device("cuda:0"))
         config = {
-            "inputs": ["input_0", [1, 3, 224, 224], "float32"],
+            "model_type": "torch",
+            "inputs": [["input_0", [1, 3, 224, 224], "float32"]],
             "outputs": ["output"],
-            "dataset": {"loader": "from_random", "config": {"max_iter": 5}},
-            "parse": {"type": "torch"},
-            "compile": {"type": deploy_type},
-            "profile": {
-                "baseline": {"benchmark": {"repeat": 10}},
-                "parse": {"check": {"atol": atol, "rtol": rtol}, "benchmark": {"repeat": 50}},
-                "compile": {"check": {"atol": atol, "rtol": rtol}, "benchmark": {"repeat": 50}},
+            "dataset": {"loader": "from_random", "max_iter": 5},
+            "prepare": {"profile": {"benchmark": {"repeat": 10}}},
+            "parse": {
+                "profile": {"check": {"atol": atol, "rtol": rtol}, "benchmark": {"repeat": 50}}
+            },
+            "compile": {
+                "type": deploy_type,
+                "profile": {"check": {"atol": atol, "rtol": rtol}, "benchmark": {"repeat": 50}},
             },
         }
         manager = MSCManager(torch_model, config)

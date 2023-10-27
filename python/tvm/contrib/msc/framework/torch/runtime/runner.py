@@ -26,6 +26,7 @@ from tvm.contrib.msc.core.ir import MSCGraph
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.framework.torch.codegen import to_torch
 from tvm.contrib.msc.framework.torch.frontend import set_weight_alias
+from tvm.contrib.msc.core import utils as msc_utils
 
 
 class TorchRunner(ModelRunner):
@@ -129,3 +130,47 @@ class TorchRunner(ModelRunner):
     @property
     def framework(self):
         return MSCFramework.TORCH
+
+    @classmethod
+    def run_native(
+        cls,
+        model: torch.nn.Module,
+        inputs: Dict[str, np.ndarray],
+        input_names: List[str],
+        output_names: List[str],
+    ) -> Dict[str, np.ndarray]:
+        """Run the datas and get outputs
+
+        Parameters
+        -------
+        model: torch.nn.Module
+            The runnable model.
+        inputs: dict<str, data>
+            The inputs in dict.
+        input_names: list<str>
+            The input names.
+        output_names: list<str>
+            The outut names.
+
+        Returns
+        -------
+        outputs: dict<str, np.array>
+            The outputs in dict.
+        """
+
+        parameters = list(model.parameters())
+        if parameters:
+            device = parameters[0].device
+        else:
+            device = torch.device("cpu")
+        torch_inputs = [torch.from_numpy(inputs[i_name]).to(device) for i_name in input_names]
+        outputs = model(*torch_inputs)
+        if isinstance(outputs, torch.Tensor):
+            assert len(output_names) == 1, "Expect 1 outputs, get " + str(output_names)
+            return {output_names[0]: msc_utils.cast_array(outputs)}
+        assert len(output_names) == len(outputs), "Outputs mismatch, {} with {}".format(
+            output_names, len(outputs)
+        )
+        return {
+            o_name: msc_utils.cast_array(o_data) for o_name, o_data in zip(output_names, outputs)
+        }
