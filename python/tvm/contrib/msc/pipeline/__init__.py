@@ -17,4 +17,3 @@
 """tvm.contrib.msc.pipeline"""
 
 from .manager import *
-from .message import *

@@ -16,8 +16,9 @@
 # under the License.
 """tvm.contrib.msc.framework.torch.runtime.runner"""
 
-import numpy as np
+import time
 from typing import Dict, List, Union, Tuple
+import numpy as np
 
 import torch
 import tvm
@@ -138,6 +139,8 @@ class TorchRunner(ModelRunner):
         inputs: Dict[str, np.ndarray],
         input_names: List[str],
         output_names: List[str],
+        warm_up: int = 10,
+        repeat: int = 0,
     ) -> Dict[str, np.ndarray]:
         """Run the datas and get outputs
 
@@ -151,6 +154,10 @@ class TorchRunner(ModelRunner):
             The input names.
         output_names: list<str>
             The outut names.
+        warm_up: int
+            The warm_up num for profile.
+        repeat: int
+            The repeat num for profile.
 
         Returns
         -------
@@ -163,14 +170,28 @@ class TorchRunner(ModelRunner):
             device = parameters[0].device
         else:
             device = torch.device("cpu")
-        torch_inputs = [torch.from_numpy(inputs[i_name]).to(device) for i_name in input_names]
-        outputs = model(*torch_inputs)
+
+        def _run_once():
+            torch_inputs = [torch.from_numpy(inputs[i_name]).to(device) for i_name in input_names]
+            return model(*torch_inputs)
+
+        if repeat > 0:
+            for _ in range(warm_up):
+                _run_once()
+            start = time.time()
+            for _ in range(repeat):
+                outputs = _run_once()
+            avg_time = (time.time() - start) * 1000 / repeat
+        else:
+            outputs = _run_once()
+            avg_time = -1
         if isinstance(outputs, torch.Tensor):
             assert len(output_names) == 1, "Expect 1 outputs, get " + str(output_names)
-            return {output_names[0]: msc_utils.cast_array(outputs)}
+            return {output_names[0]: msc_utils.cast_array(outputs)}, avg_time
         assert len(output_names) == len(outputs), "Outputs mismatch, {} with {}".format(
             output_names, len(outputs)
         )
-        return {
+        outputs = {
             o_name: msc_utils.cast_array(o_data) for o_name, o_data in zip(output_names, outputs)
         }
+        return outputs, avg_time

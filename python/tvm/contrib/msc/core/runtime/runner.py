@@ -216,6 +216,12 @@ class BaseRunner(object):
 
         return self._model
 
+    def destory(self):
+        """Destory runner"""
+
+        if self._model:
+            del self._model
+
     def _translate(self) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:
         """Translate IRModule to MSCgraphs
 

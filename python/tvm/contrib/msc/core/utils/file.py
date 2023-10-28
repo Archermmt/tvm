@@ -181,7 +181,7 @@ class MSCDirectory(object):
             os.remove(dir_path)
         return self.__class__(dir_path, keep_history=keep_history, cleanup=cleanup)
 
-    def relpath(self, name: str, keep_history: bool = False) -> str:
+    def relpath(self, name: str, keep_history: bool = True) -> str:
         """Relative path in dir
 
         Parameters
@@ -265,7 +265,7 @@ def set_workspace(
         The created dir.
     """
 
-    path = path or "msc_worksapce"
+    path = path or "msc_workspace"
     workspace = MSCDirectory(path, keep_history, cleanup)
     MSCMap.set(MSCKey.WORKSPACE, workspace)
     return workspace

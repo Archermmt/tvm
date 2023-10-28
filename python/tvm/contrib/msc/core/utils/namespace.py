@@ -57,7 +57,7 @@ class MSCKey:
     REGISTERED_FUNCS = "registered_funcs"
     REGISTERED_TOOLS = "registered_tools"
 
-    MSC_PHASE = "msc_phase"
+    MSC_STAGE = "msc_stage"
     TIME_STAMPS = "time_stamps"
 
 

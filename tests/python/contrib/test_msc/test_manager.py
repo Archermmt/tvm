@@ -18,7 +18,6 @@
 """ Test Managers in MSC. """
 
 import pytest
-import numpy as np
 
 import torch
 from tvm.contrib.msc.framework.tensorflow import tf_v1
@@ -26,13 +25,7 @@ from tvm.contrib.msc.framework.tensorflow import tf_v1
 import tvm.testing
 import tvm.relay.testing.tf as tf_testing
 from tvm.contrib.msc.pipeline import MSCManager
-
-from tvm.contrib.msc.framework.tvm.runtime import TVMRunner
-from tvm.contrib.msc.framework.torch.runtime import TorchRunner
-from tvm.contrib.msc.framework.tensorrt.runtime import TensorRTRunner
-from tvm.contrib.msc.framework.tensorflow.frontend import from_tensorflow
-from tvm.contrib.msc.framework.tensorflow.runtime import TensorflowRunner
-from tvm.contrib.msc.core import utils as msc_utils
+from tvm.contrib.msc.core.utils.namespace import MSCFramework
 
 requires_tensorrt = pytest.mark.skipif(
     tvm.get_global_func("relax.ext.tensorrt", True) is None,
@@ -40,8 +33,27 @@ requires_tensorrt = pytest.mark.skipif(
 )
 
 
+def _get_config(model_type, deploy_type, inputs, outputs, atol=1e-2, rtol=1e-2):
+    """Get msc config"""
+    return {
+        "model_type": model_type,
+        "inputs": inputs,
+        "outputs": outputs,
+        "dataset": {"loader": "from_random", "max_iter": 5},
+        "prepare": {"profile": {"benchmark": {"repeat": 10}}},
+        "baseline": {
+            "run_type": model_type,
+            "profile": {"check": {"atol": atol, "rtol": rtol}, "benchmark": {"repeat": 10}},
+        },
+        "compile": {
+            "run_type": deploy_type,
+            "profile": {"check": {"atol": atol, "rtol": rtol}, "benchmark": {"repeat": 10}},
+        },
+    }
+
+
 def _get_torch_model(name, is_training=False):
-    """Get model from torch vision and parse to relax"""
+    """Get model from torch vision"""
     # pylint: disable=import-outside-toplevel
     try:
         import torchvision
@@ -57,7 +69,8 @@ def _get_torch_model(name, is_training=False):
         return None
 
 
-def _get_graph_from_tf():
+def _get_tf_graph():
+    """Get graph from tensorflow"""
     try:
         tf_graph = tf_v1.Graph()
         with tf_graph.as_default():
@@ -67,10 +80,10 @@ def _get_graph_from_tf():
             )
             # Call the utility to import the graph definition into default graph.
             graph_def = tf_testing.ProcessGraphDefParam(graph_def)
-        return tf_graph, graph_def
+        return graph_def
     except:
         print("please install tensorflow package")
-        return None, None
+        return None
 
 
 def _test_from_torch(deploy_type, is_training=False, atol=1e-2, rtol=1e-2):
@@ -78,31 +91,63 @@ def _test_from_torch(deploy_type, is_training=False, atol=1e-2, rtol=1e-2):
     if torch_model:
         if torch.cuda.is_available():
             torch_model = torch_model.to(torch.device("cuda:0"))
-        config = {
-            "model_type": "torch",
-            "inputs": [["input_0", [1, 3, 224, 224], "float32"]],
-            "outputs": ["output"],
-            "dataset": {"loader": "from_random", "max_iter": 5},
-            "prepare": {"profile": {"benchmark": {"repeat": 10}}},
-            "parse": {
-                "profile": {"check": {"atol": atol, "rtol": rtol}, "benchmark": {"repeat": 50}}
-            },
-            "compile": {
-                "type": deploy_type,
-                "profile": {"check": {"atol": atol, "rtol": rtol}, "benchmark": {"repeat": 50}},
-            },
-        }
+        config = _get_config(
+            MSCFramework.TORCH,
+            deploy_type,
+            inputs=[["input_0", [1, 3, 224, 224], "float32"]],
+            outputs=["output"],
+            atol=atol,
+            rtol=rtol,
+        )
         manager = MSCManager(torch_model, config)
-        manager.run_pipe()
+        report = manager.run_pipe()
+        assert report["success"], "Failed to run pipe for torch -> {}".format(deploy_type)
+
+
+def _test_from_tf(deploy_type, atol=1e-2, rtol=1e-2):
+    graphdef = _get_tf_graph()
+    if graphdef:
+        config = _get_config(
+            MSCFramework.TENSORFLOW,
+            deploy_type,
+            inputs=[["input", [1, 224, 224, 3], "float32"]],
+            outputs=["MobilenetV2/Predictions/Reshape_1:0"],
+            atol=atol,
+            rtol=rtol,
+        )
+        manager = MSCManager(graphdef, config)
+        report = manager.run_pipe()
+        assert report["success"], "Failed to run pipe for tensorflow -> {}".format(deploy_type)
         manager.destory()
 
 
 def test_tvm_manager():
     """Test manager for tvm"""
 
-    _test_from_torch("tvm", is_training=True)
+    _test_from_torch(MSCFramework.TVM, is_training=True)
+    _test_from_tf(MSCFramework.TVM)
+
+
+def test_torch_manager():
+    """Test manager for torch"""
+
+    _test_from_torch(MSCFramework.TORCH, is_training=False)
+
+
+def test_tensorflow_manager():
+    """Test manager for tensorflow"""
+
+    _test_from_tf(MSCFramework.TENSORFLOW)
+
+
+@requires_tensorrt
+def test_tensorrt_manager():
+    """Test manager for torch"""
+
+    _test_from_torch(MSCFramework.TENSORRT, is_training=False)
+    _test_from_tf(MSCFramework.TENSORRT)
 
 
 if __name__ == "__main__":
-    # tvm.testing.main()
-    test_tvm_manager()
+    tvm.testing.main()
+    # test_torch_manager()

@@ -16,8 +16,9 @@
 # under the License.
 """tvm.contrib.msc.framework.tensorflow.runtime.runner"""
 
-import numpy as np
+import time
 from typing import Dict, List, Union
+import numpy as np
 
 from tensorflow.python.client import device_lib
 from tensorflow.python.ops import variables
@@ -64,6 +65,15 @@ class TensorflowRunner(ModelRunner):
         self._tf_graph = None
         self._tf_outputs = None
         self._session = None
+
+    def destory(self):
+        """Destory runner"""
+
+        self._session.close()
+        del self._tf_graph
+        del self._tf_outputs
+        del self._session
+        super().destory()
 
     def _generate_model(self) -> object:
         """Codegen the model according to framework
@@ -163,6 +173,8 @@ class TensorflowRunner(ModelRunner):
         inputs: Dict[str, np.ndarray],
         input_names: List[str],
         output_names: List[str],
+        warm_up: int = 10,
+        repeat: int = 0,
     ) -> Dict[str, np.ndarray]:
         """Run the datas and get outputs
 
@@ -176,6 +188,11 @@ class TensorflowRunner(ModelRunner):
             The input names.
         output_names: list<str>
             The outut names.
+        warm_up: int
+            The warm_up num for profile.
+        repeat: int
+            The repeat num for profile.
+
 
         Returns
         -------
@@ -187,5 +204,15 @@ class TensorflowRunner(ModelRunner):
         with tf_v1.Graph().as_default():
             tf_v1.import_graph_def(model, name="")
             with tf_v1.Session() as sess:
-                outputs = sess.run(output_names, feed_dict)
-        return {o_name: o_data for o_name, o_data in zip(output_names, outputs)}
+                if repeat > 0:
+                    for _ in range(warm_up):
+                        outputs = sess.run(output_names, feed_dict)
+                    start = time.time()
+                    for _ in range(repeat):
+                        outputs = sess.run(output_names, feed_dict)
+                    avg_time = (time.time() - start) * 1000 / repeat
+                else:
+                    outputs = sess.run(output_names, feed_dict)
+                    avg_time = -1
+        outputs = {o_name: o_data for o_name, o_data in zip(output_names, outputs)}
+        return outputs, avg_time

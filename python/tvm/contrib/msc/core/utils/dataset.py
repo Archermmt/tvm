@@ -93,9 +93,15 @@ class MSCDataLoader(object):
            The loaded data.
         """
 
-        f_path = os.path.join(self._folder, name, "batch_{}.bin".format(self._start + index))
+        f_path = os.path.join(
+            self._folder, info["save_name"], "batch_{}.bin".format(self._start + index)
+        )
         assert os.path.isfile(f_path), "Can not find data file " + str(f_path)
         return np.fromfile(f_path, dtype=info["dtype"]).reshape(info["shape"])
+
+    @property
+    def info(self):
+        return self._info
 
 
 class MSCDataSaver(object):
@@ -202,7 +208,8 @@ class MSCDataSaver(object):
             Whether the data is input.
         """
 
-        sub_folder = f_path = os.path.join(self._folder, name)
+        save_name = name.replace("/", "_")
+        sub_folder = f_path = os.path.join(self._folder, save_name)
         if not os.path.isdir(sub_folder):
             os.mkdir(sub_folder)
         f_path = os.path.join(sub_folder, "batch_{}.bin".format(self._start + self._current))
@@ -220,8 +227,13 @@ class MSCDataSaver(object):
                 "shape": list(data.shape),
                 "dtype": data.dtype.name,
                 "bytes": data.size * data.itemsize,
+                "save_name": save_name,
             }
         data.tofile(f_path)
+
+    @property
+    def info(self):
+        return self._info
 
 
 def is_dataset(folder: str) -> bool:
