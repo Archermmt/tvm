@@ -64,6 +64,7 @@ def to_relax(
             with open(folder.relpath(graph.name + "_params.bin"), "wb") as f_params:
                 f_params.write(tvm.runtime.save_param_dict(weights))
 
+    # pylint: disable=unused-argument
     def _bind_weights(mod: tvm.IRModule, folder: msc_utils.MSCDirectory) -> tvm.IRModule:
         if weights:
             mod = BindParams("main", weights)(mod)

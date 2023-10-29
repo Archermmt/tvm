@@ -19,9 +19,9 @@
 import os
 import json
 import copy
-import numpy as np
 from typing import List, Tuple, Dict
 from distutils.version import LooseVersion
+import numpy as np
 
 import tvm
 from .namespace import MSCFramework
@@ -52,7 +52,7 @@ class MSCArray(object):
 
             if isinstance(data, torch.Tensor):
                 return "torch", data.detach().cpu().numpy()
-        except:
+        except:  # pylint: disable=bare-except
             pass
 
         raise Exception("Unkonwn data {}({})".format(data, type(data)))
@@ -118,7 +118,7 @@ def compare_arrays(
         The compare results.
     """
 
-    assert golden.keys() == datas.keys(), "golden {} and datas {} mismatch {}".format(
+    assert golden.keys() == datas.keys(), "golden {} and datas {} mismatch".format(
         golden.keys(), datas.keys()
     )
     report = {"total": 0, "passed": 0, "info": {}}
@@ -140,7 +140,7 @@ def compare_arrays(
             np.testing.assert_allclose(gol, data, rtol=rtol, atol=atol, verbose=False)
             report["info"][name] = "<Pass> diff {}".format(diff.abstract())
             report["passed"] += 1
-        except:
+        except:  # pylint: disable=bare-except
             report["info"][name] = "<Fail> diff {}".format(diff.abstract())
     return report
 

@@ -93,9 +93,8 @@ class MSCDataLoader(object):
            The loaded data.
         """
 
-        f_path = os.path.join(
-            self._folder, info["save_name"], "batch_{}.bin".format(self._start + index)
-        )
+        save_name = info.get("save_name", name)
+        f_path = os.path.join(self._folder, save_name, "batch_{}.bin".format(self._start + index))
         assert os.path.isfile(f_path), "Can not find data file " + str(f_path)
         return np.fromfile(f_path, dtype=info["dtype"]).reshape(info["shape"])
 
@@ -175,7 +174,7 @@ class MSCDataSaver(object):
             assert len(inputs) == len(
                 self._input_names
             ), "Inputs size {} mismatch with input_names {}".format(len(inputs), self._input_names)
-            inputs = {name: data for name, data in zip(self._input_names, inputs)}
+            inputs = dict(zip(self._input_names, inputs))
         for name, data in inputs.items():
             self._save_data(name, data, True)
         if outputs:
@@ -189,7 +188,7 @@ class MSCDataSaver(object):
                 ), "Outputs size {} mismatch with input_names {}".format(
                     len(outputs), self._output_names
                 )
-                outputs = {name: data for name, data in zip(self._output_names, outputs)}
+                outputs = dict(zip(self._output_names, outputs))
             for name, data in outputs.items():
                 self._save_data(name, data, False)
         self._current += 1

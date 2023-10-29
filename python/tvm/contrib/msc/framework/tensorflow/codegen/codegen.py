@@ -16,7 +16,7 @@
 # under the License.
 """tvm.contrib.msc.framework.tensorflow.codegen.codegen"""
 
-from typing import Dict, Optional, Union, List
+from typing import Dict, Optional
 
 import tvm
 from tvm.contrib.msc.core.ir import MSCGraph

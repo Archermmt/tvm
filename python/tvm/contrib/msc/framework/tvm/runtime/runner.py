@@ -16,14 +16,13 @@
 # under the License.
 """tvm.contrib.msc.framework.runtime.tvm.runner"""
 
-import numpy as np
 from typing import Dict, List, Union
+import numpy as np
 
 import tvm
 from tvm.contrib.msc.core.runtime import ModelRunner
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.framework.tvm.codegen import to_relax
-from tvm.contrib.msc.core import utils as msc_utils
 
 
 class TVMRunner(ModelRunner):

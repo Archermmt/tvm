@@ -14,13 +14,14 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+# pylint: disable=unused-argument
 """tvm.contrib.msc.core.runtime.runner"""
 
 import os
 import json
 import logging
-import numpy as np
 from typing import Dict, Optional, Any, List, Tuple, Union
+import numpy as np
 
 import tvm
 from tvm.contrib.msc.core.ir import MSCGraph
@@ -660,7 +661,7 @@ class BYOCRunner(BaseRunner):
             graphs.append(MSCGraph.from_json(cache_dir.relpath(f_graph)))
             with open(cache_dir.relpath(f_weights), "rb") as f:
                 weights = tvm.runtime.load_param_dict(f.read())
-        self._graph_infos = [(g, w) for g, w in zip(graphs, weights)]
+        self._graph_infos = list(zip(graphs, weights))
         self._byoc_graph = MSCGraph.from_json(cache_dir.relpath(cache_info["byoc_graph"]))
         self._byoc_graph.visualize(
             msc_utils.get_debug_dir().relpath(self._byoc_graph.name + ".prototxt")

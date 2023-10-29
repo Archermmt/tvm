@@ -41,7 +41,7 @@ requires_tensorrt = pytest.mark.skipif(
 
 
 def _get_torch_model(name, is_training=False):
-    """Get model from torch vision and parse to relax"""
+    """Get model from torch vision"""
     # pylint: disable=import-outside-toplevel
     try:
         import torchvision
@@ -100,7 +100,7 @@ def test_tvm_runner_cpu():
 
 
 @tvm.testing.requires_gpu
-def test_tvm_runner_cuda():
+def test_tvm_runner_gpu():
     """Test runner for tvm on cuda"""
 
     _test_from_torch(TVMRunner, "cuda", is_training=True)
@@ -113,7 +113,7 @@ def test_torch_runner_cpu():
 
 
 @tvm.testing.requires_gpu
-def test_torch_runner_cuda():
+def test_torch_runner_gpu():
     """Test runner for torch on cuda"""
 
     _test_from_torch(TorchRunner, "cuda", atol=1e-2, rtol=1e-2)
