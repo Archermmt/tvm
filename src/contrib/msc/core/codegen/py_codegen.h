@@ -82,18 +82,15 @@ class PyCodeGen : public BaseCodeGen<ConfigType, HelperType> {
     this->stack_.line("import os")
         .line("import numpy as np")
         .line("from typing import List, Dict")
-        .line("import tvm")
-        .line("from tvm.contrib.msc.core import utils as msc_utils");
+        .line("import tvm");
+    if (this->config()->use_tools) {
+      this->stack_.line("from tvm.contrib.msc.tools import tool as msc_tool");
+    }
+    this->stack_.line("from tvm.contrib.msc.core import utils as msc_utils");
   }
 
   /*! \brief Stack the docs for the helpers*/
   virtual void CodeGenHelper() {
-    this->stack_.func_def("process_tensor", TensorType())
-        .func_arg("tensor", TensorType())
-        .func_arg("name", "str")
-        .func_arg("consumer", "str")
-        .func_start()
-        .func_end("tensor");
     if (this->config()->need_test) {
       this->stack_.func_def("load_data", "np.ndarray")
           .func_arg("name", "str")
@@ -147,19 +144,24 @@ class PyCodeGen : public BaseCodeGen<ConfigType, HelperType> {
   /*! \brief Stack the docs for the node*/
   virtual void CodeGenNode(const MSCJoint& node) {
     this->stack_.comment(this->Comment(node));
-    if (this->config()->need_process) {
+    if (this->config()->use_tools) {
       for (size_t i = 0; i < node->inputs.size(); i++) {
         const auto& input = node->InputAt(i);
-        this->stack_.func_call("process_tensor", this->IdxInputBase(node, i, false))
+        this->stack_.func_call("msc_tool.process_tensor", this->IdxInputBase(node, i, false))
             .call_arg(this->IdxInputBase(node, i, true))
             .call_arg(DocUtils::ToStrDoc(input->name))
-            .call_arg(DocUtils::ToStrDoc(node->name));
+            .call_arg(DocUtils::ToStrDoc(node->name))
+            .call_arg(DocUtils::ToStrDoc(this->config()->tools_phase))
+            .call_arg(DocUtils::ToStrDoc(this->config()->tools_tag));
       }
       for (const auto& pair : node->weights) {
-        this->stack_.func_call("process_tensor", this->IdxWeightBase(node, pair.first, false))
+        this->stack_
+            .func_call("msc_tool.process_tensor", this->IdxWeightBase(node, pair.first, false))
             .call_arg(this->IdxWeightBase(node, pair.first, true))
             .call_arg(DocUtils::ToStrDoc(pair.second->name))
-            .call_arg(DocUtils::ToStrDoc(node->name));
+            .call_arg(DocUtils::ToStrDoc(node->name))
+            .call_arg(DocUtils::ToStrDoc(this->config()->tools_phase))
+            .call_arg(DocUtils::ToStrDoc(this->config()->tools_tag));
       }
     }
     for (const auto& d : this->GetOpCodes(node)) {

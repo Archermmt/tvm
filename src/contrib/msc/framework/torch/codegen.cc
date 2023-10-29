@@ -40,6 +40,9 @@ void TorchCodeGen::CodeGenGraph() {
   // Write init
   is_init_ = true;
   stack_.func_def("__init__", "torch.nn.Module");
+  if (config()->use_tools) {
+    stack_.func_decorator("msc_tool.execute_tool(\"build\",\"" + config()->tools_tag + "\")");
+  }
   stack_.func_arg("self", "torch.nn.Module");
   stack_.func_start();
   stack_.func_call("super").call_arg(graph()->name).call_arg("self").method_call("__init__");
@@ -55,6 +58,9 @@ void TorchCodeGen::CodeGenGraph() {
   // Write forward
   is_init_ = false;
   stack_.func_def("forward", "List[torch.Tensor]");
+  if (config()->use_tools) {
+    stack_.func_decorator("msc_tool.execute_tool(\"forward\",\"" + config()->tools_tag + "\")");
+  }
   stack_.func_arg("self", "torch.nn.Module");
   for (const auto& i : graph()->GetInputs()) {
     const auto& pair = graph()->FindProducerAndIdx(i);

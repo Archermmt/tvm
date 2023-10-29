@@ -16,6 +16,7 @@
 # under the License.
 """tvm.contrib.msc.core.utils.register"""
 
+from typing import Any
 from .namespace import MSCMap, MSCKey, MSCFramework
 
 
@@ -59,3 +60,92 @@ def get_registered_func(name: str, framework: str = MSCFramework.MSC):
     if framework not in funcs:
         return None
     return funcs[framework].get(name)
+
+
+def register_tool_cls(tool_cls: Any):
+    """Register a tool class.
+
+    Parameters
+    ----------
+    tool_cls: class
+        The tool class to be registered.
+    """
+
+    tools_cls = MSCMap.get(MSCKey.REGISTERED_TOOLS_CLS, {})
+    assert hasattr(tool_cls, "tool_type") and hasattr(
+        tool_cls, "tool_style"
+    ), "tool_type and tool_style should be given to register tool class"
+    if tool_cls.tool_type() not in tools_cls:
+        tools_cls[tool_cls.tool_type()] = {}
+    tools_cls[tool_cls.tool_type()][tool_cls.tool_style()] = tool_cls
+    MSCMap.set(MSCKey.REGISTERED_TOOLS_CLS, tools_cls)
+
+
+def get_registered_tool_cls(tool_type: str, tool_style: str) -> Any:
+    """Get the registered tool class.
+
+    Parameters
+    ----------
+    tool_type: string
+        The type of the tool prune| quantize| distill| debug.
+    tool_style: string
+        The style of the tool.
+
+    Returns
+    -------
+    tool_cls: class
+        The registered tool class.
+    """
+
+    tools_cls = MSCMap.get(MSCKey.REGISTERED_TOOLS_CLS, {})
+    return tools_cls.get(tool_type, {}).get(tool_style)
+
+
+def register_tool_impl(impl_cls: Any, impl_style: str = "default"):
+    """Register a tool implement.
+
+    Parameters
+    ----------
+    impl_cls: class
+        The implement class.
+    impl_style: string
+        The style of the implement.
+    """
+
+    tools_impl = MSCMap.get(MSCKey.REGISTERED_TOOLS_IMPL, {})
+    assert hasattr(impl_cls, "framework") and hasattr(
+        impl_cls, "tool_type"
+    ), "framework and tool_type should be given to register tool implement"
+    if impl_cls.framework() not in tools_impl:
+        tools_impl[impl_cls.framework()] = {}
+    register_name = "{}.{}".format(impl_cls.tool_type(), impl_style)
+    assert (
+        register_name not in tools_impl[impl_cls.framework()]
+    ), "Implement {} is already registered by {}".format(
+        register_name, tools_impl[impl_cls.framework()][register_name]
+    )
+    tools_impl[impl_cls.framework()][register_name] = impl_cls
+    MSCMap.set(MSCKey.REGISTERED_TOOLS_IMPL, tools_impl)
+
+
+def get_registered_tool_impl(framework: str, tool_type: str, impl_style: str) -> Any:
+    """Get the registered tool implement.
+
+    Parameters
+    ----------
+    framework: string
+        Should be from MSCFramework.
+    tool_type: string
+        The type of the tool prune| quantize| distill| debug.
+    impl_style: string
+        The style of the implement.
+
+    Returns
+    -------
+    impl_cls: class
+        The implement class.
+    """
+
+    tools_impl = MSCMap.get(MSCKey.REGISTERED_TOOLS_IMPL, {})
+    register_name = "{}.{}".format(tool_type, impl_style)
+    return tools_impl.get(framework, {}).get(register_name)

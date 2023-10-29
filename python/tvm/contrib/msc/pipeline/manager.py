@@ -18,7 +18,7 @@
 
 import os
 import time
-from typing import Dict
+from typing import Dict, Any
 import numpy as np
 import traceback
 import torch
@@ -41,7 +41,7 @@ class BaseManager(object):
 
     Parameters
     ----------
-    model: object
+    model: Any
         The raw model in framwork.
     config: dict
         The config for pipeline.
@@ -73,12 +73,12 @@ class BaseManager(object):
             "profile": {},
         }
 
-    def update_config(self, model: object, config: dict) -> dict:
+    def update_config(self, model: Any, config: dict) -> dict:
         """Update config
 
         Parameters
         ----------
-        model: object
+        model: Any
             The raw model in framwork.
         config: dict
             The config for pipeline.
@@ -277,7 +277,7 @@ class BaseManager(object):
 
     def optimize(
         self, stage_config: dict, use_cache: bool = False, ret_type: str = "runnable"
-    ) -> object:
+    ) -> Any:
         """Run the optimize and return object.
 
         Parameters
@@ -304,7 +304,7 @@ class BaseManager(object):
 
     def compile(
         self, stage_config: dict, use_cache: bool = False, ret_type: str = "runnable"
-    ) -> object:
+    ) -> Any:
         """Run the compile and return object.
 
         Parameters
@@ -411,7 +411,7 @@ class BaseManager(object):
             report["latency"] = "{:.2f} ms".format(avg_time)
         return report
 
-    def get_runnable(self, ret_type: str = "runner") -> object:
+    def get_runnable(self, ret_type: str = "runner") -> Any:
         """Return object by type.
 
         Parameters
@@ -507,7 +507,7 @@ class MSCManager(BaseManager):
             self.update_runner(config, stage, model)
         return config
 
-    def update_runner(self, config: dict, stage: str, model: object) -> dict:
+    def update_runner(self, config: dict, stage: str, model: Any) -> dict:
         """Update runner in stage config.
 
         Parameters
@@ -516,7 +516,7 @@ class MSCManager(BaseManager):
             The config of a pipeline.
         stage: str
             The stage to be updated
-        model: object
+        model: Any
             The raw model in framwork.
         """
 
@@ -544,9 +544,9 @@ class MSCManager(BaseManager):
             run_config["translate_config"] = {}
         if "build" not in run_config["translate_config"]:
             run_config["translate_config"]["build"] = {}
-        if "load_config" not in run_config:
-            run_config["load_config"] = {}
-        run_config["load_config"].update(
+        if "generate_config" not in run_config:
+            run_config["generate_config"] = {}
+        run_config["generate_config"].update(
             {
                 "build_folder": msc_utils.get_build_dir().create_dir(stage),
             }

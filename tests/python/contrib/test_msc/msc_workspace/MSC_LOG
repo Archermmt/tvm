@@ -1,0 +1,139 @@
+2023-11-02 20:00:43,956 message.py[ln:55]<INFO> 
+####################             [MSC] Start init             ####################
+2023-11-02 20:00:43,957 manager.py[ln:60]<INFO> 
+>>>>>>>>>>>>>>>>>>>>                  CONFIG                  >>>>>>>>>>>>>>>>>>>>
+model_type: torch
+inputs: [['input_0', [1, 3, 224, 224], 'float32']]
+outputs: ['output']
+dataset:
+  loader: from_random
+  max_iter: 5
+prepare:
+  profile:
+    benchmark:
+      repeat: 10
+baseline:
+  run_type: torch
+  profile:
+    check:
+      atol: 0.01
+      rtol: 0.01
+    benchmark:
+      repeat: 10
+optimize:
+  run_type: torch
+  run_config:
+    tools_config:
+      prune:
+        runtime_config: msc_prune.json
+        strategy: [{'density': 0.8}]
+compile:
+  run_type: torch
+  profile:
+    check:
+      atol: 0.01
+      rtol: 0.01
+    benchmark:
+      repeat: 10
+workspace: /Users/tongmeng/Desktop/Codes/tvm/tests/python/contrib/test_msc/msc_workspace
+<<<<<<<<<<<<<<<<<<<<                  CONFIG                  <<<<<<<<<<<<<<<<<<<<
+2023-11-02 20:00:43,961 message.py[ln:53]<INFO> 
+####################              [MSC] End init              ####################
+
+2023-11-02 20:00:43,961 message.py[ln:55]<INFO> 
+####################           [MSC] Start prepare            ####################
+2023-11-02 20:00:43,964 manager.py[ln:215]<INFO> 
+>>>>>>>>>>>>>>>>>>>>                  GOLDEN                  >>>>>>>>>>>>>>>>>>>>
+golden_folder: /Users/tongmeng/Desktop/Codes/tvm/tests/python/contrib/test_msc/msc_workspace/Dataset/Golden
+datas_info:
+  inputs:
+    input_0:
+      shape: [1, 3, 224, 224]
+      dtype: float32
+      bytes: 602112
+      save_name: input_0
+  outputs:
+    output:
+      shape: [1, 1000]
+      dtype: float32
+      bytes: 4000
+      save_name: output
+  num_datas: 5
+sample_inputs:
+  input_0: [S:1;3;224;224,D:float32] Max 0.999996, Min 9.56626e-07, Avg 0.500038
+<<<<<<<<<<<<<<<<<<<<                  GOLDEN                  <<<<<<<<<<<<<<<<<<<<
+2023-11-02 20:00:47,539 manager.py[ln:227]<INFO> Profile(prepare) 10 times -> 166.63 ms
+2023-11-02 20:00:47,539 message.py[ln:53]<INFO> 
+####################            [MSC] End prepare             ####################
+
+2023-11-02 20:00:47,540 message.py[ln:55]<INFO> 
+####################            [MSC] Start parse             ####################
+2023-11-02 20:00:47,847 message.py[ln:53]<INFO> 
+####################             [MSC] End parse              ####################
+
+2023-11-02 20:00:47,847 message.py[ln:55]<INFO> 
+####################           [MSC] Start baseline           ####################
+2023-11-02 20:00:49,989 runner.py[ln:168]<INFO> Runnable(torch, eval) loaded on device cpu
+2023-11-02 20:00:51,405 manager.py[ln:393]<INFO> 
+>>>>>>>>>>>>>>>>>>>>         Check(baseline) pass 5/5         >>>>>>>>>>>>>>>>>>>>
+iter_0:
+  output: <Pass> diff [S:1;1000,D:float32] Max 0, Min 0, Avg 0
+iter_1:
+  output: <Pass> diff [S:1;1000,D:float32] Max 0, Min 0, Avg 0
+iter_2:
+  output: <Pass> diff [S:1;1000,D:float32] Max 0, Min 0, Avg 0
+iter_3:
+  output: <Pass> diff [S:1;1000,D:float32] Max 0, Min 0, Avg 0
+iter_4:
+  output: <Pass> diff [S:1;1000,D:float32] Max 0, Min 0, Avg 0
+<<<<<<<<<<<<<<<<<<<<         Check(baseline) pass 5/5         <<<<<<<<<<<<<<<<<<<<
+2023-11-02 20:00:55,651 manager.py[ln:406]<INFO> Profile(baseline) 10 times on cpu -> 202.21 ms
+2023-11-02 20:00:56,901 message.py[ln:53]<INFO> 
+####################            [MSC] End baseline            ####################
+
+2023-11-02 20:00:56,902 message.py[ln:55]<INFO> 
+####################           [MSC] Start optimize           ####################
+2023-11-02 20:01:03,710 manager.py[ln:130]<INFO> 
+>>>>>>>>>>>>>>>>>>>>                 SUMMARY                  >>>>>>>>>>>>>>>>>>>>
+success: false
+info:
+  workspace: /Users/tongmeng/Desktop/Codes/tvm/tests/python/contrib/test_msc/msc_workspace
+  log: /Users/tongmeng/Desktop/Codes/tvm/tests/python/contrib/test_msc/msc_workspace/MSC_LOG
+  model_type: torch
+  baseline_by: torch(cpu)
+duration:
+  total: 12.95 s(100.00%)
+  init: 0.00 s(0.04%)
+  prepare: 3.58 s(27.64%)
+  parse: 0.31 s(2.38%)
+  baseline:
+    total: 9.05 s(69.93%)
+    init: 0.00 s(0.00%)
+    build: 2.14 s(16.54%)
+    profile: 6.91 s(53.39%)
+  optimize: 0.00 s(0.01%)
+profile:
+  prepare:
+    latency: 166.63 ms
+  baseline:
+    accuracy: 5/5(100.00%)
+    latency: 202.21 ms
+err_msg: Pipeline failed:stop here!!
+Trace: Traceback (most recent call last):
+  File "/Users/tongmeng/Desktop/Codes/tvm/python/tvm/contrib/msc/pipeline/manager.py", line 123, in run_pipe
+    self.optimize(self._config["optimize"], use_cache)
+  File "/Users/tongmeng/Desktop/Codes/tvm/python/tvm/contrib/msc/pipeline/manager.py", line 298, in optimize
+    self._runner = self._create_runner(stage_config, use_cache)
+  File "/Users/tongmeng/Desktop/Codes/tvm/python/tvm/contrib/msc/pipeline/manager.py", line 462, in _create_runner
+    runner.build(cache_dir=cache_dir)
+  File "/Users/tongmeng/Desktop/Codes/tvm/python/tvm/contrib/msc/core/runtime/runner.py", line 143, in build
+    self._tools[t_type] = self._create_tool(t_type, config)
+  File "/Users/tongmeng/Desktop/Codes/tvm/python/tvm/contrib/msc/core/runtime/runner.py", line 273, in _create_tool
+    return add_tool(tool_type, tool_cls(impl_cls(), self._graphs, **config))
+  File "/Users/tongmeng/Desktop/Codes/tvm/python/tvm/contrib/msc/core/tools/tool.py", line 158, in __init__
+    self.setup(options)
+  File "/Users/tongmeng/Desktop/Codes/tvm/python/tvm/contrib/msc/core/tools/prune/pruner.py", line 69, in setup
+    raise Exception("stop here!!")
+Exception: stop here!!
+
+<<<<<<<<<<<<<<<<<<<<                 SUMMARY                  <<<<<<<<<<<<<<<<<<<<

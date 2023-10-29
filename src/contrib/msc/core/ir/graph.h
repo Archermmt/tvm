@@ -492,7 +492,7 @@ class WeightJointNode : public BaseJointNode {
   /*! \brief The weight of weight node. */
   MSCTensor weight;
   /*! \brief The friends of weight node. */
-  Array<BaseJoint> friends;
+  mutable Array<BaseJoint> friends;
   /*! \brief Get parent from the node. */
   const WeightJoint ParentAt(int index) const;
   /*! \brief Get child from the node. */
@@ -534,15 +534,15 @@ class WeightJoint : public BaseJoint {
    * \param shared_ref The shared_ref of the node.
    * \param optype The optype of the node.
    * \param wtype The weight type of the node.
-   * \param attrs The attributes of the node.
    * \param weight The weight tensor of the node.
    * \param parents The parents of the node.
+   * \param attrs The attributes of the node.
    * \param friends The friends of the node.
    */
   TVM_DLL WeightJoint(int index, const String& name, const String& shared_ref, const String& optype,
-                      const String& wtype, const Map<String, String>& attrs,
-                      const MSCTensor& weight, const Array<BaseJoint> parents,
-                      const Array<BaseJoint>& friends);
+                      const String& wtype, const MSCTensor& weight, const Array<BaseJoint> parents,
+                      const Map<String, String>& attrs = Map<String, String>(),
+                      const Array<BaseJoint>& friends = Array<BaseJoint>());
 
   TVM_DEFINE_OBJECT_REF_METHODS(WeightJoint, BaseJoint, WeightJointNode);
 };
@@ -715,6 +715,9 @@ class MSCGraph : public BaseGraph {
  */
 class WeightGraphNode : public BaseGraphNode {
  public:
+  /*! \brief build from MSCGraph. */
+  void Build(const MSCGraph& graph, const Map<String, Array<String>>& prunable_types,
+             const Map<String, String>& relation_types);
   /*! \brief Export graph to prototxt. */
   const String ToPrototxt() const;
   /*! \brief Find node in graph. */
@@ -739,12 +742,13 @@ class WeightGraphNode : public BaseGraphNode {
 class WeightGraph : public BaseGraph {
  public:
   /*!
-   * \brief The constructor.
-   * \param name The name of the node.
-   * \param node_names The node names in the graph
-   * \param nodes The nodes in the graph.
+   * \brief The constructor based on MSCGraph.
+   * \param graph The msc graph.
+   * \param prunable_types The prunable types.
+   * \param relation_types The relation types.
    */
-  TVM_DLL WeightGraph(const String& name, const Array<WeightJoint>& node_names);
+  TVM_DLL WeightGraph(const MSCGraph& graph, const Map<String, Array<String>>& prunable_types,
+                      const Map<String, String>& relation_types);
 
   TVM_DEFINE_OBJECT_REF_METHODS(WeightGraph, BaseGraph, WeightGraphNode);
 };

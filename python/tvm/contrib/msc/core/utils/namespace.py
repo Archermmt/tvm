@@ -55,10 +55,16 @@ class MSCKey:
     VERBOSE = "verbose"
     GLOBALE_LOGGER = "global_logger"
     REGISTERED_FUNCS = "registered_funcs"
-    REGISTERED_TOOLS = "registered_tools"
+    REGISTERED_TOOLS_CLS = "registered_tools_cls"
+    REGISTERED_TOOLS_IMPL = "registered_tools_impl"
 
     MSC_STAGE = "msc_stage"
     TIME_STAMPS = "time_stamps"
+
+    PRUNER = "pruner"
+    QUANTIZER = "quantizer"
+    DISTILLER = "distiller"
+    RECORDER = "reocrder"
 
 
 class MSCFramework:

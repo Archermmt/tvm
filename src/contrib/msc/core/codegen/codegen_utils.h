@@ -41,12 +41,10 @@ using namespace tvm::script::printer;
 
 #define CODEGEN_CONFIG_MEMBERS             \
   bool is_train{false};                    \
-  bool need_prune{false};                  \
-  bool need_quantize{false};               \
-  bool need_collect{false};                \
-  bool need_distill{false};                \
-  bool need_process{false};                \
+  bool use_tools{false};                   \
   bool need_test{true};                    \
+  std::string tools_phase{""};             \
+  std::string tools_tag{"main"};           \
   std::string test_device{"cpu"};          \
   std::string prefix{"res_"};              \
   std::string baseline_folder{"baseline"}; \
@@ -55,20 +53,14 @@ using namespace tvm::script::printer;
 #define CODEGEN_CONFIG_PARSE                    \
   if (key == "is_train") {                      \
     reader->Read(&is_train);                    \
-  } else if (key == "need_prune") {             \
-    reader->Read(&need_prune);                  \
-    need_process |= need_prune;                 \
-  } else if (key == "need_quantize") {          \
-    reader->Read(&need_quantize);               \
-    need_process |= need_quantize;              \
-  } else if (key == "need_collect") {           \
-    reader->Read(&need_collect);                \
-    need_process |= need_collect;               \
-  } else if (key == "need_distill") {           \
-    reader->Read(&need_distill);                \
-    need_process |= need_distill;               \
+  } else if (key == "use_tools") {              \
+    reader->Read(&use_tools);                   \
   } else if (key == "need_test") {              \
     reader->Read(&need_test);                   \
+  } else if (key == "tools_phase") {            \
+    reader->Read(&tools_phase);                 \
+  } else if (key == "tools_tag") {              \
+    reader->Read(&tools_tag);                   \
   } else if (key == "test_device") {            \
     reader->Read(&test_device);                 \
   } else if (key == "prefix") {                 \
@@ -88,7 +80,7 @@ using namespace tvm::script::printer;
  protected:                                                                                       \
   const std::shared_ptr<ConfigType> config() { return config_; }                                  \
   const String GetSuffix(bool as_raw = false) {                                                   \
-    const String& suffix = as_raw && config()->need_process ? "_raw" : "";                        \
+    const String& suffix = as_raw && config()->use_tools ? "_raw" : "";                           \
     return suffix;                                                                                \
   }                                                                                               \
   const String IdxNodeBase(const MSCJoint& node, bool as_raw = true) {                            \

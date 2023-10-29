@@ -1,0 +1,3110 @@
+name: "main_weights"
+layer {
+  name: "const"
+  type: "weight"
+  top: "const"
+  layer_param {
+    idx: 0
+    optype: "nn.conv2d"
+    weight: "const(conv2d.weight)<64,3,7,7|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_1"
+  type: "gamma"
+  top: "const_1"
+  bottom: "const"
+  layer_param {
+    idx: 1
+    optype: "nn.batch_norm"
+    weight: "const_1(batch_norm.weight)<64|float32|O>"
+  }
+}
+layer {
+  name: "const_2"
+  type: "beta"
+  top: "const_2"
+  bottom: "const"
+  layer_param {
+    idx: 2
+    optype: "nn.batch_norm"
+    weight: "const_2(batch_norm.bias)<64|float32|O>"
+  }
+}
+layer {
+  name: "const_3"
+  type: "mean"
+  top: "const_3"
+  bottom: "const"
+  layer_param {
+    idx: 3
+    optype: "nn.batch_norm"
+    weight: "const_3(batch_norm.running_mean)<64|float32|O>"
+  }
+}
+layer {
+  name: "const_4"
+  type: "var"
+  top: "const_4"
+  bottom: "const"
+  layer_param {
+    idx: 4
+    optype: "nn.batch_norm"
+    weight: "const_4(batch_norm.running_var)<64|float32|O>"
+  }
+}
+layer {
+  name: "const_5"
+  type: "weight"
+  top: "const_5"
+  bottom: "const"
+  layer_param {
+    idx: 5
+    optype: "nn.conv2d"
+    weight: "const_5(conv2d_1.weight)<64,64,1,1|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_6"
+  type: "gamma"
+  top: "const_6"
+  bottom: "const_5"
+  layer_param {
+    idx: 6
+    optype: "nn.batch_norm"
+    weight: "const_6(batch_norm_1.weight)<64|float32|O>"
+  }
+}
+layer {
+  name: "const_7"
+  type: "beta"
+  top: "const_7"
+  bottom: "const_5"
+  layer_param {
+    idx: 7
+    optype: "nn.batch_norm"
+    weight: "const_7(batch_norm_1.bias)<64|float32|O>"
+  }
+}
+layer {
+  name: "const_8"
+  type: "mean"
+  top: "const_8"
+  bottom: "const_5"
+  layer_param {
+    idx: 8
+    optype: "nn.batch_norm"
+    weight: "const_8(batch_norm_1.running_mean)<64|float32|O>"
+  }
+}
+layer {
+  name: "const_9"
+  type: "var"
+  top: "const_9"
+  bottom: "const_5"
+  layer_param {
+    idx: 9
+    optype: "nn.batch_norm"
+    weight: "const_9(batch_norm_1.running_var)<64|float32|O>"
+  }
+}
+layer {
+  name: "const_10"
+  type: "weight"
+  top: "const_10"
+  bottom: "const_5"
+  layer_param {
+    idx: 10
+    optype: "nn.conv2d"
+    weight: "const_10(conv2d_2.weight)<64,64,3,3|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_11"
+  type: "gamma"
+  top: "const_11"
+  bottom: "const_10"
+  layer_param {
+    idx: 11
+    optype: "nn.batch_norm"
+    weight: "const_11(batch_norm_2.weight)<64|float32|O>"
+  }
+}
+layer {
+  name: "const_12"
+  type: "beta"
+  top: "const_12"
+  bottom: "const_10"
+  layer_param {
+    idx: 12
+    optype: "nn.batch_norm"
+    weight: "const_12(batch_norm_2.bias)<64|float32|O>"
+  }
+}
+layer {
+  name: "const_13"
+  type: "mean"
+  top: "const_13"
+  bottom: "const_10"
+  layer_param {
+    idx: 13
+    optype: "nn.batch_norm"
+    weight: "const_13(batch_norm_2.running_mean)<64|float32|O>"
+  }
+}
+layer {
+  name: "const_14"
+  type: "var"
+  top: "const_14"
+  bottom: "const_10"
+  layer_param {
+    idx: 14
+    optype: "nn.batch_norm"
+    weight: "const_14(batch_norm_2.running_var)<64|float32|O>"
+  }
+}
+layer {
+  name: "const_15"
+  type: "weight"
+  top: "const_15"
+  bottom: "const_10"
+  layer_param {
+    friend_0: "ID_50 const_50 <PARENTS: const_45| CHILDERN: >\n  FRIENDS: const_50,const_35,const_15,const_20\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_50(conv2d_10.weight)<256,64,1,1|float32|OIHW>\n"
+    friend_2: "ID_15 const_15 <PARENTS: const_10| CHILDERN: >\n  FRIENDS: const_50,const_35,const_15,const_20\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_15(conv2d_3.weight)<256,64,1,1|float32|OIHW>\n"
+    friend_3: "ID_20 const_20 <PARENTS: const| CHILDERN: >\n  FRIENDS: const_50,const_35,const_15,const_20\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_20(conv2d_4.weight)<256,64,1,1|float32|OIHW>\n"
+    friend_1: "ID_35 const_35 <PARENTS: const_30| CHILDERN: >\n  FRIENDS: const_50,const_35,const_15,const_20\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_35(conv2d_7.weight)<256,64,1,1|float32|OIHW>\n"
+    idx: 15
+    weight: "const_15(conv2d_3.weight)<256,64,1,1|float32|OIHW>"
+    optype: "nn.conv2d"
+  }
+}
+layer {
+  name: "const_16"
+  type: "gamma"
+  top: "const_16"
+  bottom: "const_15"
+  layer_param {
+    idx: 16
+    optype: "nn.batch_norm"
+    weight: "const_16(batch_norm_3.weight)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_17"
+  type: "beta"
+  top: "const_17"
+  bottom: "const_15"
+  layer_param {
+    idx: 17
+    optype: "nn.batch_norm"
+    weight: "const_17(batch_norm_3.bias)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_18"
+  type: "mean"
+  top: "const_18"
+  bottom: "const_15"
+  layer_param {
+    idx: 18
+    optype: "nn.batch_norm"
+    weight: "const_18(batch_norm_3.running_mean)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_19"
+  type: "var"
+  top: "const_19"
+  bottom: "const_15"
+  layer_param {
+    idx: 19
+    optype: "nn.batch_norm"
+    weight: "const_19(batch_norm_3.running_var)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_20"
+  type: "weight"
+  top: "const_20"
+  bottom: "const"
+  layer_param {
+    friend_0: "ID_50 const_50 <PARENTS: const_45| CHILDERN: >\n  FRIENDS: const_50,const_35,const_15,const_20\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_50(conv2d_10.weight)<256,64,1,1|float32|OIHW>\n"
+    friend_2: "ID_15 const_15 <PARENTS: const_10| CHILDERN: >\n  FRIENDS: const_50,const_35,const_15,const_20\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_15(conv2d_3.weight)<256,64,1,1|float32|OIHW>\n"
+    friend_3: "ID_20 const_20 <PARENTS: const| CHILDERN: >\n  FRIENDS: const_50,const_35,const_15,const_20\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_20(conv2d_4.weight)<256,64,1,1|float32|OIHW>\n"
+    friend_1: "ID_35 const_35 <PARENTS: const_30| CHILDERN: >\n  FRIENDS: const_50,const_35,const_15,const_20\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_35(conv2d_7.weight)<256,64,1,1|float32|OIHW>\n"
+    idx: 20
+    weight: "const_20(conv2d_4.weight)<256,64,1,1|float32|OIHW>"
+    optype: "nn.conv2d"
+  }
+}
+layer {
+  name: "const_21"
+  type: "gamma"
+  top: "const_21"
+  bottom: "const_20"
+  layer_param {
+    idx: 21
+    optype: "nn.batch_norm"
+    weight: "const_21(batch_norm_4.weight)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_22"
+  type: "beta"
+  top: "const_22"
+  bottom: "const_20"
+  layer_param {
+    idx: 22
+    optype: "nn.batch_norm"
+    weight: "const_22(batch_norm_4.bias)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_23"
+  type: "mean"
+  top: "const_23"
+  bottom: "const_20"
+  layer_param {
+    idx: 23
+    optype: "nn.batch_norm"
+    weight: "const_23(batch_norm_4.running_mean)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_24"
+  type: "var"
+  top: "const_24"
+  bottom: "const_20"
+  layer_param {
+    idx: 24
+    optype: "nn.batch_norm"
+    weight: "const_24(batch_norm_4.running_var)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_25"
+  type: "weight"
+  top: "const_25"
+  bottom: "const_15"
+  bottom: "const_20"
+  layer_param {
+    idx: 25
+    optype: "nn.conv2d"
+    weight: "const_25(conv2d_5.weight)<64,256,1,1|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_26"
+  type: "gamma"
+  top: "const_26"
+  bottom: "const_25"
+  layer_param {
+    idx: 26
+    optype: "nn.batch_norm"
+    weight: "const_26(batch_norm_5.weight)<64|float32|O>"
+  }
+}
+layer {
+  name: "const_27"
+  type: "beta"
+  top: "const_27"
+  bottom: "const_25"
+  layer_param {
+    idx: 27
+    optype: "nn.batch_norm"
+    weight: "const_27(batch_norm_5.bias)<64|float32|O>"
+  }
+}
+layer {
+  name: "const_28"
+  type: "mean"
+  top: "const_28"
+  bottom: "const_25"
+  layer_param {
+    idx: 28
+    optype: "nn.batch_norm"
+    weight: "const_28(batch_norm_5.running_mean)<64|float32|O>"
+  }
+}
+layer {
+  name: "const_29"
+  type: "var"
+  top: "const_29"
+  bottom: "const_25"
+  layer_param {
+    idx: 29
+    optype: "nn.batch_norm"
+    weight: "const_29(batch_norm_5.running_var)<64|float32|O>"
+  }
+}
+layer {
+  name: "const_30"
+  type: "weight"
+  top: "const_30"
+  bottom: "const_25"
+  layer_param {
+    idx: 30
+    optype: "nn.conv2d"
+    weight: "const_30(conv2d_6.weight)<64,64,3,3|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_31"
+  type: "gamma"
+  top: "const_31"
+  bottom: "const_30"
+  layer_param {
+    idx: 31
+    optype: "nn.batch_norm"
+    weight: "const_31(batch_norm_6.weight)<64|float32|O>"
+  }
+}
+layer {
+  name: "const_32"
+  type: "beta"
+  top: "const_32"
+  bottom: "const_30"
+  layer_param {
+    idx: 32
+    optype: "nn.batch_norm"
+    weight: "const_32(batch_norm_6.bias)<64|float32|O>"
+  }
+}
+layer {
+  name: "const_33"
+  type: "mean"
+  top: "const_33"
+  bottom: "const_30"
+  layer_param {
+    idx: 33
+    optype: "nn.batch_norm"
+    weight: "const_33(batch_norm_6.running_mean)<64|float32|O>"
+  }
+}
+layer {
+  name: "const_34"
+  type: "var"
+  top: "const_34"
+  bottom: "const_30"
+  layer_param {
+    idx: 34
+    optype: "nn.batch_norm"
+    weight: "const_34(batch_norm_6.running_var)<64|float32|O>"
+  }
+}
+layer {
+  name: "const_35"
+  type: "weight"
+  top: "const_35"
+  bottom: "const_30"
+  layer_param {
+    friend_0: "ID_50 const_50 <PARENTS: const_45| CHILDERN: >\n  FRIENDS: const_50,const_35,const_15,const_20\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_50(conv2d_10.weight)<256,64,1,1|float32|OIHW>\n"
+    friend_2: "ID_15 const_15 <PARENTS: const_10| CHILDERN: >\n  FRIENDS: const_50,const_35,const_15,const_20\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_15(conv2d_3.weight)<256,64,1,1|float32|OIHW>\n"
+    friend_3: "ID_20 const_20 <PARENTS: const| CHILDERN: >\n  FRIENDS: const_50,const_35,const_15,const_20\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_20(conv2d_4.weight)<256,64,1,1|float32|OIHW>\n"
+    friend_1: "ID_35 const_35 <PARENTS: const_30| CHILDERN: >\n  FRIENDS: const_50,const_35,const_15,const_20\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_35(conv2d_7.weight)<256,64,1,1|float32|OIHW>\n"
+    idx: 35
+    weight: "const_35(conv2d_7.weight)<256,64,1,1|float32|OIHW>"
+    optype: "nn.conv2d"
+  }
+}
+layer {
+  name: "const_36"
+  type: "gamma"
+  top: "const_36"
+  bottom: "const_35"
+  layer_param {
+    idx: 36
+    optype: "nn.batch_norm"
+    weight: "const_36(batch_norm_7.weight)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_37"
+  type: "beta"
+  top: "const_37"
+  bottom: "const_35"
+  layer_param {
+    idx: 37
+    optype: "nn.batch_norm"
+    weight: "const_37(batch_norm_7.bias)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_38"
+  type: "mean"
+  top: "const_38"
+  bottom: "const_35"
+  layer_param {
+    idx: 38
+    optype: "nn.batch_norm"
+    weight: "const_38(batch_norm_7.running_mean)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_39"
+  type: "var"
+  top: "const_39"
+  bottom: "const_35"
+  layer_param {
+    idx: 39
+    optype: "nn.batch_norm"
+    weight: "const_39(batch_norm_7.running_var)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_40"
+  type: "weight"
+  top: "const_40"
+  bottom: "const_35"
+  bottom: "const_15"
+  bottom: "const_20"
+  layer_param {
+    idx: 40
+    optype: "nn.conv2d"
+    weight: "const_40(conv2d_8.weight)<64,256,1,1|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_41"
+  type: "gamma"
+  top: "const_41"
+  bottom: "const_40"
+  layer_param {
+    idx: 41
+    optype: "nn.batch_norm"
+    weight: "const_41(batch_norm_8.weight)<64|float32|O>"
+  }
+}
+layer {
+  name: "const_42"
+  type: "beta"
+  top: "const_42"
+  bottom: "const_40"
+  layer_param {
+    idx: 42
+    optype: "nn.batch_norm"
+    weight: "const_42(batch_norm_8.bias)<64|float32|O>"
+  }
+}
+layer {
+  name: "const_43"
+  type: "mean"
+  top: "const_43"
+  bottom: "const_40"
+  layer_param {
+    idx: 43
+    optype: "nn.batch_norm"
+    weight: "const_43(batch_norm_8.running_mean)<64|float32|O>"
+  }
+}
+layer {
+  name: "const_44"
+  type: "var"
+  top: "const_44"
+  bottom: "const_40"
+  layer_param {
+    idx: 44
+    optype: "nn.batch_norm"
+    weight: "const_44(batch_norm_8.running_var)<64|float32|O>"
+  }
+}
+layer {
+  name: "const_45"
+  type: "weight"
+  top: "const_45"
+  bottom: "const_40"
+  layer_param {
+    idx: 45
+    optype: "nn.conv2d"
+    weight: "const_45(conv2d_9.weight)<64,64,3,3|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_46"
+  type: "gamma"
+  top: "const_46"
+  bottom: "const_45"
+  layer_param {
+    idx: 46
+    optype: "nn.batch_norm"
+    weight: "const_46(batch_norm_9.weight)<64|float32|O>"
+  }
+}
+layer {
+  name: "const_47"
+  type: "beta"
+  top: "const_47"
+  bottom: "const_45"
+  layer_param {
+    idx: 47
+    optype: "nn.batch_norm"
+    weight: "const_47(batch_norm_9.bias)<64|float32|O>"
+  }
+}
+layer {
+  name: "const_48"
+  type: "mean"
+  top: "const_48"
+  bottom: "const_45"
+  layer_param {
+    idx: 48
+    optype: "nn.batch_norm"
+    weight: "const_48(batch_norm_9.running_mean)<64|float32|O>"
+  }
+}
+layer {
+  name: "const_49"
+  type: "var"
+  top: "const_49"
+  bottom: "const_45"
+  layer_param {
+    idx: 49
+    optype: "nn.batch_norm"
+    weight: "const_49(batch_norm_9.running_var)<64|float32|O>"
+  }
+}
+layer {
+  name: "const_50"
+  type: "weight"
+  top: "const_50"
+  bottom: "const_45"
+  layer_param {
+    friend_0: "ID_50 const_50 <PARENTS: const_45| CHILDERN: >\n  FRIENDS: const_50,const_35,const_15,const_20\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_50(conv2d_10.weight)<256,64,1,1|float32|OIHW>\n"
+    friend_2: "ID_15 const_15 <PARENTS: const_10| CHILDERN: >\n  FRIENDS: const_50,const_35,const_15,const_20\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_15(conv2d_3.weight)<256,64,1,1|float32|OIHW>\n"
+    friend_3: "ID_20 const_20 <PARENTS: const| CHILDERN: >\n  FRIENDS: const_50,const_35,const_15,const_20\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_20(conv2d_4.weight)<256,64,1,1|float32|OIHW>\n"
+    friend_1: "ID_35 const_35 <PARENTS: const_30| CHILDERN: >\n  FRIENDS: const_50,const_35,const_15,const_20\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_35(conv2d_7.weight)<256,64,1,1|float32|OIHW>\n"
+    idx: 50
+    weight: "const_50(conv2d_10.weight)<256,64,1,1|float32|OIHW>"
+    optype: "nn.conv2d"
+  }
+}
+layer {
+  name: "const_51"
+  type: "gamma"
+  top: "const_51"
+  bottom: "const_50"
+  layer_param {
+    idx: 51
+    optype: "nn.batch_norm"
+    weight: "const_51(batch_norm_10.weight)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_52"
+  type: "beta"
+  top: "const_52"
+  bottom: "const_50"
+  layer_param {
+    idx: 52
+    optype: "nn.batch_norm"
+    weight: "const_52(batch_norm_10.bias)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_53"
+  type: "mean"
+  top: "const_53"
+  bottom: "const_50"
+  layer_param {
+    idx: 53
+    optype: "nn.batch_norm"
+    weight: "const_53(batch_norm_10.running_mean)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_54"
+  type: "var"
+  top: "const_54"
+  bottom: "const_50"
+  layer_param {
+    idx: 54
+    optype: "nn.batch_norm"
+    weight: "const_54(batch_norm_10.running_var)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_55"
+  type: "weight"
+  top: "const_55"
+  bottom: "const_50"
+  bottom: "const_35"
+  bottom: "const_15"
+  bottom: "const_20"
+  layer_param {
+    idx: 55
+    optype: "nn.conv2d"
+    weight: "const_55(conv2d_11.weight)<128,256,1,1|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_56"
+  type: "gamma"
+  top: "const_56"
+  bottom: "const_55"
+  layer_param {
+    idx: 56
+    optype: "nn.batch_norm"
+    weight: "const_56(batch_norm_11.weight)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_57"
+  type: "beta"
+  top: "const_57"
+  bottom: "const_55"
+  layer_param {
+    idx: 57
+    optype: "nn.batch_norm"
+    weight: "const_57(batch_norm_11.bias)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_58"
+  type: "mean"
+  top: "const_58"
+  bottom: "const_55"
+  layer_param {
+    idx: 58
+    optype: "nn.batch_norm"
+    weight: "const_58(batch_norm_11.running_mean)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_59"
+  type: "var"
+  top: "const_59"
+  bottom: "const_55"
+  layer_param {
+    idx: 59
+    optype: "nn.batch_norm"
+    weight: "const_59(batch_norm_11.running_var)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_60"
+  type: "weight"
+  top: "const_60"
+  bottom: "const_55"
+  layer_param {
+    idx: 60
+    optype: "nn.conv2d"
+    weight: "const_60(conv2d_12.weight)<128,128,3,3|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_61"
+  type: "gamma"
+  top: "const_61"
+  bottom: "const_60"
+  layer_param {
+    idx: 61
+    optype: "nn.batch_norm"
+    weight: "const_61(batch_norm_12.weight)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_62"
+  type: "beta"
+  top: "const_62"
+  bottom: "const_60"
+  layer_param {
+    idx: 62
+    optype: "nn.batch_norm"
+    weight: "const_62(batch_norm_12.bias)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_63"
+  type: "mean"
+  top: "const_63"
+  bottom: "const_60"
+  layer_param {
+    idx: 63
+    optype: "nn.batch_norm"
+    weight: "const_63(batch_norm_12.running_mean)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_64"
+  type: "var"
+  top: "const_64"
+  bottom: "const_60"
+  layer_param {
+    idx: 64
+    optype: "nn.batch_norm"
+    weight: "const_64(batch_norm_12.running_var)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_65"
+  type: "weight"
+  top: "const_65"
+  bottom: "const_60"
+  layer_param {
+    friend_0: "ID_115 const_115 <PARENTS: const_110| CHILDERN: >\n  FRIENDS: const_115,const_100,const_85,const_65,const_70\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_115(conv2d_23.weight)<512,128,1,1|float32|OIHW>\n"
+    friend_2: "ID_85 const_85 <PARENTS: const_80| CHILDERN: >\n  FRIENDS: const_115,const_100,const_85,const_65,const_70\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_85(conv2d_17.weight)<512,128,1,1|float32|OIHW>\n"
+    friend_3: "ID_65 const_65 <PARENTS: const_60| CHILDERN: >\n  FRIENDS: const_115,const_100,const_85,const_65,const_70\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_65(conv2d_13.weight)<512,128,1,1|float32|OIHW>\n"
+    friend_1: "ID_100 const_100 <PARENTS: const_95| CHILDERN: >\n  FRIENDS: const_115,const_100,const_85,const_65,const_70\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_100(conv2d_20.weight)<512,128,1,1|float32|OIHW>\n"
+    idx: 65
+    friend_4: "ID_70 const_70 <PARENTS: const_50,const_35,const_15,const_20| CHILDERN: >\n  FRIENDS: const_115,const_100,const_85,const_65,const_70\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_70(conv2d_14.weight)<512,256,1,1|float32|OIHW>\n"
+    weight: "const_65(conv2d_13.weight)<512,128,1,1|float32|OIHW>"
+    optype: "nn.conv2d"
+  }
+}
+layer {
+  name: "const_66"
+  type: "gamma"
+  top: "const_66"
+  bottom: "const_65"
+  layer_param {
+    idx: 66
+    optype: "nn.batch_norm"
+    weight: "const_66(batch_norm_13.weight)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_67"
+  type: "beta"
+  top: "const_67"
+  bottom: "const_65"
+  layer_param {
+    idx: 67
+    optype: "nn.batch_norm"
+    weight: "const_67(batch_norm_13.bias)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_68"
+  type: "mean"
+  top: "const_68"
+  bottom: "const_65"
+  layer_param {
+    idx: 68
+    optype: "nn.batch_norm"
+    weight: "const_68(batch_norm_13.running_mean)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_69"
+  type: "var"
+  top: "const_69"
+  bottom: "const_65"
+  layer_param {
+    idx: 69
+    optype: "nn.batch_norm"
+    weight: "const_69(batch_norm_13.running_var)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_70"
+  type: "weight"
+  top: "const_70"
+  bottom: "const_50"
+  bottom: "const_35"
+  bottom: "const_15"
+  bottom: "const_20"
+  layer_param {
+    friend_0: "ID_115 const_115 <PARENTS: const_110| CHILDERN: >\n  FRIENDS: const_115,const_100,const_85,const_65,const_70\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_115(conv2d_23.weight)<512,128,1,1|float32|OIHW>\n"
+    friend_2: "ID_85 const_85 <PARENTS: const_80| CHILDERN: >\n  FRIENDS: const_115,const_100,const_85,const_65,const_70\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_85(conv2d_17.weight)<512,128,1,1|float32|OIHW>\n"
+    friend_3: "ID_65 const_65 <PARENTS: const_60| CHILDERN: >\n  FRIENDS: const_115,const_100,const_85,const_65,const_70\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_65(conv2d_13.weight)<512,128,1,1|float32|OIHW>\n"
+    friend_1: "ID_100 const_100 <PARENTS: const_95| CHILDERN: >\n  FRIENDS: const_115,const_100,const_85,const_65,const_70\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_100(conv2d_20.weight)<512,128,1,1|float32|OIHW>\n"
+    idx: 70
+    friend_4: "ID_70 const_70 <PARENTS: const_50,const_35,const_15,const_20| CHILDERN: >\n  FRIENDS: const_115,const_100,const_85,const_65,const_70\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_70(conv2d_14.weight)<512,256,1,1|float32|OIHW>\n"
+    weight: "const_70(conv2d_14.weight)<512,256,1,1|float32|OIHW>"
+    optype: "nn.conv2d"
+  }
+}
+layer {
+  name: "const_71"
+  type: "gamma"
+  top: "const_71"
+  bottom: "const_70"
+  layer_param {
+    idx: 71
+    optype: "nn.batch_norm"
+    weight: "const_71(batch_norm_14.weight)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_72"
+  type: "beta"
+  top: "const_72"
+  bottom: "const_70"
+  layer_param {
+    idx: 72
+    optype: "nn.batch_norm"
+    weight: "const_72(batch_norm_14.bias)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_73"
+  type: "mean"
+  top: "const_73"
+  bottom: "const_70"
+  layer_param {
+    idx: 73
+    optype: "nn.batch_norm"
+    weight: "const_73(batch_norm_14.running_mean)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_74"
+  type: "var"
+  top: "const_74"
+  bottom: "const_70"
+  layer_param {
+    idx: 74
+    optype: "nn.batch_norm"
+    weight: "const_74(batch_norm_14.running_var)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_75"
+  type: "weight"
+  top: "const_75"
+  bottom: "const_65"
+  bottom: "const_70"
+  layer_param {
+    idx: 75
+    optype: "nn.conv2d"
+    weight: "const_75(conv2d_15.weight)<128,512,1,1|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_76"
+  type: "gamma"
+  top: "const_76"
+  bottom: "const_75"
+  layer_param {
+    idx: 76
+    optype: "nn.batch_norm"
+    weight: "const_76(batch_norm_15.weight)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_77"
+  type: "beta"
+  top: "const_77"
+  bottom: "const_75"
+  layer_param {
+    idx: 77
+    optype: "nn.batch_norm"
+    weight: "const_77(batch_norm_15.bias)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_78"
+  type: "mean"
+  top: "const_78"
+  bottom: "const_75"
+  layer_param {
+    idx: 78
+    optype: "nn.batch_norm"
+    weight: "const_78(batch_norm_15.running_mean)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_79"
+  type: "var"
+  top: "const_79"
+  bottom: "const_75"
+  layer_param {
+    idx: 79
+    optype: "nn.batch_norm"
+    weight: "const_79(batch_norm_15.running_var)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_80"
+  type: "weight"
+  top: "const_80"
+  bottom: "const_75"
+  layer_param {
+    idx: 80
+    optype: "nn.conv2d"
+    weight: "const_80(conv2d_16.weight)<128,128,3,3|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_81"
+  type: "gamma"
+  top: "const_81"
+  bottom: "const_80"
+  layer_param {
+    idx: 81
+    optype: "nn.batch_norm"
+    weight: "const_81(batch_norm_16.weight)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_82"
+  type: "beta"
+  top: "const_82"
+  bottom: "const_80"
+  layer_param {
+    idx: 82
+    optype: "nn.batch_norm"
+    weight: "const_82(batch_norm_16.bias)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_83"
+  type: "mean"
+  top: "const_83"
+  bottom: "const_80"
+  layer_param {
+    idx: 83
+    optype: "nn.batch_norm"
+    weight: "const_83(batch_norm_16.running_mean)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_84"
+  type: "var"
+  top: "const_84"
+  bottom: "const_80"
+  layer_param {
+    idx: 84
+    optype: "nn.batch_norm"
+    weight: "const_84(batch_norm_16.running_var)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_85"
+  type: "weight"
+  top: "const_85"
+  bottom: "const_80"
+  layer_param {
+    friend_0: "ID_115 const_115 <PARENTS: const_110| CHILDERN: >\n  FRIENDS: const_115,const_100,const_85,const_65,const_70\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_115(conv2d_23.weight)<512,128,1,1|float32|OIHW>\n"
+    friend_2: "ID_85 const_85 <PARENTS: const_80| CHILDERN: >\n  FRIENDS: const_115,const_100,const_85,const_65,const_70\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_85(conv2d_17.weight)<512,128,1,1|float32|OIHW>\n"
+    friend_3: "ID_65 const_65 <PARENTS: const_60| CHILDERN: >\n  FRIENDS: const_115,const_100,const_85,const_65,const_70\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_65(conv2d_13.weight)<512,128,1,1|float32|OIHW>\n"
+    friend_1: "ID_100 const_100 <PARENTS: const_95| CHILDERN: >\n  FRIENDS: const_115,const_100,const_85,const_65,const_70\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_100(conv2d_20.weight)<512,128,1,1|float32|OIHW>\n"
+    idx: 85
+    friend_4: "ID_70 const_70 <PARENTS: const_50,const_35,const_15,const_20| CHILDERN: >\n  FRIENDS: const_115,const_100,const_85,const_65,const_70\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_70(conv2d_14.weight)<512,256,1,1|float32|OIHW>\n"
+    weight: "const_85(conv2d_17.weight)<512,128,1,1|float32|OIHW>"
+    optype: "nn.conv2d"
+  }
+}
+layer {
+  name: "const_86"
+  type: "gamma"
+  top: "const_86"
+  bottom: "const_85"
+  layer_param {
+    idx: 86
+    optype: "nn.batch_norm"
+    weight: "const_86(batch_norm_17.weight)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_87"
+  type: "beta"
+  top: "const_87"
+  bottom: "const_85"
+  layer_param {
+    idx: 87
+    optype: "nn.batch_norm"
+    weight: "const_87(batch_norm_17.bias)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_88"
+  type: "mean"
+  top: "const_88"
+  bottom: "const_85"
+  layer_param {
+    idx: 88
+    optype: "nn.batch_norm"
+    weight: "const_88(batch_norm_17.running_mean)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_89"
+  type: "var"
+  top: "const_89"
+  bottom: "const_85"
+  layer_param {
+    idx: 89
+    optype: "nn.batch_norm"
+    weight: "const_89(batch_norm_17.running_var)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_90"
+  type: "weight"
+  top: "const_90"
+  bottom: "const_85"
+  bottom: "const_65"
+  bottom: "const_70"
+  layer_param {
+    idx: 90
+    optype: "nn.conv2d"
+    weight: "const_90(conv2d_18.weight)<128,512,1,1|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_91"
+  type: "gamma"
+  top: "const_91"
+  bottom: "const_90"
+  layer_param {
+    idx: 91
+    optype: "nn.batch_norm"
+    weight: "const_91(batch_norm_18.weight)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_92"
+  type: "beta"
+  top: "const_92"
+  bottom: "const_90"
+  layer_param {
+    idx: 92
+    optype: "nn.batch_norm"
+    weight: "const_92(batch_norm_18.bias)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_93"
+  type: "mean"
+  top: "const_93"
+  bottom: "const_90"
+  layer_param {
+    idx: 93
+    optype: "nn.batch_norm"
+    weight: "const_93(batch_norm_18.running_mean)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_94"
+  type: "var"
+  top: "const_94"
+  bottom: "const_90"
+  layer_param {
+    idx: 94
+    optype: "nn.batch_norm"
+    weight: "const_94(batch_norm_18.running_var)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_95"
+  type: "weight"
+  top: "const_95"
+  bottom: "const_90"
+  layer_param {
+    idx: 95
+    optype: "nn.conv2d"
+    weight: "const_95(conv2d_19.weight)<128,128,3,3|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_96"
+  type: "gamma"
+  top: "const_96"
+  bottom: "const_95"
+  layer_param {
+    idx: 96
+    optype: "nn.batch_norm"
+    weight: "const_96(batch_norm_19.weight)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_97"
+  type: "beta"
+  top: "const_97"
+  bottom: "const_95"
+  layer_param {
+    idx: 97
+    optype: "nn.batch_norm"
+    weight: "const_97(batch_norm_19.bias)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_98"
+  type: "mean"
+  top: "const_98"
+  bottom: "const_95"
+  layer_param {
+    idx: 98
+    optype: "nn.batch_norm"
+    weight: "const_98(batch_norm_19.running_mean)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_99"
+  type: "var"
+  top: "const_99"
+  bottom: "const_95"
+  layer_param {
+    idx: 99
+    optype: "nn.batch_norm"
+    weight: "const_99(batch_norm_19.running_var)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_100"
+  type: "weight"
+  top: "const_100"
+  bottom: "const_95"
+  layer_param {
+    friend_0: "ID_115 const_115 <PARENTS: const_110| CHILDERN: >\n  FRIENDS: const_115,const_100,const_85,const_65,const_70\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_115(conv2d_23.weight)<512,128,1,1|float32|OIHW>\n"
+    friend_2: "ID_85 const_85 <PARENTS: const_80| CHILDERN: >\n  FRIENDS: const_115,const_100,const_85,const_65,const_70\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_85(conv2d_17.weight)<512,128,1,1|float32|OIHW>\n"
+    friend_3: "ID_65 const_65 <PARENTS: const_60| CHILDERN: >\n  FRIENDS: const_115,const_100,const_85,const_65,const_70\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_65(conv2d_13.weight)<512,128,1,1|float32|OIHW>\n"
+    friend_1: "ID_100 const_100 <PARENTS: const_95| CHILDERN: >\n  FRIENDS: const_115,const_100,const_85,const_65,const_70\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_100(conv2d_20.weight)<512,128,1,1|float32|OIHW>\n"
+    idx: 100
+    friend_4: "ID_70 const_70 <PARENTS: const_50,const_35,const_15,const_20| CHILDERN: >\n  FRIENDS: const_115,const_100,const_85,const_65,const_70\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_70(conv2d_14.weight)<512,256,1,1|float32|OIHW>\n"
+    weight: "const_100(conv2d_20.weight)<512,128,1,1|float32|OIHW>"
+    optype: "nn.conv2d"
+  }
+}
+layer {
+  name: "const_101"
+  type: "gamma"
+  top: "const_101"
+  bottom: "const_100"
+  layer_param {
+    idx: 101
+    optype: "nn.batch_norm"
+    weight: "const_101(batch_norm_20.weight)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_102"
+  type: "beta"
+  top: "const_102"
+  bottom: "const_100"
+  layer_param {
+    idx: 102
+    optype: "nn.batch_norm"
+    weight: "const_102(batch_norm_20.bias)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_103"
+  type: "mean"
+  top: "const_103"
+  bottom: "const_100"
+  layer_param {
+    idx: 103
+    optype: "nn.batch_norm"
+    weight: "const_103(batch_norm_20.running_mean)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_104"
+  type: "var"
+  top: "const_104"
+  bottom: "const_100"
+  layer_param {
+    idx: 104
+    optype: "nn.batch_norm"
+    weight: "const_104(batch_norm_20.running_var)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_105"
+  type: "weight"
+  top: "const_105"
+  bottom: "const_100"
+  bottom: "const_85"
+  bottom: "const_65"
+  bottom: "const_70"
+  layer_param {
+    idx: 105
+    optype: "nn.conv2d"
+    weight: "const_105(conv2d_21.weight)<128,512,1,1|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_106"
+  type: "gamma"
+  top: "const_106"
+  bottom: "const_105"
+  layer_param {
+    idx: 106
+    optype: "nn.batch_norm"
+    weight: "const_106(batch_norm_21.weight)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_107"
+  type: "beta"
+  top: "const_107"
+  bottom: "const_105"
+  layer_param {
+    idx: 107
+    optype: "nn.batch_norm"
+    weight: "const_107(batch_norm_21.bias)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_108"
+  type: "mean"
+  top: "const_108"
+  bottom: "const_105"
+  layer_param {
+    idx: 108
+    optype: "nn.batch_norm"
+    weight: "const_108(batch_norm_21.running_mean)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_109"
+  type: "var"
+  top: "const_109"
+  bottom: "const_105"
+  layer_param {
+    idx: 109
+    optype: "nn.batch_norm"
+    weight: "const_109(batch_norm_21.running_var)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_110"
+  type: "weight"
+  top: "const_110"
+  bottom: "const_105"
+  layer_param {
+    idx: 110
+    optype: "nn.conv2d"
+    weight: "const_110(conv2d_22.weight)<128,128,3,3|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_111"
+  type: "gamma"
+  top: "const_111"
+  bottom: "const_110"
+  layer_param {
+    idx: 111
+    optype: "nn.batch_norm"
+    weight: "const_111(batch_norm_22.weight)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_112"
+  type: "beta"
+  top: "const_112"
+  bottom: "const_110"
+  layer_param {
+    idx: 112
+    optype: "nn.batch_norm"
+    weight: "const_112(batch_norm_22.bias)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_113"
+  type: "mean"
+  top: "const_113"
+  bottom: "const_110"
+  layer_param {
+    idx: 113
+    optype: "nn.batch_norm"
+    weight: "const_113(batch_norm_22.running_mean)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_114"
+  type: "var"
+  top: "const_114"
+  bottom: "const_110"
+  layer_param {
+    idx: 114
+    optype: "nn.batch_norm"
+    weight: "const_114(batch_norm_22.running_var)<128|float32|O>"
+  }
+}
+layer {
+  name: "const_115"
+  type: "weight"
+  top: "const_115"
+  bottom: "const_110"
+  layer_param {
+    friend_0: "ID_115 const_115 <PARENTS: const_110| CHILDERN: >\n  FRIENDS: const_115,const_100,const_85,const_65,const_70\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_115(conv2d_23.weight)<512,128,1,1|float32|OIHW>\n"
+    friend_2: "ID_85 const_85 <PARENTS: const_80| CHILDERN: >\n  FRIENDS: const_115,const_100,const_85,const_65,const_70\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_85(conv2d_17.weight)<512,128,1,1|float32|OIHW>\n"
+    friend_3: "ID_65 const_65 <PARENTS: const_60| CHILDERN: >\n  FRIENDS: const_115,const_100,const_85,const_65,const_70\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_65(conv2d_13.weight)<512,128,1,1|float32|OIHW>\n"
+    friend_1: "ID_100 const_100 <PARENTS: const_95| CHILDERN: >\n  FRIENDS: const_115,const_100,const_85,const_65,const_70\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_100(conv2d_20.weight)<512,128,1,1|float32|OIHW>\n"
+    idx: 115
+    friend_4: "ID_70 const_70 <PARENTS: const_50,const_35,const_15,const_20| CHILDERN: >\n  FRIENDS: const_115,const_100,const_85,const_65,const_70\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_70(conv2d_14.weight)<512,256,1,1|float32|OIHW>\n"
+    weight: "const_115(conv2d_23.weight)<512,128,1,1|float32|OIHW>"
+    optype: "nn.conv2d"
+  }
+}
+layer {
+  name: "const_116"
+  type: "gamma"
+  top: "const_116"
+  bottom: "const_115"
+  layer_param {
+    idx: 116
+    optype: "nn.batch_norm"
+    weight: "const_116(batch_norm_23.weight)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_117"
+  type: "beta"
+  top: "const_117"
+  bottom: "const_115"
+  layer_param {
+    idx: 117
+    optype: "nn.batch_norm"
+    weight: "const_117(batch_norm_23.bias)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_118"
+  type: "mean"
+  top: "const_118"
+  bottom: "const_115"
+  layer_param {
+    idx: 118
+    optype: "nn.batch_norm"
+    weight: "const_118(batch_norm_23.running_mean)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_119"
+  type: "var"
+  top: "const_119"
+  bottom: "const_115"
+  layer_param {
+    idx: 119
+    optype: "nn.batch_norm"
+    weight: "const_119(batch_norm_23.running_var)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_120"
+  type: "weight"
+  top: "const_120"
+  bottom: "const_115"
+  bottom: "const_100"
+  bottom: "const_85"
+  bottom: "const_65"
+  bottom: "const_70"
+  layer_param {
+    idx: 120
+    optype: "nn.conv2d"
+    weight: "const_120(conv2d_24.weight)<256,512,1,1|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_121"
+  type: "gamma"
+  top: "const_121"
+  bottom: "const_120"
+  layer_param {
+    idx: 121
+    optype: "nn.batch_norm"
+    weight: "const_121(batch_norm_24.weight)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_122"
+  type: "beta"
+  top: "const_122"
+  bottom: "const_120"
+  layer_param {
+    idx: 122
+    optype: "nn.batch_norm"
+    weight: "const_122(batch_norm_24.bias)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_123"
+  type: "mean"
+  top: "const_123"
+  bottom: "const_120"
+  layer_param {
+    idx: 123
+    optype: "nn.batch_norm"
+    weight: "const_123(batch_norm_24.running_mean)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_124"
+  type: "var"
+  top: "const_124"
+  bottom: "const_120"
+  layer_param {
+    idx: 124
+    optype: "nn.batch_norm"
+    weight: "const_124(batch_norm_24.running_var)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_125"
+  type: "weight"
+  top: "const_125"
+  bottom: "const_120"
+  layer_param {
+    idx: 125
+    optype: "nn.conv2d"
+    weight: "const_125(conv2d_25.weight)<256,256,3,3|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_126"
+  type: "gamma"
+  top: "const_126"
+  bottom: "const_125"
+  layer_param {
+    idx: 126
+    optype: "nn.batch_norm"
+    weight: "const_126(batch_norm_25.weight)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_127"
+  type: "beta"
+  top: "const_127"
+  bottom: "const_125"
+  layer_param {
+    idx: 127
+    optype: "nn.batch_norm"
+    weight: "const_127(batch_norm_25.bias)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_128"
+  type: "mean"
+  top: "const_128"
+  bottom: "const_125"
+  layer_param {
+    idx: 128
+    optype: "nn.batch_norm"
+    weight: "const_128(batch_norm_25.running_mean)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_129"
+  type: "var"
+  top: "const_129"
+  bottom: "const_125"
+  layer_param {
+    idx: 129
+    optype: "nn.batch_norm"
+    weight: "const_129(batch_norm_25.running_var)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_130"
+  type: "weight"
+  top: "const_130"
+  bottom: "const_125"
+  layer_param {
+    optype: "nn.conv2d"
+    friend_5: "ID_130 const_130 <PARENTS: const_125| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_130(conv2d_26.weight)<1024,256,1,1|float32|OIHW>\n"
+    friend_3: "ID_165 const_165 <PARENTS: const_160| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_165(conv2d_33.weight)<1024,256,1,1|float32|OIHW>\n"
+    friend_1: "ID_195 const_195 <PARENTS: const_190| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_195(conv2d_39.weight)<1024,256,1,1|float32|OIHW>\n"
+    idx: 130
+    friend_6: "ID_135 const_135 <PARENTS: const_115,const_100,const_85,const_65,const_70| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_135(conv2d_27.weight)<1024,512,1,1|float32|OIHW>\n"
+    friend_4: "ID_150 const_150 <PARENTS: const_145| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_150(conv2d_30.weight)<1024,256,1,1|float32|OIHW>\n"
+    friend_2: "ID_180 const_180 <PARENTS: const_175| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_180(conv2d_36.weight)<1024,256,1,1|float32|OIHW>\n"
+    friend_0: "ID_210 const_210 <PARENTS: const_205| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_210(conv2d_42.weight)<1024,256,1,1|float32|OIHW>\n"
+    weight: "const_130(conv2d_26.weight)<1024,256,1,1|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_131"
+  type: "gamma"
+  top: "const_131"
+  bottom: "const_130"
+  layer_param {
+    idx: 131
+    optype: "nn.batch_norm"
+    weight: "const_131(batch_norm_26.weight)<1024|float32|O>"
+  }
+}
+layer {
+  name: "const_132"
+  type: "beta"
+  top: "const_132"
+  bottom: "const_130"
+  layer_param {
+    idx: 132
+    optype: "nn.batch_norm"
+    weight: "const_132(batch_norm_26.bias)<1024|float32|O>"
+  }
+}
+layer {
+  name: "const_133"
+  type: "mean"
+  top: "const_133"
+  bottom: "const_130"
+  layer_param {
+    idx: 133
+    optype: "nn.batch_norm"
+    weight: "const_133(batch_norm_26.running_mean)<1024|float32|O>"
+  }
+}
+layer {
+  name: "const_134"
+  type: "var"
+  top: "const_134"
+  bottom: "const_130"
+  layer_param {
+    idx: 134
+    optype: "nn.batch_norm"
+    weight: "const_134(batch_norm_26.running_var)<1024|float32|O>"
+  }
+}
+layer {
+  name: "const_135"
+  type: "weight"
+  top: "const_135"
+  bottom: "const_115"
+  bottom: "const_100"
+  bottom: "const_85"
+  bottom: "const_65"
+  bottom: "const_70"
+  layer_param {
+    optype: "nn.conv2d"
+    friend_5: "ID_130 const_130 <PARENTS: const_125| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_130(conv2d_26.weight)<1024,256,1,1|float32|OIHW>\n"
+    friend_3: "ID_165 const_165 <PARENTS: const_160| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_165(conv2d_33.weight)<1024,256,1,1|float32|OIHW>\n"
+    friend_1: "ID_195 const_195 <PARENTS: const_190| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_195(conv2d_39.weight)<1024,256,1,1|float32|OIHW>\n"
+    idx: 135
+    friend_6: "ID_135 const_135 <PARENTS: const_115,const_100,const_85,const_65,const_70| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_135(conv2d_27.weight)<1024,512,1,1|float32|OIHW>\n"
+    friend_4: "ID_150 const_150 <PARENTS: const_145| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_150(conv2d_30.weight)<1024,256,1,1|float32|OIHW>\n"
+    friend_2: "ID_180 const_180 <PARENTS: const_175| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_180(conv2d_36.weight)<1024,256,1,1|float32|OIHW>\n"
+    friend_0: "ID_210 const_210 <PARENTS: const_205| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_210(conv2d_42.weight)<1024,256,1,1|float32|OIHW>\n"
+    weight: "const_135(conv2d_27.weight)<1024,512,1,1|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_136"
+  type: "gamma"
+  top: "const_136"
+  bottom: "const_135"
+  layer_param {
+    idx: 136
+    optype: "nn.batch_norm"
+    weight: "const_136(batch_norm_27.weight)<1024|float32|O>"
+  }
+}
+layer {
+  name: "const_137"
+  type: "beta"
+  top: "const_137"
+  bottom: "const_135"
+  layer_param {
+    idx: 137
+    optype: "nn.batch_norm"
+    weight: "const_137(batch_norm_27.bias)<1024|float32|O>"
+  }
+}
+layer {
+  name: "const_138"
+  type: "mean"
+  top: "const_138"
+  bottom: "const_135"
+  layer_param {
+    idx: 138
+    optype: "nn.batch_norm"
+    weight: "const_138(batch_norm_27.running_mean)<1024|float32|O>"
+  }
+}
+layer {
+  name: "const_139"
+  type: "var"
+  top: "const_139"
+  bottom: "const_135"
+  layer_param {
+    idx: 139
+    optype: "nn.batch_norm"
+    weight: "const_139(batch_norm_27.running_var)<1024|float32|O>"
+  }
+}
+layer {
+  name: "const_140"
+  type: "weight"
+  top: "const_140"
+  bottom: "const_130"
+  bottom: "const_135"
+  layer_param {
+    idx: 140
+    optype: "nn.conv2d"
+    weight: "const_140(conv2d_28.weight)<256,1024,1,1|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_141"
+  type: "gamma"
+  top: "const_141"
+  bottom: "const_140"
+  layer_param {
+    idx: 141
+    optype: "nn.batch_norm"
+    weight: "const_141(batch_norm_28.weight)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_142"
+  type: "beta"
+  top: "const_142"
+  bottom: "const_140"
+  layer_param {
+    idx: 142
+    optype: "nn.batch_norm"
+    weight: "const_142(batch_norm_28.bias)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_143"
+  type: "mean"
+  top: "const_143"
+  bottom: "const_140"
+  layer_param {
+    idx: 143
+    optype: "nn.batch_norm"
+    weight: "const_143(batch_norm_28.running_mean)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_144"
+  type: "var"
+  top: "const_144"
+  bottom: "const_140"
+  layer_param {
+    idx: 144
+    optype: "nn.batch_norm"
+    weight: "const_144(batch_norm_28.running_var)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_145"
+  type: "weight"
+  top: "const_145"
+  bottom: "const_140"
+  layer_param {
+    idx: 145
+    optype: "nn.conv2d"
+    weight: "const_145(conv2d_29.weight)<256,256,3,3|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_146"
+  type: "gamma"
+  top: "const_146"
+  bottom: "const_145"
+  layer_param {
+    idx: 146
+    optype: "nn.batch_norm"
+    weight: "const_146(batch_norm_29.weight)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_147"
+  type: "beta"
+  top: "const_147"
+  bottom: "const_145"
+  layer_param {
+    idx: 147
+    optype: "nn.batch_norm"
+    weight: "const_147(batch_norm_29.bias)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_148"
+  type: "mean"
+  top: "const_148"
+  bottom: "const_145"
+  layer_param {
+    idx: 148
+    optype: "nn.batch_norm"
+    weight: "const_148(batch_norm_29.running_mean)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_149"
+  type: "var"
+  top: "const_149"
+  bottom: "const_145"
+  layer_param {
+    idx: 149
+    optype: "nn.batch_norm"
+    weight: "const_149(batch_norm_29.running_var)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_150"
+  type: "weight"
+  top: "const_150"
+  bottom: "const_145"
+  layer_param {
+    optype: "nn.conv2d"
+    friend_5: "ID_130 const_130 <PARENTS: const_125| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_130(conv2d_26.weight)<1024,256,1,1|float32|OIHW>\n"
+    friend_3: "ID_165 const_165 <PARENTS: const_160| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_165(conv2d_33.weight)<1024,256,1,1|float32|OIHW>\n"
+    friend_1: "ID_195 const_195 <PARENTS: const_190| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_195(conv2d_39.weight)<1024,256,1,1|float32|OIHW>\n"
+    idx: 150
+    friend_6: "ID_135 const_135 <PARENTS: const_115,const_100,const_85,const_65,const_70| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_135(conv2d_27.weight)<1024,512,1,1|float32|OIHW>\n"
+    friend_4: "ID_150 const_150 <PARENTS: const_145| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_150(conv2d_30.weight)<1024,256,1,1|float32|OIHW>\n"
+    friend_2: "ID_180 const_180 <PARENTS: const_175| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_180(conv2d_36.weight)<1024,256,1,1|float32|OIHW>\n"
+    friend_0: "ID_210 const_210 <PARENTS: const_205| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_210(conv2d_42.weight)<1024,256,1,1|float32|OIHW>\n"
+    weight: "const_150(conv2d_30.weight)<1024,256,1,1|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_151"
+  type: "gamma"
+  top: "const_151"
+  bottom: "const_150"
+  layer_param {
+    idx: 151
+    optype: "nn.batch_norm"
+    weight: "const_151(batch_norm_30.weight)<1024|float32|O>"
+  }
+}
+layer {
+  name: "const_152"
+  type: "beta"
+  top: "const_152"
+  bottom: "const_150"
+  layer_param {
+    idx: 152
+    optype: "nn.batch_norm"
+    weight: "const_152(batch_norm_30.bias)<1024|float32|O>"
+  }
+}
+layer {
+  name: "const_153"
+  type: "mean"
+  top: "const_153"
+  bottom: "const_150"
+  layer_param {
+    idx: 153
+    optype: "nn.batch_norm"
+    weight: "const_153(batch_norm_30.running_mean)<1024|float32|O>"
+  }
+}
+layer {
+  name: "const_154"
+  type: "var"
+  top: "const_154"
+  bottom: "const_150"
+  layer_param {
+    idx: 154
+    optype: "nn.batch_norm"
+    weight: "const_154(batch_norm_30.running_var)<1024|float32|O>"
+  }
+}
+layer {
+  name: "const_155"
+  type: "weight"
+  top: "const_155"
+  bottom: "const_150"
+  bottom: "const_130"
+  bottom: "const_135"
+  layer_param {
+    idx: 155
+    optype: "nn.conv2d"
+    weight: "const_155(conv2d_31.weight)<256,1024,1,1|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_156"
+  type: "gamma"
+  top: "const_156"
+  bottom: "const_155"
+  layer_param {
+    idx: 156
+    optype: "nn.batch_norm"
+    weight: "const_156(batch_norm_31.weight)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_157"
+  type: "beta"
+  top: "const_157"
+  bottom: "const_155"
+  layer_param {
+    idx: 157
+    optype: "nn.batch_norm"
+    weight: "const_157(batch_norm_31.bias)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_158"
+  type: "mean"
+  top: "const_158"
+  bottom: "const_155"
+  layer_param {
+    idx: 158
+    optype: "nn.batch_norm"
+    weight: "const_158(batch_norm_31.running_mean)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_159"
+  type: "var"
+  top: "const_159"
+  bottom: "const_155"
+  layer_param {
+    idx: 159
+    optype: "nn.batch_norm"
+    weight: "const_159(batch_norm_31.running_var)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_160"
+  type: "weight"
+  top: "const_160"
+  bottom: "const_155"
+  layer_param {
+    idx: 160
+    optype: "nn.conv2d"
+    weight: "const_160(conv2d_32.weight)<256,256,3,3|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_161"
+  type: "gamma"
+  top: "const_161"
+  bottom: "const_160"
+  layer_param {
+    idx: 161
+    optype: "nn.batch_norm"
+    weight: "const_161(batch_norm_32.weight)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_162"
+  type: "beta"
+  top: "const_162"
+  bottom: "const_160"
+  layer_param {
+    idx: 162
+    optype: "nn.batch_norm"
+    weight: "const_162(batch_norm_32.bias)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_163"
+  type: "mean"
+  top: "const_163"
+  bottom: "const_160"
+  layer_param {
+    idx: 163
+    optype: "nn.batch_norm"
+    weight: "const_163(batch_norm_32.running_mean)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_164"
+  type: "var"
+  top: "const_164"
+  bottom: "const_160"
+  layer_param {
+    idx: 164
+    optype: "nn.batch_norm"
+    weight: "const_164(batch_norm_32.running_var)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_165"
+  type: "weight"
+  top: "const_165"
+  bottom: "const_160"
+  layer_param {
+    optype: "nn.conv2d"
+    friend_5: "ID_130 const_130 <PARENTS: const_125| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_130(conv2d_26.weight)<1024,256,1,1|float32|OIHW>\n"
+    friend_3: "ID_165 const_165 <PARENTS: const_160| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_165(conv2d_33.weight)<1024,256,1,1|float32|OIHW>\n"
+    friend_1: "ID_195 const_195 <PARENTS: const_190| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_195(conv2d_39.weight)<1024,256,1,1|float32|OIHW>\n"
+    idx: 165
+    friend_6: "ID_135 const_135 <PARENTS: const_115,const_100,const_85,const_65,const_70| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_135(conv2d_27.weight)<1024,512,1,1|float32|OIHW>\n"
+    friend_4: "ID_150 const_150 <PARENTS: const_145| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_150(conv2d_30.weight)<1024,256,1,1|float32|OIHW>\n"
+    friend_2: "ID_180 const_180 <PARENTS: const_175| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_180(conv2d_36.weight)<1024,256,1,1|float32|OIHW>\n"
+    friend_0: "ID_210 const_210 <PARENTS: const_205| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_210(conv2d_42.weight)<1024,256,1,1|float32|OIHW>\n"
+    weight: "const_165(conv2d_33.weight)<1024,256,1,1|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_166"
+  type: "gamma"
+  top: "const_166"
+  bottom: "const_165"
+  layer_param {
+    idx: 166
+    optype: "nn.batch_norm"
+    weight: "const_166(batch_norm_33.weight)<1024|float32|O>"
+  }
+}
+layer {
+  name: "const_167"
+  type: "beta"
+  top: "const_167"
+  bottom: "const_165"
+  layer_param {
+    idx: 167
+    optype: "nn.batch_norm"
+    weight: "const_167(batch_norm_33.bias)<1024|float32|O>"
+  }
+}
+layer {
+  name: "const_168"
+  type: "mean"
+  top: "const_168"
+  bottom: "const_165"
+  layer_param {
+    idx: 168
+    optype: "nn.batch_norm"
+    weight: "const_168(batch_norm_33.running_mean)<1024|float32|O>"
+  }
+}
+layer {
+  name: "const_169"
+  type: "var"
+  top: "const_169"
+  bottom: "const_165"
+  layer_param {
+    idx: 169
+    optype: "nn.batch_norm"
+    weight: "const_169(batch_norm_33.running_var)<1024|float32|O>"
+  }
+}
+layer {
+  name: "const_170"
+  type: "weight"
+  top: "const_170"
+  bottom: "const_165"
+  bottom: "const_150"
+  bottom: "const_130"
+  bottom: "const_135"
+  layer_param {
+    idx: 170
+    optype: "nn.conv2d"
+    weight: "const_170(conv2d_34.weight)<256,1024,1,1|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_171"
+  type: "gamma"
+  top: "const_171"
+  bottom: "const_170"
+  layer_param {
+    idx: 171
+    optype: "nn.batch_norm"
+    weight: "const_171(batch_norm_34.weight)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_172"
+  type: "beta"
+  top: "const_172"
+  bottom: "const_170"
+  layer_param {
+    idx: 172
+    optype: "nn.batch_norm"
+    weight: "const_172(batch_norm_34.bias)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_173"
+  type: "mean"
+  top: "const_173"
+  bottom: "const_170"
+  layer_param {
+    idx: 173
+    optype: "nn.batch_norm"
+    weight: "const_173(batch_norm_34.running_mean)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_174"
+  type: "var"
+  top: "const_174"
+  bottom: "const_170"
+  layer_param {
+    idx: 174
+    optype: "nn.batch_norm"
+    weight: "const_174(batch_norm_34.running_var)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_175"
+  type: "weight"
+  top: "const_175"
+  bottom: "const_170"
+  layer_param {
+    idx: 175
+    optype: "nn.conv2d"
+    weight: "const_175(conv2d_35.weight)<256,256,3,3|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_176"
+  type: "gamma"
+  top: "const_176"
+  bottom: "const_175"
+  layer_param {
+    idx: 176
+    optype: "nn.batch_norm"
+    weight: "const_176(batch_norm_35.weight)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_177"
+  type: "beta"
+  top: "const_177"
+  bottom: "const_175"
+  layer_param {
+    idx: 177
+    optype: "nn.batch_norm"
+    weight: "const_177(batch_norm_35.bias)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_178"
+  type: "mean"
+  top: "const_178"
+  bottom: "const_175"
+  layer_param {
+    idx: 178
+    optype: "nn.batch_norm"
+    weight: "const_178(batch_norm_35.running_mean)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_179"
+  type: "var"
+  top: "const_179"
+  bottom: "const_175"
+  layer_param {
+    idx: 179
+    optype: "nn.batch_norm"
+    weight: "const_179(batch_norm_35.running_var)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_180"
+  type: "weight"
+  top: "const_180"
+  bottom: "const_175"
+  layer_param {
+    optype: "nn.conv2d"
+    friend_5: "ID_130 const_130 <PARENTS: const_125| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_130(conv2d_26.weight)<1024,256,1,1|float32|OIHW>\n"
+    friend_3: "ID_165 const_165 <PARENTS: const_160| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_165(conv2d_33.weight)<1024,256,1,1|float32|OIHW>\n"
+    friend_1: "ID_195 const_195 <PARENTS: const_190| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_195(conv2d_39.weight)<1024,256,1,1|float32|OIHW>\n"
+    idx: 180
+    friend_6: "ID_135 const_135 <PARENTS: const_115,const_100,const_85,const_65,const_70| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_135(conv2d_27.weight)<1024,512,1,1|float32|OIHW>\n"
+    friend_4: "ID_150 const_150 <PARENTS: const_145| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_150(conv2d_30.weight)<1024,256,1,1|float32|OIHW>\n"
+    friend_2: "ID_180 const_180 <PARENTS: const_175| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_180(conv2d_36.weight)<1024,256,1,1|float32|OIHW>\n"
+    friend_0: "ID_210 const_210 <PARENTS: const_205| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_210(conv2d_42.weight)<1024,256,1,1|float32|OIHW>\n"
+    weight: "const_180(conv2d_36.weight)<1024,256,1,1|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_181"
+  type: "gamma"
+  top: "const_181"
+  bottom: "const_180"
+  layer_param {
+    idx: 181
+    optype: "nn.batch_norm"
+    weight: "const_181(batch_norm_36.weight)<1024|float32|O>"
+  }
+}
+layer {
+  name: "const_182"
+  type: "beta"
+  top: "const_182"
+  bottom: "const_180"
+  layer_param {
+    idx: 182
+    optype: "nn.batch_norm"
+    weight: "const_182(batch_norm_36.bias)<1024|float32|O>"
+  }
+}
+layer {
+  name: "const_183"
+  type: "mean"
+  top: "const_183"
+  bottom: "const_180"
+  layer_param {
+    idx: 183
+    optype: "nn.batch_norm"
+    weight: "const_183(batch_norm_36.running_mean)<1024|float32|O>"
+  }
+}
+layer {
+  name: "const_184"
+  type: "var"
+  top: "const_184"
+  bottom: "const_180"
+  layer_param {
+    idx: 184
+    optype: "nn.batch_norm"
+    weight: "const_184(batch_norm_36.running_var)<1024|float32|O>"
+  }
+}
+layer {
+  name: "const_185"
+  type: "weight"
+  top: "const_185"
+  bottom: "const_180"
+  bottom: "const_165"
+  bottom: "const_150"
+  bottom: "const_130"
+  bottom: "const_135"
+  layer_param {
+    idx: 185
+    optype: "nn.conv2d"
+    weight: "const_185(conv2d_37.weight)<256,1024,1,1|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_186"
+  type: "gamma"
+  top: "const_186"
+  bottom: "const_185"
+  layer_param {
+    idx: 186
+    optype: "nn.batch_norm"
+    weight: "const_186(batch_norm_37.weight)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_187"
+  type: "beta"
+  top: "const_187"
+  bottom: "const_185"
+  layer_param {
+    idx: 187
+    optype: "nn.batch_norm"
+    weight: "const_187(batch_norm_37.bias)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_188"
+  type: "mean"
+  top: "const_188"
+  bottom: "const_185"
+  layer_param {
+    idx: 188
+    optype: "nn.batch_norm"
+    weight: "const_188(batch_norm_37.running_mean)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_189"
+  type: "var"
+  top: "const_189"
+  bottom: "const_185"
+  layer_param {
+    idx: 189
+    optype: "nn.batch_norm"
+    weight: "const_189(batch_norm_37.running_var)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_190"
+  type: "weight"
+  top: "const_190"
+  bottom: "const_185"
+  layer_param {
+    idx: 190
+    optype: "nn.conv2d"
+    weight: "const_190(conv2d_38.weight)<256,256,3,3|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_191"
+  type: "gamma"
+  top: "const_191"
+  bottom: "const_190"
+  layer_param {
+    idx: 191
+    optype: "nn.batch_norm"
+    weight: "const_191(batch_norm_38.weight)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_192"
+  type: "beta"
+  top: "const_192"
+  bottom: "const_190"
+  layer_param {
+    idx: 192
+    optype: "nn.batch_norm"
+    weight: "const_192(batch_norm_38.bias)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_193"
+  type: "mean"
+  top: "const_193"
+  bottom: "const_190"
+  layer_param {
+    idx: 193
+    optype: "nn.batch_norm"
+    weight: "const_193(batch_norm_38.running_mean)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_194"
+  type: "var"
+  top: "const_194"
+  bottom: "const_190"
+  layer_param {
+    idx: 194
+    optype: "nn.batch_norm"
+    weight: "const_194(batch_norm_38.running_var)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_195"
+  type: "weight"
+  top: "const_195"
+  bottom: "const_190"
+  layer_param {
+    optype: "nn.conv2d"
+    friend_5: "ID_130 const_130 <PARENTS: const_125| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_130(conv2d_26.weight)<1024,256,1,1|float32|OIHW>\n"
+    friend_3: "ID_165 const_165 <PARENTS: const_160| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_165(conv2d_33.weight)<1024,256,1,1|float32|OIHW>\n"
+    friend_1: "ID_195 const_195 <PARENTS: const_190| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_195(conv2d_39.weight)<1024,256,1,1|float32|OIHW>\n"
+    idx: 195
+    friend_6: "ID_135 const_135 <PARENTS: const_115,const_100,const_85,const_65,const_70| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_135(conv2d_27.weight)<1024,512,1,1|float32|OIHW>\n"
+    friend_4: "ID_150 const_150 <PARENTS: const_145| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_150(conv2d_30.weight)<1024,256,1,1|float32|OIHW>\n"
+    friend_2: "ID_180 const_180 <PARENTS: const_175| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_180(conv2d_36.weight)<1024,256,1,1|float32|OIHW>\n"
+    friend_0: "ID_210 const_210 <PARENTS: const_205| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_210(conv2d_42.weight)<1024,256,1,1|float32|OIHW>\n"
+    weight: "const_195(conv2d_39.weight)<1024,256,1,1|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_196"
+  type: "gamma"
+  top: "const_196"
+  bottom: "const_195"
+  layer_param {
+    idx: 196
+    optype: "nn.batch_norm"
+    weight: "const_196(batch_norm_39.weight)<1024|float32|O>"
+  }
+}
+layer {
+  name: "const_197"
+  type: "beta"
+  top: "const_197"
+  bottom: "const_195"
+  layer_param {
+    idx: 197
+    optype: "nn.batch_norm"
+    weight: "const_197(batch_norm_39.bias)<1024|float32|O>"
+  }
+}
+layer {
+  name: "const_198"
+  type: "mean"
+  top: "const_198"
+  bottom: "const_195"
+  layer_param {
+    idx: 198
+    optype: "nn.batch_norm"
+    weight: "const_198(batch_norm_39.running_mean)<1024|float32|O>"
+  }
+}
+layer {
+  name: "const_199"
+  type: "var"
+  top: "const_199"
+  bottom: "const_195"
+  layer_param {
+    idx: 199
+    optype: "nn.batch_norm"
+    weight: "const_199(batch_norm_39.running_var)<1024|float32|O>"
+  }
+}
+layer {
+  name: "const_200"
+  type: "weight"
+  top: "const_200"
+  bottom: "const_195"
+  bottom: "const_180"
+  bottom: "const_165"
+  bottom: "const_150"
+  bottom: "const_130"
+  bottom: "const_135"
+  layer_param {
+    idx: 200
+    optype: "nn.conv2d"
+    weight: "const_200(conv2d_40.weight)<256,1024,1,1|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_201"
+  type: "gamma"
+  top: "const_201"
+  bottom: "const_200"
+  layer_param {
+    idx: 201
+    optype: "nn.batch_norm"
+    weight: "const_201(batch_norm_40.weight)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_202"
+  type: "beta"
+  top: "const_202"
+  bottom: "const_200"
+  layer_param {
+    idx: 202
+    optype: "nn.batch_norm"
+    weight: "const_202(batch_norm_40.bias)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_203"
+  type: "mean"
+  top: "const_203"
+  bottom: "const_200"
+  layer_param {
+    idx: 203
+    optype: "nn.batch_norm"
+    weight: "const_203(batch_norm_40.running_mean)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_204"
+  type: "var"
+  top: "const_204"
+  bottom: "const_200"
+  layer_param {
+    idx: 204
+    optype: "nn.batch_norm"
+    weight: "const_204(batch_norm_40.running_var)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_205"
+  type: "weight"
+  top: "const_205"
+  bottom: "const_200"
+  layer_param {
+    idx: 205
+    optype: "nn.conv2d"
+    weight: "const_205(conv2d_41.weight)<256,256,3,3|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_206"
+  type: "gamma"
+  top: "const_206"
+  bottom: "const_205"
+  layer_param {
+    idx: 206
+    optype: "nn.batch_norm"
+    weight: "const_206(batch_norm_41.weight)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_207"
+  type: "beta"
+  top: "const_207"
+  bottom: "const_205"
+  layer_param {
+    idx: 207
+    optype: "nn.batch_norm"
+    weight: "const_207(batch_norm_41.bias)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_208"
+  type: "mean"
+  top: "const_208"
+  bottom: "const_205"
+  layer_param {
+    idx: 208
+    optype: "nn.batch_norm"
+    weight: "const_208(batch_norm_41.running_mean)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_209"
+  type: "var"
+  top: "const_209"
+  bottom: "const_205"
+  layer_param {
+    idx: 209
+    optype: "nn.batch_norm"
+    weight: "const_209(batch_norm_41.running_var)<256|float32|O>"
+  }
+}
+layer {
+  name: "const_210"
+  type: "weight"
+  top: "const_210"
+  bottom: "const_205"
+  layer_param {
+    optype: "nn.conv2d"
+    friend_5: "ID_130 const_130 <PARENTS: const_125| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_130(conv2d_26.weight)<1024,256,1,1|float32|OIHW>\n"
+    friend_3: "ID_165 const_165 <PARENTS: const_160| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_165(conv2d_33.weight)<1024,256,1,1|float32|OIHW>\n"
+    friend_1: "ID_195 const_195 <PARENTS: const_190| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_195(conv2d_39.weight)<1024,256,1,1|float32|OIHW>\n"
+    idx: 210
+    friend_6: "ID_135 const_135 <PARENTS: const_115,const_100,const_85,const_65,const_70| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_135(conv2d_27.weight)<1024,512,1,1|float32|OIHW>\n"
+    friend_4: "ID_150 const_150 <PARENTS: const_145| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_150(conv2d_30.weight)<1024,256,1,1|float32|OIHW>\n"
+    friend_2: "ID_180 const_180 <PARENTS: const_175| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_180(conv2d_36.weight)<1024,256,1,1|float32|OIHW>\n"
+    friend_0: "ID_210 const_210 <PARENTS: const_205| CHILDERN: >\n  FRIENDS: const_210,const_195,const_180,const_165,const_150,const_130,const_135\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_210(conv2d_42.weight)<1024,256,1,1|float32|OIHW>\n"
+    weight: "const_210(conv2d_42.weight)<1024,256,1,1|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_211"
+  type: "gamma"
+  top: "const_211"
+  bottom: "const_210"
+  layer_param {
+    idx: 211
+    optype: "nn.batch_norm"
+    weight: "const_211(batch_norm_42.weight)<1024|float32|O>"
+  }
+}
+layer {
+  name: "const_212"
+  type: "beta"
+  top: "const_212"
+  bottom: "const_210"
+  layer_param {
+    idx: 212
+    optype: "nn.batch_norm"
+    weight: "const_212(batch_norm_42.bias)<1024|float32|O>"
+  }
+}
+layer {
+  name: "const_213"
+  type: "mean"
+  top: "const_213"
+  bottom: "const_210"
+  layer_param {
+    idx: 213
+    optype: "nn.batch_norm"
+    weight: "const_213(batch_norm_42.running_mean)<1024|float32|O>"
+  }
+}
+layer {
+  name: "const_214"
+  type: "var"
+  top: "const_214"
+  bottom: "const_210"
+  layer_param {
+    idx: 214
+    optype: "nn.batch_norm"
+    weight: "const_214(batch_norm_42.running_var)<1024|float32|O>"
+  }
+}
+layer {
+  name: "const_215"
+  type: "weight"
+  top: "const_215"
+  bottom: "const_210"
+  bottom: "const_195"
+  bottom: "const_180"
+  bottom: "const_165"
+  bottom: "const_150"
+  bottom: "const_130"
+  bottom: "const_135"
+  layer_param {
+    idx: 215
+    optype: "nn.conv2d"
+    weight: "const_215(conv2d_43.weight)<512,1024,1,1|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_216"
+  type: "gamma"
+  top: "const_216"
+  bottom: "const_215"
+  layer_param {
+    idx: 216
+    optype: "nn.batch_norm"
+    weight: "const_216(batch_norm_43.weight)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_217"
+  type: "beta"
+  top: "const_217"
+  bottom: "const_215"
+  layer_param {
+    idx: 217
+    optype: "nn.batch_norm"
+    weight: "const_217(batch_norm_43.bias)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_218"
+  type: "mean"
+  top: "const_218"
+  bottom: "const_215"
+  layer_param {
+    idx: 218
+    optype: "nn.batch_norm"
+    weight: "const_218(batch_norm_43.running_mean)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_219"
+  type: "var"
+  top: "const_219"
+  bottom: "const_215"
+  layer_param {
+    idx: 219
+    optype: "nn.batch_norm"
+    weight: "const_219(batch_norm_43.running_var)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_220"
+  type: "weight"
+  top: "const_220"
+  bottom: "const_215"
+  layer_param {
+    idx: 220
+    optype: "nn.conv2d"
+    weight: "const_220(conv2d_44.weight)<512,512,3,3|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_221"
+  type: "gamma"
+  top: "const_221"
+  bottom: "const_220"
+  layer_param {
+    idx: 221
+    optype: "nn.batch_norm"
+    weight: "const_221(batch_norm_44.weight)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_222"
+  type: "beta"
+  top: "const_222"
+  bottom: "const_220"
+  layer_param {
+    idx: 222
+    optype: "nn.batch_norm"
+    weight: "const_222(batch_norm_44.bias)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_223"
+  type: "mean"
+  top: "const_223"
+  bottom: "const_220"
+  layer_param {
+    idx: 223
+    optype: "nn.batch_norm"
+    weight: "const_223(batch_norm_44.running_mean)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_224"
+  type: "var"
+  top: "const_224"
+  bottom: "const_220"
+  layer_param {
+    idx: 224
+    optype: "nn.batch_norm"
+    weight: "const_224(batch_norm_44.running_var)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_225"
+  type: "weight"
+  top: "const_225"
+  bottom: "const_220"
+  layer_param {
+    friend_0: "ID_260 const_260 <PARENTS: const_255| CHILDERN: >\n  FRIENDS: const_260,const_245,const_225,const_230\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_260(conv2d_52.weight)<2048,512,1,1|float32|OIHW>\n"
+    friend_2: "ID_225 const_225 <PARENTS: const_220| CHILDERN: >\n  FRIENDS: const_260,const_245,const_225,const_230\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_225(conv2d_45.weight)<2048,512,1,1|float32|OIHW>\n"
+    friend_3: "ID_230 const_230 <PARENTS: const_210,const_195,const_180,const_165,const_150,const_130,const_135| CHILDERN: >\n  FRIENDS: const_260,const_245,const_225,const_230\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_230(conv2d_46.weight)<2048,1024,1,1|float32|OIHW>\n"
+    friend_1: "ID_245 const_245 <PARENTS: const_240| CHILDERN: >\n  FRIENDS: const_260,const_245,const_225,const_230\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_245(conv2d_49.weight)<2048,512,1,1|float32|OIHW>\n"
+    idx: 225
+    weight: "const_225(conv2d_45.weight)<2048,512,1,1|float32|OIHW>"
+    optype: "nn.conv2d"
+  }
+}
+layer {
+  name: "const_226"
+  type: "gamma"
+  top: "const_226"
+  bottom: "const_225"
+  layer_param {
+    idx: 226
+    optype: "nn.batch_norm"
+    weight: "const_226(batch_norm_45.weight)<2048|float32|O>"
+  }
+}
+layer {
+  name: "const_227"
+  type: "beta"
+  top: "const_227"
+  bottom: "const_225"
+  layer_param {
+    idx: 227
+    optype: "nn.batch_norm"
+    weight: "const_227(batch_norm_45.bias)<2048|float32|O>"
+  }
+}
+layer {
+  name: "const_228"
+  type: "mean"
+  top: "const_228"
+  bottom: "const_225"
+  layer_param {
+    idx: 228
+    optype: "nn.batch_norm"
+    weight: "const_228(batch_norm_45.running_mean)<2048|float32|O>"
+  }
+}
+layer {
+  name: "const_229"
+  type: "var"
+  top: "const_229"
+  bottom: "const_225"
+  layer_param {
+    idx: 229
+    optype: "nn.batch_norm"
+    weight: "const_229(batch_norm_45.running_var)<2048|float32|O>"
+  }
+}
+layer {
+  name: "const_230"
+  type: "weight"
+  top: "const_230"
+  bottom: "const_210"
+  bottom: "const_195"
+  bottom: "const_180"
+  bottom: "const_165"
+  bottom: "const_150"
+  bottom: "const_130"
+  bottom: "const_135"
+  layer_param {
+    friend_0: "ID_260 const_260 <PARENTS: const_255| CHILDERN: >\n  FRIENDS: const_260,const_245,const_225,const_230\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_260(conv2d_52.weight)<2048,512,1,1|float32|OIHW>\n"
+    friend_2: "ID_225 const_225 <PARENTS: const_220| CHILDERN: >\n  FRIENDS: const_260,const_245,const_225,const_230\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_225(conv2d_45.weight)<2048,512,1,1|float32|OIHW>\n"
+    friend_3: "ID_230 const_230 <PARENTS: const_210,const_195,const_180,const_165,const_150,const_130,const_135| CHILDERN: >\n  FRIENDS: const_260,const_245,const_225,const_230\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_230(conv2d_46.weight)<2048,1024,1,1|float32|OIHW>\n"
+    friend_1: "ID_245 const_245 <PARENTS: const_240| CHILDERN: >\n  FRIENDS: const_260,const_245,const_225,const_230\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_245(conv2d_49.weight)<2048,512,1,1|float32|OIHW>\n"
+    idx: 230
+    weight: "const_230(conv2d_46.weight)<2048,1024,1,1|float32|OIHW>"
+    optype: "nn.conv2d"
+  }
+}
+layer {
+  name: "const_231"
+  type: "gamma"
+  top: "const_231"
+  bottom: "const_230"
+  layer_param {
+    idx: 231
+    optype: "nn.batch_norm"
+    weight: "const_231(batch_norm_46.weight)<2048|float32|O>"
+  }
+}
+layer {
+  name: "const_232"
+  type: "beta"
+  top: "const_232"
+  bottom: "const_230"
+  layer_param {
+    idx: 232
+    optype: "nn.batch_norm"
+    weight: "const_232(batch_norm_46.bias)<2048|float32|O>"
+  }
+}
+layer {
+  name: "const_233"
+  type: "mean"
+  top: "const_233"
+  bottom: "const_230"
+  layer_param {
+    idx: 233
+    optype: "nn.batch_norm"
+    weight: "const_233(batch_norm_46.running_mean)<2048|float32|O>"
+  }
+}
+layer {
+  name: "const_234"
+  type: "var"
+  top: "const_234"
+  bottom: "const_230"
+  layer_param {
+    idx: 234
+    optype: "nn.batch_norm"
+    weight: "const_234(batch_norm_46.running_var)<2048|float32|O>"
+  }
+}
+layer {
+  name: "const_235"
+  type: "weight"
+  top: "const_235"
+  bottom: "const_225"
+  bottom: "const_230"
+  layer_param {
+    idx: 235
+    optype: "nn.conv2d"
+    weight: "const_235(conv2d_47.weight)<512,2048,1,1|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_236"
+  type: "gamma"
+  top: "const_236"
+  bottom: "const_235"
+  layer_param {
+    idx: 236
+    optype: "nn.batch_norm"
+    weight: "const_236(batch_norm_47.weight)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_237"
+  type: "beta"
+  top: "const_237"
+  bottom: "const_235"
+  layer_param {
+    idx: 237
+    optype: "nn.batch_norm"
+    weight: "const_237(batch_norm_47.bias)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_238"
+  type: "mean"
+  top: "const_238"
+  bottom: "const_235"
+  layer_param {
+    idx: 238
+    optype: "nn.batch_norm"
+    weight: "const_238(batch_norm_47.running_mean)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_239"
+  type: "var"
+  top: "const_239"
+  bottom: "const_235"
+  layer_param {
+    idx: 239
+    optype: "nn.batch_norm"
+    weight: "const_239(batch_norm_47.running_var)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_240"
+  type: "weight"
+  top: "const_240"
+  bottom: "const_235"
+  layer_param {
+    idx: 240
+    optype: "nn.conv2d"
+    weight: "const_240(conv2d_48.weight)<512,512,3,3|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_241"
+  type: "gamma"
+  top: "const_241"
+  bottom: "const_240"
+  layer_param {
+    idx: 241
+    optype: "nn.batch_norm"
+    weight: "const_241(batch_norm_48.weight)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_242"
+  type: "beta"
+  top: "const_242"
+  bottom: "const_240"
+  layer_param {
+    idx: 242
+    optype: "nn.batch_norm"
+    weight: "const_242(batch_norm_48.bias)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_243"
+  type: "mean"
+  top: "const_243"
+  bottom: "const_240"
+  layer_param {
+    idx: 243
+    optype: "nn.batch_norm"
+    weight: "const_243(batch_norm_48.running_mean)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_244"
+  type: "var"
+  top: "const_244"
+  bottom: "const_240"
+  layer_param {
+    idx: 244
+    optype: "nn.batch_norm"
+    weight: "const_244(batch_norm_48.running_var)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_245"
+  type: "weight"
+  top: "const_245"
+  bottom: "const_240"
+  layer_param {
+    friend_0: "ID_260 const_260 <PARENTS: const_255| CHILDERN: >\n  FRIENDS: const_260,const_245,const_225,const_230\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_260(conv2d_52.weight)<2048,512,1,1|float32|OIHW>\n"
+    friend_2: "ID_225 const_225 <PARENTS: const_220| CHILDERN: >\n  FRIENDS: const_260,const_245,const_225,const_230\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_225(conv2d_45.weight)<2048,512,1,1|float32|OIHW>\n"
+    friend_3: "ID_230 const_230 <PARENTS: const_210,const_195,const_180,const_165,const_150,const_130,const_135| CHILDERN: >\n  FRIENDS: const_260,const_245,const_225,const_230\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_230(conv2d_46.weight)<2048,1024,1,1|float32|OIHW>\n"
+    friend_1: "ID_245 const_245 <PARENTS: const_240| CHILDERN: >\n  FRIENDS: const_260,const_245,const_225,const_230\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_245(conv2d_49.weight)<2048,512,1,1|float32|OIHW>\n"
+    idx: 245
+    weight: "const_245(conv2d_49.weight)<2048,512,1,1|float32|OIHW>"
+    optype: "nn.conv2d"
+  }
+}
+layer {
+  name: "const_246"
+  type: "gamma"
+  top: "const_246"
+  bottom: "const_245"
+  layer_param {
+    idx: 246
+    optype: "nn.batch_norm"
+    weight: "const_246(batch_norm_49.weight)<2048|float32|O>"
+  }
+}
+layer {
+  name: "const_247"
+  type: "beta"
+  top: "const_247"
+  bottom: "const_245"
+  layer_param {
+    idx: 247
+    optype: "nn.batch_norm"
+    weight: "const_247(batch_norm_49.bias)<2048|float32|O>"
+  }
+}
+layer {
+  name: "const_248"
+  type: "mean"
+  top: "const_248"
+  bottom: "const_245"
+  layer_param {
+    idx: 248
+    optype: "nn.batch_norm"
+    weight: "const_248(batch_norm_49.running_mean)<2048|float32|O>"
+  }
+}
+layer {
+  name: "const_249"
+  type: "var"
+  top: "const_249"
+  bottom: "const_245"
+  layer_param {
+    idx: 249
+    optype: "nn.batch_norm"
+    weight: "const_249(batch_norm_49.running_var)<2048|float32|O>"
+  }
+}
+layer {
+  name: "const_250"
+  type: "weight"
+  top: "const_250"
+  bottom: "const_245"
+  bottom: "const_225"
+  bottom: "const_230"
+  layer_param {
+    idx: 250
+    optype: "nn.conv2d"
+    weight: "const_250(conv2d_50.weight)<512,2048,1,1|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_251"
+  type: "gamma"
+  top: "const_251"
+  bottom: "const_250"
+  layer_param {
+    idx: 251
+    optype: "nn.batch_norm"
+    weight: "const_251(batch_norm_50.weight)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_252"
+  type: "beta"
+  top: "const_252"
+  bottom: "const_250"
+  layer_param {
+    idx: 252
+    optype: "nn.batch_norm"
+    weight: "const_252(batch_norm_50.bias)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_253"
+  type: "mean"
+  top: "const_253"
+  bottom: "const_250"
+  layer_param {
+    idx: 253
+    optype: "nn.batch_norm"
+    weight: "const_253(batch_norm_50.running_mean)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_254"
+  type: "var"
+  top: "const_254"
+  bottom: "const_250"
+  layer_param {
+    idx: 254
+    optype: "nn.batch_norm"
+    weight: "const_254(batch_norm_50.running_var)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_255"
+  type: "weight"
+  top: "const_255"
+  bottom: "const_250"
+  layer_param {
+    idx: 255
+    optype: "nn.conv2d"
+    weight: "const_255(conv2d_51.weight)<512,512,3,3|float32|OIHW>"
+  }
+}
+layer {
+  name: "const_256"
+  type: "gamma"
+  top: "const_256"
+  bottom: "const_255"
+  layer_param {
+    idx: 256
+    optype: "nn.batch_norm"
+    weight: "const_256(batch_norm_51.weight)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_257"
+  type: "beta"
+  top: "const_257"
+  bottom: "const_255"
+  layer_param {
+    idx: 257
+    optype: "nn.batch_norm"
+    weight: "const_257(batch_norm_51.bias)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_258"
+  type: "mean"
+  top: "const_258"
+  bottom: "const_255"
+  layer_param {
+    idx: 258
+    optype: "nn.batch_norm"
+    weight: "const_258(batch_norm_51.running_mean)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_259"
+  type: "var"
+  top: "const_259"
+  bottom: "const_255"
+  layer_param {
+    idx: 259
+    optype: "nn.batch_norm"
+    weight: "const_259(batch_norm_51.running_var)<512|float32|O>"
+  }
+}
+layer {
+  name: "const_260"
+  type: "weight"
+  top: "const_260"
+  bottom: "const_255"
+  layer_param {
+    friend_0: "ID_260 const_260 <PARENTS: const_255| CHILDERN: >\n  FRIENDS: const_260,const_245,const_225,const_230\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_260(conv2d_52.weight)<2048,512,1,1|float32|OIHW>\n"
+    friend_2: "ID_225 const_225 <PARENTS: const_220| CHILDERN: >\n  FRIENDS: const_260,const_245,const_225,const_230\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_225(conv2d_45.weight)<2048,512,1,1|float32|OIHW>\n"
+    friend_3: "ID_230 const_230 <PARENTS: const_210,const_195,const_180,const_165,const_150,const_130,const_135| CHILDERN: >\n  FRIENDS: const_260,const_245,const_225,const_230\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_230(conv2d_46.weight)<2048,1024,1,1|float32|OIHW>\n"
+    friend_1: "ID_245 const_245 <PARENTS: const_240| CHILDERN: >\n  FRIENDS: const_260,const_245,const_225,const_230\n  OPTYPE: nn.conv2d\n  WEIGHT_TYPE: weight\n  WEIGHT: const_245(conv2d_49.weight)<2048,512,1,1|float32|OIHW>\n"
+    idx: 260
+    weight: "const_260(conv2d_52.weight)<2048,512,1,1|float32|OIHW>"
+    optype: "nn.conv2d"
+  }
+}
+layer {
+  name: "const_261"
+  type: "gamma"
+  top: "const_261"
+  bottom: "const_260"
+  layer_param {
+    idx: 261
+    optype: "nn.batch_norm"
+    weight: "const_261(batch_norm_52.weight)<2048|float32|O>"
+  }
+}
+layer {
+  name: "const_262"
+  type: "beta"
+  top: "const_262"
+  bottom: "const_260"
+  layer_param {
+    idx: 262
+    optype: "nn.batch_norm"
+    weight: "const_262(batch_norm_52.bias)<2048|float32|O>"
+  }
+}
+layer {
+  name: "const_263"
+  type: "mean"
+  top: "const_263"
+  bottom: "const_260"
+  layer_param {
+    idx: 263
+    optype: "nn.batch_norm"
+    weight: "const_263(batch_norm_52.running_mean)<2048|float32|O>"
+  }
+}
+layer {
+  name: "const_264"
+  type: "var"
+  top: "const_264"
+  bottom: "const_260"
+  layer_param {
+    idx: 264
+    optype: "nn.batch_norm"
+    weight: "const_264(batch_norm_52.running_var)<2048|float32|O>"
+  }
+}
+layer {
+  name: "reshape:0"
+  type: "inject"
+  top: "reshape:0"
+  bottom: "const_260"
+  bottom: "const_245"
+  bottom: "const_225"
+  bottom: "const_230"
+  layer_param {
+    idx: 265
+    optype: "reshape"
+    weight: "reshape:0<1,2048|float32|NC>"
+  }
+}
+layer {
+  name: "const_265"
+  type: "weight"
+  top: "const_265"
+  bottom: "reshape:0"
+  layer_param {
+    idx: 266
+    optype: "msc.linear_bias"
+    weight: "const_265(msc_linear_bias.weight)<1000,2048|float32|OI>"
+  }
+}
+layer {
+  name: "const_266"
+  type: "bias"
+  top: "const_266"
+  bottom: "reshape:0"
+  layer_param {
+    idx: 267
+    optype: "msc.linear_bias"
+    weight: "const_266(msc_linear_bias.bias)<1000|float32|O>"
+  }
+}

@@ -17,13 +17,14 @@
 """tvm.contrib.msc.framework.tensorflow.runtime.runner"""
 
 import time
-from typing import Dict, List, Union
+from typing import Dict, List, Union, Any
 import numpy as np
 
 from tensorflow.python.client import device_lib
 from tensorflow.python.ops import variables
 
 import tvm
+from tvm.contrib.msc.core.ir import MSCGraph
 from tvm.contrib.msc.core.runtime import ModelRunner
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.framework.tensorflow.codegen import to_tensorflow
@@ -75,12 +76,21 @@ class TensorflowRunner(ModelRunner):
         del self._session
         super().destory()
 
-    def _generate_model(self) -> object:
+    def _generate_model(
+        self, graphs: List[MSCGraph] = None, weights: List[Dict[str, tvm.nd.array]] = None
+    ) -> Any:
         """Codegen the model according to framework
+
+        Parameters
+        -------
+        graphs: list<MSCgraph>
+            The msc graphs.
+        weights: list<dic<str, tvm.nd.array>>
+            The weights
 
         Returns
         -------
-        model: object
+        model: Any
             The runnable model
         """
 
@@ -88,15 +98,15 @@ class TensorflowRunner(ModelRunner):
             del self._tf_graph
         self._tf_graph = tf_v1.Graph()
         with self._tf_graph.as_default():
-            self._tf_outputs = super()._generate_model()
+            self._tf_outputs = super()._generate_model(graphs, weights)
         return self._tf_graph
 
-    def _to_runnable(self, model: object, device: str, is_training: bool) -> object:
+    def _to_runnable(self, model: Any, device: str, is_training: bool) -> Any:
         """Build runnable object
 
         Parameters
         -------
-        model: object
+        model: Any
             The meta model.
         device: str
             The device for place model
@@ -105,7 +115,7 @@ class TensorflowRunner(ModelRunner):
 
         Returns
         -------
-        runnable: object
+        runnable: Any
             The runnable
         """
 

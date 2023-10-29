@@ -17,7 +17,7 @@
 """tvm.contrib.msc.framework.torch.runtime.runner"""
 
 import time
-from typing import Dict, List, Union, Tuple
+from typing import Dict, List, Union, Tuple, Any
 import numpy as np
 
 import torch
@@ -27,6 +27,7 @@ from tvm.contrib.msc.core.ir import MSCGraph
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.framework.torch.codegen import to_torch
 from tvm.contrib.msc.framework.torch.frontend import set_weight_alias
+from tvm.contrib.msc.framework.torch import tools
 from tvm.contrib.msc.core import utils as msc_utils
 
 
@@ -43,15 +44,16 @@ class TorchRunner(ModelRunner):
         weights_list: list<dict<str, tvm.nd.array>>
             The translated weights
         """
+
         graphs, weights = super()._translate()
         return [set_weight_alias(graphs[0])], weights
 
-    def _to_runnable(self, model: object, device: str, is_training: bool) -> object:
+    def _to_runnable(self, model: Any, device: str, is_training: bool) -> Any:
         """Build runnable object
 
         Parameters
         -------
-        model: object
+        model: Any
             The meta model.
         device: str
             The device for place model
@@ -60,7 +62,7 @@ class TorchRunner(ModelRunner):
 
         Returns
         -------
-        runnable: object
+        runnable: Any
             The runnable
         """
 
