@@ -25,7 +25,7 @@ from .namespace import MSCMap, MSCKey
 
 
 def time_stamp(
-    stage: str, mark: bool = False, log_title: bool = True, logger: logging.Logger = None
+    stage: str, mark_stage: bool = False, log_stage: bool = True, logger: logging.Logger = None
 ):
     """Mark the stamp and record time.
 
@@ -33,27 +33,27 @@ def time_stamp(
     ----------
     stage: str
         The stage name.
-    mark: bool
+    mark_stage: bool
         Whether to mark the stage.
-    log_title: bool
-        Whether to log the title
+    log_stage: bool
+        Whether to log the stage
     logger: logging.Logger
         The logger.
     """
 
     logger = logger or get_global_logger()
-    if mark:
-        MSCMap.set(MSCKey.MSC_STAGE, stage)
     time_stamps = MSCMap.get(MSCKey.TIME_STAMPS, [])
     time_stamps.append((stage, datetime.datetime.now()))
     MSCMap.set(MSCKey.TIME_STAMPS, time_stamps)
-    if log_title:
-        if mark:
-            if len(time_stamps) > 1:
-                end_msg = "[MSC] End {}".format(time_stamps[-2][0])
+    if log_stage:
+        if mark_stage:
+            last_stage = MSCMap.get(MSCKey.MSC_STAGE)
+            if last_stage:
+                end_msg = "[MSC] End {}".format(last_stage)
                 logger.info("\n{0} {1} {0}\n".format("#" * 20, end_msg.center(40)))
             start_msg = "[MSC] Start {}".format(stage)
             logger.info("\n{0} {1} {0}".format("#" * 20, start_msg.center(40)))
+            MSCMap.set(MSCKey.MSC_STAGE, stage)
         else:
             logger.debug("Start {}".format(stage))
 

@@ -91,13 +91,13 @@ class TensorflowRunner(ModelRunner):
             self._tf_outputs = super()._generate_model()
         return self._tf_graph
 
-    def _to_device(self, model: object, device: str, is_training: bool) -> object:
-        """Place model on device
+    def _to_runnable(self, model: object, device: str, is_training: bool) -> object:
+        """Build runnable object
 
         Parameters
         -------
         model: object
-            The runnable model on cpu.
+            The meta model.
         device: str
             The device for place model
         is_training: bool
@@ -105,8 +105,8 @@ class TensorflowRunner(ModelRunner):
 
         Returns
         -------
-        model: object
-            The runnable model
+        runnable: object
+            The runnable
         """
 
         if self._session:
@@ -118,14 +118,14 @@ class TensorflowRunner(ModelRunner):
             self._session.run(variables.global_variables_initializer())
         return self._session
 
-    def _run_model(
-        self, model: WrapSession, inputs: Dict[str, np.ndarray], device: str
+    def _call_runnable(
+        self, runnable: WrapSession, inputs: Dict[str, np.ndarray], device: str
     ) -> Union[List[np.ndarray], Dict[str, np.ndarray]]:
-        """Run the model to get outputs
+        """Call the runnable to get outputs
 
         Parameters
         -------
-        model: WrapSession
+        runnable: WrapSession
             The wrapped session.
         inputs: dict<str, data>
             The inputs in dict.
@@ -139,7 +139,7 @@ class TensorflowRunner(ModelRunner):
         """
 
         feed_dict = {i["name"] + ":0": inputs[i["name"]] for i in self.get_inputs()}
-        return self._session.run(self._tf_outputs, feed_dict)
+        return runnable.run(self._tf_outputs, feed_dict)
 
     def _device_enabled(self, device: str) -> bool:
         """Check if the device is enabled
@@ -152,10 +152,9 @@ class TensorflowRunner(ModelRunner):
 
         if device == "cpu":
             return True
-        if device == "gpu":
-            local_device_protos = device_lib.list_local_devices()
-            gpu_list = [x.name for x in local_device_protos if x.device_type == "GPU"]
-            return len(gpu_list) > 0
+        if device.startswith("cuda"):
+            device_protos = device_lib.list_local_devices()
+            return any(dev.device_type == "GPU" for dev in device_protos)
         return False
 
     @property

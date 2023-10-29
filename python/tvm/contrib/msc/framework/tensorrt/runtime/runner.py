@@ -25,6 +25,13 @@ from tvm.contrib.msc.framework.tensorrt.codegen import to_tensorrt
 class TensorRTRunner(BYOCRunner):
     """Runner of tensorrt"""
 
+    def setup(self):
+        """Setup the runner"""
+
+        super().setup()
+        if not self._device.startswith("cuda"):
+            self._device = "cuda"
+
     @property
     def codegen_func(self):
         return to_tensorrt

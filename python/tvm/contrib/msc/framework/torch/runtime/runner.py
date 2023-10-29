@@ -46,13 +46,13 @@ class TorchRunner(ModelRunner):
         graphs, weights = super()._translate()
         return [set_weight_alias(graphs[0])], weights
 
-    def _to_device(self, model: object, device: str, is_training: bool) -> object:
-        """Place model on device
+    def _to_runnable(self, model: object, device: str, is_training: bool) -> object:
+        """Build runnable object
 
         Parameters
         -------
         model: object
-            The runnable model on cpu.
+            The meta model.
         device: str
             The device for place model
         is_training: bool
@@ -60,14 +60,14 @@ class TorchRunner(ModelRunner):
 
         Returns
         -------
-        model: object
-            The runnable model
+        runnable: object
+            The runnable
         """
 
         if device == "cpu":
             pass
-        elif device == "gpu":
-            model = model.to(torch.device("cuda:0"))
+        elif device.startswith("cuda"):
+            model = model.to(torch.device(device))
         else:
             raise NotImplementedError("Unsupported device " + str(device))
         if is_training:
@@ -76,14 +76,14 @@ class TorchRunner(ModelRunner):
             model = model.eval()
         return model
 
-    def _run_model(
-        self, model: torch.nn.Module, inputs: Dict[str, np.ndarray], device: str
+    def _call_runnable(
+        self, runnable: torch.nn.Module, inputs: Dict[str, np.ndarray], device: str
     ) -> Union[List[np.ndarray], Dict[str, np.ndarray]]:
-        """Run the model to get outputs
+        """Call the runnable to get outputs
 
         Parameters
         -------
-        model: torch.nn.Module
+        runnable: torch.nn.Module
             The runnable model.
         inputs: dict<str, data>
             The inputs in dict.
@@ -97,17 +97,17 @@ class TorchRunner(ModelRunner):
         """
 
         model_inputs = self.get_inputs()
-        parameters = list(model.parameters())
+        parameters = list(runnable.parameters())
         if parameters:
             in_dev = parameters[0].device
         elif device == "cpu":
-            in_dev = torch.cpu()
-        elif device == "gpu":
-            in_dev = torch.cuda()
+            in_dev = torch.device(device)
+        elif device.startswith("cuda"):
+            in_dev = torch.device(device)
         else:
             raise NotImplementedError("Unsupported device " + str(device))
         torch_inputs = [torch.from_numpy(inputs[i["name"]]).to(in_dev) for i in model_inputs]
-        return model(*torch_inputs)
+        return runnable(*torch_inputs)
 
     def _device_enabled(self, device: str) -> bool:
         """Check if the device is enabled
@@ -120,7 +120,7 @@ class TorchRunner(ModelRunner):
 
         if device == "cpu":
             return True
-        if device == "gpu":
+        if device.startswith("cuda"):
             return torch.cuda.is_available()
         return False
 

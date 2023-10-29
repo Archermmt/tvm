@@ -285,7 +285,7 @@ def get_workspace() -> MSCDirectory:
     return workspace
 
 
-def create_workspace_subdir(name: str = None) -> MSCDirectory:
+def get_workspace_subdir(name: str = None) -> MSCDirectory:
     """Create sub dir for workspace
 
     Parameters
@@ -302,7 +302,8 @@ def create_workspace_subdir(name: str = None) -> MSCDirectory:
     return get_workspace().create_dir(name)
 
 
-get_build_dir = partial(create_workspace_subdir, name="Build")
-get_output_dir = partial(create_workspace_subdir, name="Output")
-get_dataset_dir = partial(create_workspace_subdir, name="Dataset")
-get_debug_dir = partial(create_workspace_subdir, name="Debug")
+get_build_dir = partial(get_workspace_subdir, name="Build")
+get_output_dir = partial(get_workspace_subdir, name="Output")
+get_dataset_dir = partial(get_workspace_subdir, name="Dataset")
+get_debug_dir = partial(get_workspace_subdir, name="Debug")
+get_cache_dir = partial(get_workspace_subdir, name="Cache")

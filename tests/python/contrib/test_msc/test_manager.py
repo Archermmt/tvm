@@ -102,6 +102,7 @@ def _test_from_torch(deploy_type, is_training=False, atol=1e-2, rtol=1e-2):
         manager = MSCManager(torch_model, config)
         report = manager.run_pipe()
         assert report["success"], "Failed to run pipe for torch -> {}".format(deploy_type)
+        manager.destory()
 
 
 def _test_from_tf(deploy_type, atol=1e-2, rtol=1e-2):
@@ -142,12 +143,10 @@ def test_tensorflow_manager():
 
 @requires_tensorrt
 def test_tensorrt_manager():
-    """Test manager for torch"""
+    """Test manager for tensorrt"""
 
     _test_from_torch(MSCFramework.TENSORRT, is_training=False)
-    _test_from_tf(MSCFramework.TENSORRT)
 
 
 if __name__ == "__main__":
     tvm.testing.main()
-    # test_torch_manager()

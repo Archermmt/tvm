@@ -18,6 +18,7 @@
 
 import os
 import json
+import copy
 import numpy as np
 from typing import List, Tuple, Dict
 from distutils.version import LooseVersion
@@ -245,6 +246,25 @@ def dict_equal(dict_a: dict, dict_b: dict) -> bool:
         if v != dict_b[k]:
             return False
     return True
+
+
+def copy_dict(dict_obj: dict) -> dict:
+    """Deepcopy dict object
+
+    Parameters
+    ----------
+    dict_obj: dict
+        The source dict.
+
+    Returns
+    -------
+    dict_obj: dict
+        The copied dict.
+    """
+
+    if not dict_obj:
+        return {}
+    return copy.deepcopy(dict_obj)
 
 
 def get_version(framework: str) -> List[int]:

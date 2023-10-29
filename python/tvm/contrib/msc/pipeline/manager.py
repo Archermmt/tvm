@@ -16,14 +16,16 @@
 # under the License.
 """tvm.contrib.msc.pipeline.manager"""
 
+import os
 import time
-from typing import Dict, Tuple
+from typing import Dict
 import numpy as np
 import traceback
 import torch
 
 import tvm
-from tvm.contrib.msc.core.utils.namespace import MSCFramework
+from tvm.contrib.msc.core.runtime import BaseRunner
+from tvm.contrib.msc.core.utils.namespace import MSCFramework, MSCMap, MSCKey
 from tvm.contrib.msc.core import utils as msc_utils
 from tvm.contrib.msc.framework.tvm.runtime import TVMRunner
 from tvm.contrib.msc.framework.torch.frontend import from_torch
@@ -49,23 +51,24 @@ class BaseManager(object):
         # check config
         for stage in ["inputs", "outputs", "dataset", "prepare", "compile"]:
             assert stage in config, "{} should be given to run the pipeline".format(stage)
-        workspace = msc_utils.set_workspace(config.get("workspace"), keep_history=False)
-        log_path = config.get("log_path") or workspace.relpath("MSC_LOG", keep_history=False)
+        self._workspace = msc_utils.set_workspace(config.get("workspace"))
+        log_path = config.get("log_path") or self._workspace.relpath("MSC_LOG", keep_history=False)
         self._logger = msc_utils.set_global_logger(config.get("verbose", "info"), log_path)
         msc_utils.time_stamp("init", True)
         self._model = model
-        config["workspace"] = workspace.path
+        config["workspace"] = self._workspace.path
         self._logger.info(msc_utils.msg_block("CONFIG", config))
         self._config = self.update_config(model, config)
+        self._logger.debug(msc_utils.msg_block("FULL_CONFIG", self._config))
         self._relax_mod, self._runner = None, None
         self._sample_inputs = None
         self._report = {
             "success": False,
-            "workspace": workspace.path,
-            "log": log_path,
-            "model_type": self._config["model_type"],
-            "optimize_by": self._config.get("optimize", {}).get("run_type"),
-            "compile_by": self._config["compile"]["run_type"],
+            "info": {
+                "workspace": self._workspace.path,
+                "log": log_path,
+                "model_type": self._config["model_type"],
+            },
             "duration": {},
             "profile": {},
         }
@@ -86,6 +89,14 @@ class BaseManager(object):
             The updated config.
         """
 
+        if config.get("use_cache", True):
+            if "parse" in config:
+                config["parse"]["cache_path"] = msc_utils.get_cache_dir().relpath(
+                    "parsed_relax.json"
+                )
+            for stage in ["baseline", "optimize", "compile"]:
+                if stage in config:
+                    config[stage]["cache_dir"] = msc_utils.get_cache_dir().create_dir(stage)
         return config
 
     def run_pipe(self) -> dict:
@@ -98,19 +109,20 @@ class BaseManager(object):
         """
 
         err_msg = None
+        use_cache = self._config.get("use_cache", True)
         try:
             msc_utils.time_stamp("prepare", True)
-            self.prepare(self._config["prepare"])
+            self._sample_inputs = self.prepare(self._config["prepare"], use_cache)
             msc_utils.time_stamp("parse", True)
-            self.parse(self._config["parse"])
+            self._relax_mod = self.parse(self._config["parse"], use_cache)
             if "baseline" in self._config:
                 msc_utils.time_stamp("baseline", True)
-                self.baseline(self._config["baseline"])
+                self.baseline(self._config["baseline"], use_cache)
             if "optimize" in self._config:
                 msc_utils.time_stamp("optimize", True)
-                self.optimize(self._config["optimize"])
+                self.optimize(self._config["optimize"], use_cache)
             msc_utils.time_stamp("compile", True)
-            self.compile(self._config["compile"])
+            self.compile(self._config["compile"], use_cache)
             msc_utils.time_stamp("end", True, False)
         except Exception as e:
             err_msg = "Pipeline failed:{}\nTrace: {}".format(e, traceback.format_exc())
@@ -118,71 +130,89 @@ class BaseManager(object):
         self._logger.info(msc_utils.msg_block("SUMMARY", report))
         return report
 
-    def prepare(self, stage_config: dict):
+    def prepare(self, stage_config: dict, use_cache: bool = False) -> Dict[str, np.ndarray]:
         """Prepare datas for the pipeline.
 
         Parameters
         ----------
         stage_config: dict
             The config of this stage.
+        use_cache: bool
+            Whether to use cache.
+
+        Returns
+        -------
+        sample_inputs: dict<str,np.ndarray>
+            The sample inputs.
         """
 
-        # create loader
-        loader = self._config["dataset"].get("loader")
-        assert loader, "Dataset loader should be given for msc pipeline"
-        if loader.startswith("from_random"):
-
-            def get_inputs(max_num=5):
-                for _ in range(max_num):
-                    yield {i[0]: np.random.rand(*i[1]).astype(i[2]) for i in self._config["inputs"]}
-
-            data_loader = get_inputs
-        elif msc_utils.is_dataset(loader):
-
-            def get_inputs(max_num=-1):
-                for _ in range(max_num):
-                    yield {i[0]: np.random.rand(*i[1]).astype(i[2]) for i in self._config["inputs"]}
-
-            data_loader = get_inputs
-        else:
-            data_loader = loader
-        assert callable(data_loader), "Loader {} is not callable".format(data_loader)
-
-        # save golden
-        golden_folder, golden_cnt = msc_utils.get_dataset_dir().relpath("Golden", False), 0
-        max_num = self._config["dataset"].get("max_num", 5)
+        golden_folder = msc_utils.get_dataset_dir().relpath("Golden", use_cache)
         input_names = [i[0] for i in self._config["inputs"]]
+        sample_inputs = None
         report = {"golden_folder": golden_folder}
-        if "runner" in stage_config:
-            with msc_utils.MSCDataSaver(
-                golden_folder, input_names, self._config["outputs"]
-            ) as saver:
-                for inputs in data_loader():
-                    if golden_cnt >= max_num:
-                        break
-                    if not self._sample_inputs:
-                        self._sample_inputs = inputs
-                    outputs, _ = stage_config["runner"](
-                        self._model, inputs, input_names, self._config["outputs"]
-                    )
-                    golden_cnt = saver.save(inputs, outputs)
-                report["datas_info"] = saver.info
-        elif msc_utils.is_dataset(loader):
-            with msc_utils.MSCDataSaver(
-                golden_folder, input_names, self._config["outputs"]
-            ) as saver:
-                for inputs, outputs in msc_utils.MSCDataLoader(loader):
-                    if golden_cnt >= max_num:
-                        break
-                    if not self._sample_inputs:
-                        self._sample_inputs = inputs
-                    golden_cnt = saver.save(inputs, outputs)
-                report["datas_info"] = saver.info
+        if use_cache and msc_utils.is_dataset(golden_folder):
+            loader = msc_utils.MSCDataLoader(golden_folder)
+            report["datas_info"] = loader.info
+            sample_inputs = loader[0][0]
+            self._logger.debug("Load {} cached golden from {}".format(len(loader), golden_folder))
         else:
-            raise Exception("golden or runner should given in prepare to save golden")
-        report["sample_inputs"] = self._sample_inputs
+            # create loader
+            loader = self._config["dataset"].get("loader")
+            assert loader, "Dataset loader should be given for msc pipeline"
+            if loader.startswith("from_random"):
+
+                def get_inputs(max_num=5):
+                    for _ in range(max_num):
+                        yield {
+                            i[0]: np.random.rand(*i[1]).astype(i[2]) for i in self._config["inputs"]
+                        }
+
+                data_loader = get_inputs
+            elif msc_utils.is_dataset(loader):
+
+                def get_inputs(max_num=-1):
+                    for _ in range(max_num):
+                        yield {
+                            i[0]: np.random.rand(*i[1]).astype(i[2]) for i in self._config["inputs"]
+                        }
+
+                data_loader = get_inputs
+            else:
+                data_loader = loader
+            assert callable(data_loader), "Loader {} is not callable".format(data_loader)
+
+            # save golden
+            golden_cnt, max_num = 0, self._config["dataset"].get("max_num", 5)
+            if "runner" in stage_config:
+                with msc_utils.MSCDataSaver(
+                    golden_folder, input_names, self._config["outputs"]
+                ) as saver:
+                    for inputs in data_loader():
+                        if golden_cnt >= max_num:
+                            break
+                        if not sample_inputs:
+                            sample_inputs = inputs
+                        outputs, _ = stage_config["runner"](
+                            self._model, inputs, input_names, self._config["outputs"]
+                        )
+                        golden_cnt = saver.save(inputs, outputs)
+                    report["datas_info"] = saver.info
+            elif msc_utils.is_dataset(loader):
+                with msc_utils.MSCDataSaver(
+                    golden_folder, input_names, self._config["outputs"]
+                ) as saver:
+                    for inputs, outputs in msc_utils.MSCDataLoader(loader):
+                        if golden_cnt >= max_num:
+                            break
+                        if not sample_inputs:
+                            sample_inputs = inputs
+                        golden_cnt = saver.save(inputs, outputs)
+                    report["datas_info"] = saver.info
+            else:
+                raise Exception("golden or runner should given in prepare to save golden")
+            self._logger.debug("Saved {} golden to {}".format(golden_cnt, golden_folder))
+        report["sample_inputs"] = sample_inputs
         self._logger.info(msc_utils.msg_block("GOLDEN", report))
-        self._logger.info("Saved {} datas as golden -> {}".format(golden_cnt, golden_folder))
 
         # profile
         if "profile" in stage_config and "runner" in stage_config:
@@ -192,78 +222,112 @@ class BaseManager(object):
                 "Prepare profile with {}({})".format(stage_config["runner"], benchmark)
             )
             _, avg_time = stage_config["runner"](
-                self._model, inputs, input_names, self._config["outputs"], **benchmark
+                self._model, sample_inputs, input_names, self._config["outputs"], **benchmark
             )
             self._logger.info("Profile(prepare) {} times -> {:.2f} ms".format(repeat, avg_time))
             self._report["profile"]["prepare"] = {"latency": "{:.2f} ms".format(avg_time)}
+        return sample_inputs
 
-    def parse(self, stage_config: dict) -> Tuple[tvm.IRModule, Dict[str, tvm.nd.array]]:
+    def parse(self, stage_config: dict, use_cache: bool = False) -> tvm.IRModule:
         """Parse the model to IRModule.
 
         Parameters
         ----------
         stage_config: dict
             The config of this stage.
+        use_cache: bool
+            Whether to use cache.
+
+        Returns
+        -------
+        relax_mod: tvm.IRModule
+            The parsed module.
         """
 
-        parse_config = stage_config.get("parse_config", {})
-        self._logger.debug("Parse with {}({})".format(stage_config["parser"], parse_config))
-        self._relax_mod, _ = stage_config["parser"](self._model, as_msc=False, **parse_config)
+        cache_path = stage_config.get("cache_path") if use_cache else None
+        if cache_path and os.path.isfile(cache_path):
+            relax_mod = tvm.ir.load_json(cache_path)
+            self._logger.debug("Load parsed mod from {}".format(cache_path))
+        else:
+            parse_config = stage_config.get("parse_config", {})
+            self._logger.debug("Parse by {}({})".format(stage_config["parser"], parse_config))
+            relax_mod, _ = stage_config["parser"](self._model, as_msc=False, **parse_config)
+            if cache_path:
+                with open(cache_path, "w") as f:
+                    f.write(tvm.ir.save_json(relax_mod))
+                self._logger.debug("Save parsed mod to {}".format(cache_path))
+        return relax_mod
 
-    def baseline(self, stage_config: dict):
+    def baseline(self, stage_config: dict, use_cache: bool = False):
         """Run the baseline.
 
         Parameters
         ----------
         stage_config: dict
             The config of this stage.
+        use_cache: bool
+            Whether to use cache.
         """
 
-        self._create_runner(stage_config)
+        self._runner = self._create_runner(stage_config, use_cache)
         if "profile" in stage_config:
-            self._profile(stage_config)
+            self._report["profile"]["baseline"] = self._profile(stage_config)
+        if use_cache:
+            self._runner.save_cache(stage_config["cache_dir"])
 
-    def optimize(self, stage_config: dict, ret_type: str = "model") -> object:
+    def optimize(
+        self, stage_config: dict, use_cache: bool = False, ret_type: str = "runnable"
+    ) -> object:
         """Run the optimize and return object.
 
         Parameters
         ----------
         stage_config: dict
             The config of this stage.
+        use_cache: bool
+            Whether to use cache.
         ret_type: str
             The return type runner| model.
 
         Returns
         -------
-        holder:
+        runnable:
             The runner or model.
         """
 
-        self._create_runner(stage_config)
+        self._runner = self._create_runner(stage_config, use_cache)
         if "profile" in stage_config:
-            self._profile(stage_config)
-        return self._get_holder(ret_type)
+            self._report["profile"]["optimize"] = self._profile(stage_config)
+        if use_cache:
+            self._runner.save_cache(stage_config["cache_dir"])
+        return self.get_runnable(ret_type)
 
-    def compile(self, stage_config: dict, ret_type: str = "model") -> object:
+    def compile(
+        self, stage_config: dict, use_cache: bool = False, ret_type: str = "runnable"
+    ) -> object:
         """Run the compile and return object.
 
         Parameters
         ----------
         stage_config: dict
             The config of this stage.
+        use_cache: bool
+            Whether to use cache.
         ret_type: str
             The return type runner| model.
 
         Returns
         -------
-        holder:
+        runnable:
             The runner or model.
         """
 
-        self._create_runner(stage_config)
+        self._runner = self._create_runner(stage_config, use_cache)
         if "profile" in stage_config:
-            self._profile(stage_config)
-        return self._get_holder(ret_type)
+            self._report["profile"]["compile"] = self._profile(stage_config)
+        if use_cache:
+            self._runner.save_cache(stage_config["cache_dir"])
+        return self.get_runnable(ret_type)
 
     def summary(self, err_msg=None):
         """Summary the pipeline.
@@ -291,42 +355,43 @@ class BaseManager(object):
 
         if self._runner:
             self._runner.destory()
-        msc_utils.get_workspace().destory()
+        MSCMap.delete(MSCKey.TIME_STAMPS)
+        self._workspace.destory()
 
-    def _profile(self, stage_config: str):
+    def _profile(self, stage_config: str) -> dict:
         """Profile the runner.
 
         Parameters
         ----------
         stage_config: dict
             The config of this stage.
+
+        Returns
+        -------
+        report: dict
+            The profile report.
         """
 
-        if "profile" not in stage_config:
-            return
         stage = msc_utils.current_stage()
         msc_utils.time_stamp(stage + ".profile", False)
         profile_config = stage_config["profile"]
-        if stage not in self._report["profile"]:
-            self._report["profile"][stage] = {}
+        report = {}
 
         # check result
         check_config = profile_config.get("check", {})
         if check_config:
             loader = msc_utils.MSCDataLoader(msc_utils.get_dataset_dir().relpath("Golden"))
             total, passed = 0, 0
-            report = {}
+            acc_report = {}
             for idx, (inputs, outputs) in enumerate(loader):
                 results = self._runner.run(inputs)
                 iter_report = msc_utils.compare_arrays(outputs, results)
                 total += iter_report["total"]
                 passed += iter_report["passed"]
-                report["iter_" + str(idx)] = iter_report["info"]
+                acc_report["iter_" + str(idx)] = iter_report["info"]
             title = "Check({}) pass {}/{}".format(stage, passed, total)
-            self._logger.info(msc_utils.msg_block(title, report))
-            self._report["profile"][stage]["accuracy"] = "{}/{}({:.2f}%)".format(
-                passed, total, float(passed) * 100 / total
-            )
+            self._logger.info(msc_utils.msg_block(title, acc_report))
+            report["accuracy"] = "{}/{}({:.2f}%)".format(passed, total, float(passed) * 100 / total)
 
         # benchmark model
         benchmark_config = profile_config.get("benchmark", {})
@@ -338,10 +403,15 @@ class BaseManager(object):
             for _ in range(repeat):
                 self._runner.run(self._sample_inputs)
             avg_time = (time.time() - start) * 1000 / repeat
-            self._logger.info("Profile({}) {} times -> {:.2f} ms".format(stage, repeat, avg_time))
-            self._report["profile"][stage]["latency"] = "{:.2f} ms".format(avg_time)
+            self._logger.info(
+                "Profile({}) {} times on {} -> {:.2f} ms".format(
+                    stage, repeat, self._runner.device, avg_time
+                )
+            )
+            report["latency"] = "{:.2f} ms".format(avg_time)
+        return report
 
-    def _get_holder(self, ret_type: str = "runner") -> object:
+    def get_runnable(self, ret_type: str = "runner") -> object:
         """Return object by type.
 
         Parameters
@@ -351,35 +421,47 @@ class BaseManager(object):
 
         Returns
         -------
-        holder:
+        runnable:
             The runner or model.
         """
 
         if ret_type == "runner":
             return self._runner
+        elif ret_type == "runnable":
+            return self._runner.runnable
         elif ret_type == "model":
-            return self._runner.get_model()
+            return self._runner.model
         raise Exception("Unexpect return type " + str(ret_type))
 
-    def _create_runner(self, stage_config: dict):
+    def _create_runner(self, stage_config: dict, use_cache: bool = False) -> BaseRunner:
         """Create runner.
 
         Parameters
         ----------
         stage_config: dict
             The config of this stage.
+        use_cache: bool
+            Whether to use cache.
+
+        Returns
+        -------
+        runner: BaseRunner
+            The runner.
         """
 
         stage = msc_utils.current_stage()
+        cache_dir = stage_config["cache_dir"] if use_cache else None
         msc_utils.time_stamp(stage + ".build", False)
         run_config = stage_config.get("run_config", {})
         self._logger.debug(
-            "Create runner({}) with {}({})".format(stage, stage_config["runner"], run_config)
+            "Create runner({}) by {}({})".format(stage, stage_config["runner"].__name__, run_config)
         )
         if self._runner:
             self._runner.destory()
-        self._runner = stage_config["runner"](self._relax_mod, logger=self._logger, **run_config)
-        self._runner.build()
+        runner = stage_config["runner"](self._relax_mod, logger=self._logger, **run_config)
+        runner.build(cache_dir=cache_dir)
+        self._report["info"][stage + "_by"] = "{}({})".format(runner.framework, runner.device)
+        return runner
 
 
 class MSCManager(BaseManager):
@@ -462,16 +544,23 @@ class MSCManager(BaseManager):
             run_config["translate_config"] = {}
         if "build" not in run_config["translate_config"]:
             run_config["translate_config"]["build"] = {}
+        if "load_config" not in run_config:
+            run_config["load_config"] = {}
+        run_config["load_config"].update(
+            {
+                "build_folder": msc_utils.get_build_dir().create_dir(stage),
+            }
+        )
         run_config["translate_config"]["build"]["input_aliases"] = [i[0] for i in config["inputs"]]
         run_config["translate_config"]["build"]["output_aliases"] = config["outputs"]
         if model_type == MSCFramework.TORCH:
             parameters = list(model.parameters())
             if parameters:
-                dev_type = parameters[0].device.type
-                if dev_type == "cpu":
+                ref_device = parameters[0].device
+                if ref_device.type == "cpu":
                     device = "cpu"
                 else:
-                    device = "{}:{}".format(dev_type, parameters[0].device.index)
+                    device = "{}:{}".format(ref_device.type, ref_device.index)
             else:
                 device = "cpu"
             run_config.update({"device": device, "is_training": model.training})
