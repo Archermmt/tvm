@@ -68,6 +68,9 @@ class MSCTensor(Object):
             return int(self.shape[axis])
         return int(_ffi_api.MSCTensorDimAt(self, axis))
 
+    def layout_of(self, axis: str) -> int:
+        return self.layout.index_of(axis)
+
     def set_alias(self, alias: str):
         """Set alis for the tensor
 
@@ -350,10 +353,12 @@ class WeightJoint(BaseJoint):
         The optype of the node.
     wtype: string
         The weight type of the node.
+    strategy: string
+        The prune strategy of the node.
+    weight: MSCTensor
+        The weight of the node.
     attrs: dict<string, string>
         The attributes of the node.
-    weight: MSCTensor,
-        The weight of the node.
     parents: list<WeightJoint>
         The parents of the node.
     friends: list<WeightJoint>
@@ -367,8 +372,9 @@ class WeightJoint(BaseJoint):
         shared_ref: str,
         optype: str,
         wtype: str,
-        attrs: Dict[str, str],
+        strategy: str,
         weight: MSCTensor,
+        attrs: Dict[str, str],
         parents: List[BaseJoint],
         friends: List[BaseJoint],
     ):
@@ -380,11 +386,57 @@ class WeightJoint(BaseJoint):
             shared_ref,
             optype,
             wtype,
-            attrs,
+            strategy,
             weight,
+            attrs,
             parents,
             friends,
         )
+
+    def get_attrs(self) -> Dict[str, str]:
+        """Get all the attributes from node
+
+        Returns
+        -------
+        attributes: dict<str, str>
+            The attributes of node.
+        """
+
+        return _ffi_api.WeightJointGetAttrs(self)
+
+    def get_attr(self, key: str, default: Optional[Any] = None) -> str:
+        """Get the attribute of key from node
+
+        Parameters
+        -------
+        key: str
+            The key of the attribute.
+        default: Any
+            The default value when key is missing.
+
+        Returns
+        -------
+        attribute: str
+            The attributes of node.
+        """
+
+        return self.get_attrs().get(key, default)
+
+    def has_attr(self, key: str) -> bool:
+        """Check if key in attributes
+
+        Parameters
+        -------
+        key: str
+            The key of the attribute.
+
+        Returns
+        -------
+        has_attr: bool
+            Whether the key in the attributes.
+        """
+
+        return bool(_ffi_api.WeightJointHasAttr(self, key))
 
 
 class BaseGraph(Object):
@@ -726,6 +778,50 @@ class WeightGraph(Object):
             name,
             nodes,
         )
+
+    def has_node(self, name: str) -> bool:
+        """Check if weight node in the graph.
+
+        Parameters
+        ----------
+        name: string
+            The name of the node.
+
+        Returns
+        -------
+        has_node: bool
+            Whether the node is in the graph
+        """
+
+        return bool(_ffi_api.WeightGraphHasNode(self, name))
+
+    def find_node(self, name: str) -> WeightJoint:
+        """Find weight node by name.
+
+        Parameters
+        ----------
+        name: string
+            The name of the node.
+
+        Returns
+        -------
+        node: MSCJoint
+            The found node.
+        """
+
+        return _ffi_api.WeightGraphFindNode(self, name)
+
+    def get_nodes(self) -> Iterable[WeightJoint]:
+        """Get all the weight nodes in the graph.
+
+        Returns
+        -------
+        nodes: generator<WeightJoint>
+            The generator of nodes.
+        """
+
+        for n in self.node_names:
+            yield self.find_node(n)
 
     def visualize(self, path: Optional[str] = None) -> str:
         """Dump the graph to prototxt format.

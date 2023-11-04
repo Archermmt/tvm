@@ -43,6 +43,8 @@ class MSCArray(object):
         return "<{}>{}".format(self._type, self.abstract())
 
     def _analysis(self, data: Any) -> Tuple[str, np.ndarray]:
+        if isinstance(data, (list, tuple)) and all(isinstance(d, (int, float)) for d in data):
+            return "np", np.array(data)
         if isinstance(data, np.ndarray):
             return "np", data
         if isinstance(data, tvm.runtime.NDArray):
@@ -195,17 +197,22 @@ def dump_dict(dict_obj: dict, flavor: str = "dmlc") -> str:
         def _get_lines(value, indent=0):
             lines = []
             for k, v in value.items():
+                if isinstance(v, (dict, tuple, list)) and not v:
+                    continue
                 if isinstance(v, dict):
                     lines.append("{}{}:".format(indent * " ", k))
                     lines.extend(_get_lines(v, indent + 2))
                 elif isinstance(v, (tuple, list)) and len(str(v)) > 100:
-                    lines.append("{}{}:".format(indent * " ", k))
-                    lines.extend(
-                        [
-                            "{}<{}>{}".format((indent + 2) * " ", idx, ele)
-                            for idx, ele in enumerate(v)
-                        ]
-                    )
+                    if all(isinstance(e, (int, float)) for e in v):
+                        lines.append("{}{}: {}".format(indent * " ", k, MSCArray(v).abstract()))
+                    else:
+                        lines.append("{}{}:".format(indent * " ", k))
+                        lines.extend(
+                            [
+                                "{}<{}>{}".format((indent + 2) * " ", idx, ele)
+                                for idx, ele in enumerate(v)
+                            ]
+                        )
                 elif isinstance(v, bool):
                     lines.append("{}{}: {}".format(indent * " ", k, "true" if v else "false"))
                 elif isinstance(v, np.ndarray):

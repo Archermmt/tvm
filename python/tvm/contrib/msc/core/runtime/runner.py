@@ -26,8 +26,8 @@ import numpy as np
 import tvm
 from tvm.contrib.msc.core.ir import MSCGraph
 from tvm.contrib.msc.core.frontend import from_relax
-from tvm.contrib.msc.core.tools import MSCTool, add_tool
-from tvm.contrib.msc.core.utils.namespace import MSCFramework
+from tvm.contrib.msc.core.tools import MSCTool, create_tool, get_tool, get_tools
+from tvm.contrib.msc.core.utils.namespace import MSCFramework, MSCMap, MSCKey
 from tvm.contrib.msc.core import utils as msc_utils
 from tvm.contrib.msc.core import _ffi_api
 
@@ -90,7 +90,7 @@ class BaseRunner(object):
             "device": self._device,
             "is_training": self._is_training,
         }
-        self._logger.debug(msc_utils.msg_block("RUNNER_CONFIG", config))
+        self._logger.info(msc_utils.msg_block("RUNNER_CONFIG", config))
 
     def setup(self):
         """Setup the runner"""
@@ -121,6 +121,11 @@ class BaseRunner(object):
         else:
             cache_info = {}
 
+        # Create tools
+        if self._tools_config:
+            for t_type, config in self._tools_config.items():
+                self._tools[t_type] = create_tool(self.framework, t_type, config, self._name)
+
         # Load graphs from cache
         if cache_info.get("graphs"):
             self._graphs, self._weights = self._load_graphs(cache_dir, cache_info["graphs"])
@@ -131,16 +136,14 @@ class BaseRunner(object):
         # Get or rebuild graphs
         if build_graph or not self._graphs:
             self._graphs, self._weights = self._translate()
+            for tool in get_tools():
+                self._graphs, self._weights = tool.reset(self._graphs, self._weights)
             self._logger.debug("Translate {} graphs from module".format(len(self._graphs)))
 
         # Save graphs for debug
-        for graph in self._graphs:
-            graph.visualize(msc_utils.get_debug_dir().relpath(graph.name + ".prototxt"))
-
-        # Create tools
-        if self._tools_config:
-            for t_type, config in self._tools_config.items():
-                self._tools[t_type] = self._create_tool(t_type, config)
+        if MSCMap.get(MSCKey.ON_DEBUG, False):
+            for graph in self._graphs:
+                graph.visualize(msc_utils.get_debug_dir().relpath(graph.name + ".prototxt"))
 
         if cache_info.get("model") and not build_graph:
             # Load model from cache
@@ -188,8 +191,9 @@ class BaseRunner(object):
         }
         with open(cache_dir.relpath("cache_info.json"), "w") as f:
             f.write(json.dumps(cache_info, indent=2))
-        self._logger.debug("Runner save cache -> " + str(cache_dir.path))
-        self._logger.debug(msc_utils.msg_block("CACHE_INFO", cache_info))
+        self._logger.debug(
+            msc_utils.msg_block("CACHE_INFO", {"folder": cache_dir, "info": cache_info})
+        )
 
     def run(
         self, inputs: Union[List[np.ndarray], Dict[str, np.ndarray]], ret_type="dict"
@@ -247,30 +251,21 @@ class BaseRunner(object):
             outputs = [msc_utils.cast_array(data) for data in outputs]
         return outputs
 
-    def _create_tool(self, tool_type: str, config: dict) -> MSCTool:
-        """Create tool by type, config and tag
+    def get_tool(self, tool_type: str) -> MSCTool:
+        """Get tool by type
 
         Parameters
         -------
-        framework: str
-            The framework for implement
         tool_type: str
             The type of the tool prune| quantize| distill...
-        config: dict
-            The config of tool.
-        tag: str
-            The tag of the tool.
+
+        Returns
+        -------
+        tool: MSCTool
+            The saved tool.
         """
 
-        tool_style = config.pop("tool_style") if "tool_style" in config else "default"
-        tool_cls = msc_utils.get_registered_tool_cls(tool_type, tool_style)
-        assert tool_cls, "Can not find tool class for {}:{}".format(tool_type, tool_style)
-        impl_style = config.pop("impl_style") if "impl_style" in config else "default"
-        impl_cls = msc_utils.get_registered_tool_impl(self.framework, tool_type, impl_style)
-        assert impl_cls, "Can not find implement class for {}:{} @ {}".format(
-            tool_type, impl_style, self.framework
-        )
-        return add_tool(tool_type, tool_cls(impl_cls(), self._graphs, **config))
+        return get_tool(tool_type, self._name)
 
     def get_inputs(self) -> List[Dict[str, str]]:
         """Get the inputs of the model
@@ -298,7 +293,7 @@ class BaseRunner(object):
         """Destory runner"""
 
         if self._model:
-            del self._model
+            self._model = None
 
     def _translate(self) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:
         """Translate IRModule to MSCgraphs
@@ -704,7 +699,8 @@ class BYOCRunner(BaseRunner):
             cache_info
         )
 
-        self._byoc_mod = tvm.ir.load_json(cache_dir.relpath(cache_info["byoc_mod"]))
+        with open(cache_dir.relpath(cache_info["byoc_mod"]), "r") as f:
+            self._byoc_mod = tvm.ir.load_json(f.read())
         graphs, weights = [], []
         for f_graph, f_weights in cache_info["sub_graphs"]:
             graphs.append(MSCGraph.from_json(cache_dir.relpath(f_graph)))

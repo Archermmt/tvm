@@ -82,7 +82,7 @@ void TensorflowCodeGen::CodeGenGraph() {
     if (node->optype == "input") {
       continue;
     }
-    CodeGenNode(node);
+    CodeGenNode(node, config()->use_tools);
   }
   Array<String> idx_outputs;
   for (const auto& o : graph()->GetOutputs()) {

@@ -20,8 +20,10 @@ import os
 import copy
 import logging
 from functools import wraps
-from typing import List, Iterable, Any, Tuple
+from typing import List, Iterable, Any, Tuple, Dict
+import numpy as np
 
+import tvm
 from tvm.contrib.msc.core.ir import MSCGraph, MSCJoint, MSCTensor
 from tvm.contrib.msc.core.utils.namespace import MSCMap, MSCKey, MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
@@ -122,8 +124,6 @@ class MSCTool(object):
     ----------
     tool_impl: MSCToolImpl
         The implement of the tool
-    graphs: list<MSCGraph>
-        The msc graphs
     runtime_config: str
         The runtime config file path.
     strategy: dict
@@ -139,7 +139,6 @@ class MSCTool(object):
     def __init__(
         self,
         tool_impl: MSCToolImpl,
-        graphs: List[MSCGraph],
         runtime_config: str,
         strategy: dict,
         options: dict = None,
@@ -147,26 +146,26 @@ class MSCTool(object):
         logger: logging.Logger = None,
     ):
         self._tool_impl = tool_impl
-        self._graphs = graphs
         if os.path.isfile(runtime_config):
             self._runtime_config = msc_utils.load_dict(runtime_config)
         else:
             self._runtime_config = {}
-        self._strategy = self._parse_stratgey(strategy)
+        self._methods, self._method_configs = self._parse_strategy(msc_utils.copy_dict(strategy))
         self._verbose_step = verbose_step
         self._logger = logger or msc_utils.get_global_logger()
         self.setup(options)
-        init_title = "{}.Init ({} on {})".format(
+        init_title = "{}.init ({} on {})".format(
             self.tool_type(), self.tool_style(), self._tool_impl.framework()
         )
         init_info = {
-            "strategy": self._strategy,
-            "runtime_config": self._runtime_config,
+            "methods": self._methods,
+            "method_configs": self._method_configs,
             "options": self._options,
             "verbose_step": self._verbose_step,
         }
         self._logger.info(msc_utils.msg_block(init_title, init_info))
-        self.reset()
+        if self._runtime_config:
+            self._logger.debug(msc_utils.msg_block("RUNTIME_CONFIG", self._runtime_config))
 
     def setup(self, options: dict):
         """Setup the tool
@@ -183,10 +182,30 @@ class MSCTool(object):
         self._graph_id = 0
         self._tool_impl.setup(options)
 
-    def reset(self):
-        """Reset the tool"""
+    def reset(
+        self, graphs: List[MSCGraph], weights: List[Dict[str, tvm.nd.array]]
+    ) -> Tuple[List[MSCGraph], List[Dict[str, tvm.nd.array]]]:
+        """Reset the tool
+
+        Parameters
+        ----------
+        graphs: list<MSCgraph>
+            The msc graphs.
+        weights: list<dic<str, tvm.nd.array>>
+            The weights
+
+        Returns
+        -------
+        graphs: list<MSCgraph>
+            The msc graphs.
+        weights: list<dic<str, tvm.nd.array>>
+            The weights
+        """
 
         self._forward_cnt = 0
+        self._graphs = graphs
+        self._weights = weights
+        return self._graphs, self._weights
 
     def execute_before_build(self, *args, **kwargs):
         """Execute before model build
@@ -203,7 +222,7 @@ class MSCTool(object):
             self._graph_id = kwargs.get("graph_id", 0)
             self._logger.debug(
                 "<{}> before build graph[{}]({})".format(
-                    self.tool_type, self._graph_id, "train" if self._is_training else "eval"
+                    self.tool_type(), self._graph_id, "train" if self._is_training else "eval"
                 )
             )
             self._tool_impl.execute_before_build(*args, **kwargs)
@@ -226,7 +245,7 @@ class MSCTool(object):
             output = self._tool_impl.execute_after_build(output)
             self._logger.debug(
                 "<{}> after build graph[{}]({})".format(
-                    self.tool_type, self._graph_id, "train" if self._is_training else "eval"
+                    self.tool_type(), self._graph_id, "train" if self._is_training else "eval"
                 )
             )
         return output
@@ -246,7 +265,7 @@ class MSCTool(object):
             if self.should_log():
                 self._logger.debug(
                     "<{}> start graph[{}] forward[{}]".format(
-                        self.tool_type, self._graph_id, self._forward_cnt
+                        self.tool_type(), self._graph_id, self._forward_cnt
                     )
                 )
             self._tool_impl.execute_before_forward(*args, **kwargs)
@@ -270,11 +289,66 @@ class MSCTool(object):
             if self.should_log():
                 self._logger.debug(
                     "<{}> end graph[{}] forward[{}]".format(
-                        self.tool_type, self._graph_id, self._forward_cnt
+                        self.tool_type(), self._graph_id, self._forward_cnt
                     )
                 )
             self._forward_cnt += 1
         return output
+
+    def process_tensor(self, tensor: Any, name: str, consumer: str, phase: str) -> Any:
+        """Process tensor
+
+        Parameters
+        -------
+        tensor: Any
+            Tensor in framework
+        name: str
+            The name of the tensor.
+        consumer: str
+            The name of the consumer.
+        phase: str
+            The phase mark teacher| student| null
+
+        Returns
+        -------
+        tensor: Any
+            The processed tensor.
+        """
+
+        if not self._check_tensor(name, consumer, phase):
+            return tensor
+        return self._tool_impl.process_tensor(tensor, name, consumer, phase)
+
+    def _check_tensor(self, name: str, consumer: str, phase: str) -> bool:
+        """Check if the tensor should be processed
+
+        Parameters
+        -------
+        name: str
+            The name of the tensor.
+        consumer: str
+            The name of the consumer.
+        phase: str
+            The phase mark teacher| student| null
+
+        Returns
+        -------
+        vaild: bool
+            Whether to process the tensor.
+        """
+
+        return True
+
+    def update_runtime_config(self, config: dict):
+        """Update the runtime config
+
+        Parameters
+        ----------
+        config: dict
+            The new config.
+        """
+
+        self._runtime_config.update(config)
 
     def enable(self):
         """Enable the tool"""
@@ -432,7 +506,26 @@ class MSCTool(object):
                 return g.find_consumers(name)
         raise Exception("Can not find consumers of {} from graphs".format(name))
 
-    def _parse_stratgey(self, strategy: dict):
+    def get_data(self, name: str) -> np.ndarray:
+        """Get the data by name
+
+        Parameters
+        -------
+        name: str
+            The tensor name
+
+        Returns
+        -------
+        data: np.ndarray
+            The data.
+        """
+
+        for sub_weights in self._weights:
+            if name in sub_weights:
+                return msc_utils.cast_array(sub_weights[name])
+        raise Exception("Can not find data " + str(name))
+
+    def _parse_strategy(self, strategy: dict):
         """Parse the strategy to get valid strategy
 
         Parameters
@@ -442,22 +535,74 @@ class MSCTool(object):
 
         Returns
         -------
-        valid_stratgey: dict
-            The parsed strategy.
+        method_configs: dict
+            The parsed method configs.
+        methods: dict
+            The parsed methods.
         """
 
-        valid_stratgey = {}
+        methods, method_configs = {}, {}
         assert isinstance(strategy, list) and all(
             isinstance(s, dict) for s in strategy
         ), "Strategy should be given as list of dict"
         for s in strategy:
-            if "op_types" in s:
-                valid_stratgey.update({op_type: copy.deepcopy(s) for op_type in s.pop("op_types")})
-            elif "op_names" in s:
-                valid_stratgey.update({op_name: copy.deepcopy(s) for op_name in s.pop("op_names")})
+            method_cls_name = s.pop("method_cls") if "method_cls" in s else "default"
+            method_cls = msc_utils.get_registered_tool_method(
+                self._tool_impl.framework(), self.tool_type(), method_cls_name
+            )
+            default_cls = msc_utils.get_registered_tool_method(
+                MSCFramework.MSC, self.tool_type(), method_cls_name
+            )
+            method = s.pop("method") if "method" in s else "default"
+            method = (
+                getattr(method_cls, method)
+                if hasattr(method_cls, method)
+                else getattr(default_cls, method)
+            )
+            if "types" in s:
+                types = s.pop("types")
+                methods.update({s_type: method for s_type in types})
+                method_configs.update({s_type: copy.deepcopy(s) for s_type in types})
+            elif "names" in s:
+                names = s.pop("names")
+                methods.update({s_name: method for s_name in names})
+                method_configs.update({s_name: copy.deepcopy(s) for s_name in names})
             else:
-                valid_stratgey["default"] = s
-        return valid_stratgey
+                methods["default"] = method
+                method_configs["default"] = s
+        return methods, method_configs
+
+    def _get_method(self, name: str) -> dict:
+        """Get the method by name
+
+        Parameters
+        -------
+        name: str
+            The hint name
+
+        Returns
+        -------
+        method: callable
+            The method.
+        """
+
+        return self._methods.get(name) or self._methods["default"]
+
+    def _get_method_config(self, name: str) -> dict:
+        """Get the config for method by name
+
+        Parameters
+        -------
+        name: str
+            The hint name
+
+        Returns
+        -------
+        method_config: dict
+            The method config.
+        """
+
+        return self._method_configs.get(name) or self._method_configs["default"]
 
     @property
     def graph(self):
@@ -486,14 +631,14 @@ def _get_tool_key(tool_type: str) -> str:
         The tool key.
     """
 
-    if tool_type == "prune":
+    if tool_type == MSCToolType.PRUNE:
         return MSCKey.PRUNER
-    if tool_type == "quantize":
+    if tool_type == MSCToolType.QUANTIZE:
         return MSCKey.QUANTIZER
-    if tool_type == "distill":
+    if tool_type == MSCToolType.DISTILL:
         return MSCKey.DISTILLER
-    if tool_type == "record":
-        return MSCKey.RECORDER
+    if tool_type == MSCToolType.DEBUG:
+        return MSCKey.DEBUGGER
     raise TypeError("Unexpected tool type " + str(tool_type))
 
 
@@ -515,6 +660,32 @@ def add_tool(tool: MSCTool, tool_type: str, tag: str = "main"):
     tools[tag] = tool
     MSCMap.set(tool_key, tools)
     return tool
+
+
+def create_tool(framework: str, tool_type: str, config: dict, tag: str = "main") -> MSCTool:
+    """Create tool by type, config and tag
+
+    Parameters
+    -------
+    framework: str
+        The framework for implement
+    tool_type: str
+        The type of the tool prune| quantize| distill...
+    config: dict
+        The config of tool.
+    tag: str
+        The tag of the tool.
+    """
+
+    tool_style = config.pop("tool_style") if "tool_style" in config else "default"
+    tool_cls = msc_utils.get_registered_tool_cls(tool_type, tool_style)
+    assert tool_cls, "Can not find tool class for {}:{}".format(tool_type, tool_style)
+    impl_style = config.pop("impl_style") if "impl_style" in config else "default"
+    impl_cls = msc_utils.get_registered_tool_impl(framework, tool_type, impl_style)
+    assert impl_cls, "Can not find implement class for {}:{} @ {}".format(
+        tool_type, impl_style, framework
+    )
+    return add_tool(tool_cls(impl_cls(), **config), tool_type, tag)
 
 
 def get_tool(tool_type: str, tag: str = "main") -> MSCTool:
@@ -587,9 +758,9 @@ def execute_tool(stage: str, tag: str = "main") -> callable:
             output = func(*args, **kwargs)
             for tool in get_tools(tag):
                 if stage == "build":
-                    output = tool.execute_after_build(*args, **kwargs)
+                    output = tool.execute_after_build(output)
                 elif stage == "forward":
-                    output = tool.execute_after_forward(*args, **kwargs)
+                    output = tool.execute_after_forward(output)
                 else:
                     raise TypeError("Unexpected stage " + str(stage))
             return output

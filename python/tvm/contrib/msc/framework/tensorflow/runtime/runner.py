@@ -71,9 +71,9 @@ class TensorflowRunner(ModelRunner):
         """Destory runner"""
 
         self._session.close()
-        del self._tf_graph
-        del self._tf_outputs
-        del self._session
+        self._tf_graph = None
+        self._tf_outputs = None
+        self._session = None
         super().destory()
 
     def _generate_model(

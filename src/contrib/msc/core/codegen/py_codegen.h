@@ -84,7 +84,7 @@ class PyCodeGen : public BaseCodeGen<ConfigType, HelperType> {
         .line("from typing import List, Dict")
         .line("import tvm");
     if (this->config()->use_tools) {
-      this->stack_.line("from tvm.contrib.msc.tools import tool as msc_tool");
+      this->stack_.line("from tvm.contrib.msc.core import tools as msc_tools");
     }
     this->stack_.line("from tvm.contrib.msc.core import utils as msc_utils");
   }
@@ -142,12 +142,12 @@ class PyCodeGen : public BaseCodeGen<ConfigType, HelperType> {
   }
 
   /*! \brief Stack the docs for the node*/
-  virtual void CodeGenNode(const MSCJoint& node) {
+  virtual void CodeGenNode(const MSCJoint& node, bool use_tools) {
     this->stack_.comment(this->Comment(node));
-    if (this->config()->use_tools) {
+    if (use_tools) {
       for (size_t i = 0; i < node->inputs.size(); i++) {
         const auto& input = node->InputAt(i);
-        this->stack_.func_call("msc_tool.process_tensor", this->IdxInputBase(node, i, false))
+        this->stack_.func_call("msc_tools.process_tensor", this->IdxInputBase(node, i, false))
             .call_arg(this->IdxInputBase(node, i, true))
             .call_arg(DocUtils::ToStrDoc(input->name))
             .call_arg(DocUtils::ToStrDoc(node->name))
@@ -156,7 +156,7 @@ class PyCodeGen : public BaseCodeGen<ConfigType, HelperType> {
       }
       for (const auto& pair : node->weights) {
         this->stack_
-            .func_call("msc_tool.process_tensor", this->IdxWeightBase(node, pair.first, false))
+            .func_call("msc_tools.process_tensor", this->IdxWeightBase(node, pair.first, false))
             .call_arg(this->IdxWeightBase(node, pair.first, true))
             .call_arg(DocUtils::ToStrDoc(pair.second->name))
             .call_arg(DocUtils::ToStrDoc(node->name))

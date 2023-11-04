@@ -14,17 +14,17 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""tvm.contrib.msc.framework.torch.tools.prune.pruner"""
+"""tvm.contrib.msc.framework.tvm.tools.prune.pruner"""
 
 from tvm.contrib.msc.core.tools.prune import MSCPrunerImpl
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 
 
-class TorchPrunerImpl(MSCPrunerImpl):
+class TVMPrunerImpl(MSCPrunerImpl):
     @classmethod
     def framework(cls):
-        return MSCFramework.TORCH
+        return MSCFramework.TVM
 
 
-msc_utils.register_tool_impl(TorchPrunerImpl)
+msc_utils.register_tool_impl(TVMPrunerImpl)

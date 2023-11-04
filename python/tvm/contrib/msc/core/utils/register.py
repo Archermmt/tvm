@@ -119,16 +119,11 @@ def register_tool_impl(impl_cls: Any, impl_style: str = "default"):
     if impl_cls.framework() not in tools_impl:
         tools_impl[impl_cls.framework()] = {}
     register_name = "{}.{}".format(impl_cls.tool_type(), impl_style)
-    assert (
-        register_name not in tools_impl[impl_cls.framework()]
-    ), "Implement {} is already registered by {}".format(
-        register_name, tools_impl[impl_cls.framework()][register_name]
-    )
     tools_impl[impl_cls.framework()][register_name] = impl_cls
     MSCMap.set(MSCKey.REGISTERED_TOOLS_IMPL, tools_impl)
 
 
-def get_registered_tool_impl(framework: str, tool_type: str, impl_style: str) -> Any:
+def get_registered_tool_impl(framework: str, tool_type: str, impl_style: str = "default") -> Any:
     """Get the registered tool implement.
 
     Parameters
@@ -149,3 +144,50 @@ def get_registered_tool_impl(framework: str, tool_type: str, impl_style: str) ->
     tools_impl = MSCMap.get(MSCKey.REGISTERED_TOOLS_IMPL, {})
     register_name = "{}.{}".format(tool_type, impl_style)
     return tools_impl.get(framework, {}).get(register_name)
+
+
+def register_tool_method(method_cls: Any, method_style: str = "default"):
+    """Register a tool method.
+
+    Parameters
+    ----------
+    method_cls: class
+        The method class.
+    method_style: string
+        The style of the method.
+    """
+
+    tools_method = MSCMap.get(MSCKey.REGISTERED_TOOLS_METHOD, {})
+    assert hasattr(method_cls, "framework") and hasattr(
+        method_cls, "tool_type"
+    ), "framework and tool_type should be given to register tool method"
+    if method_cls.framework() not in tools_method:
+        tools_method[method_cls.framework()] = {}
+    register_name = "{}.{}".format(method_cls.tool_type(), method_style)
+    tools_method[method_cls.framework()][register_name] = method_cls
+    MSCMap.set(MSCKey.REGISTERED_TOOLS_METHOD, tools_method)
+
+
+def get_registered_tool_method(
+    framework: str, tool_type: str, method_style: str = "default"
+) -> Any:
+    """Get the registered tool method.
+
+    Parameters
+    ----------
+    framework: string
+        Should be from MSCFramework.
+    tool_type: string
+        The type of the tool prune| quantize| distill| debug.
+    method_style: string
+        The style of the method.
+
+    Returns
+    -------
+    method_cls: class
+        The method class.
+    """
+
+    tools_method = MSCMap.get(MSCKey.REGISTERED_TOOLS_METHOD, {})
+    register_name = "{}.{}".format(tool_type, method_style)
+    return tools_method.get(framework, {}).get(register_name)

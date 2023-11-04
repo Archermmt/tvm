@@ -71,7 +71,7 @@ void RelaxCodeGen::CodeGenGraph() {
     } else if (scope_level == -1) {
       stack_.scope_end();
     }
-    CodeGenNode(node);
+    CodeGenNode(node, config()->use_tools);
   }
   if (scopes().size() > 1) {
     // end left scopes

@@ -17,6 +17,7 @@
 """tvm.contrib.msc.pipeline.manager"""
 
 import os
+import json
 import time
 from typing import Dict, Any
 import numpy as np
@@ -52,16 +53,17 @@ class BaseManager(object):
         for stage in ["inputs", "outputs", "dataset", "prepare", "compile"]:
             assert stage in config, "{} should be given to run the pipeline".format(stage)
         self._workspace = msc_utils.set_workspace(config.get("workspace"))
+        MSCMap.set(MSCKey.ON_DEBUG, config.get("debug", False))
         log_path = config.get("log_path") or self._workspace.relpath("MSC_LOG", keep_history=False)
         self._logger = msc_utils.set_global_logger(config.get("verbose", "info"), log_path)
         msc_utils.time_stamp("init", True)
+        config_info = {"workspace": self._workspace.path, "config": config}
+        self._logger.info(msc_utils.msg_block("CONFIG", config_info))
         self._model = model
-        config["workspace"] = self._workspace.path
-        self._logger.info(msc_utils.msg_block("CONFIG", config))
-        self._config = self.update_config(model, config)
-        self._logger.debug(msc_utils.msg_block("FULL_CONFIG", self._config))
+        self._config = self.update_config(config)
         self._relax_mod, self._runner = None, None
         self._sample_inputs = None
+        self._tools_config = {}
         self._report = {
             "success": False,
             "info": {
@@ -73,13 +75,11 @@ class BaseManager(object):
             "profile": {},
         }
 
-    def update_config(self, model: Any, config: dict) -> dict:
+    def update_config(self, config: dict) -> dict:
         """Update config
 
         Parameters
         ----------
-        model: Any
-            The raw model in framwork.
         config: dict
             The config for pipeline.
 
@@ -89,15 +89,29 @@ class BaseManager(object):
             The updated config.
         """
 
-        if config.get("use_cache", True):
-            if "parse" in config:
-                config["parse"]["cache_path"] = msc_utils.get_cache_dir().relpath(
-                    "parsed_relax.json"
-                )
-            for stage in ["baseline", "optimize", "compile"]:
-                if stage in config:
-                    config[stage]["cache_dir"] = msc_utils.get_cache_dir().create_dir(stage)
-        return config
+        # update prepare and parse
+        assert "inputs" in config, "inputs should be given to run manager"
+        assert "outputs" in config, "outputs should be given to run manager"
+        for stage in ["prepare", "parse"]:
+            if stage not in config:
+                config[stage] = {}
+        config = self._update_prepare_config(config)
+        config = self._update_parse_config(config)
+        for stage in ["baseline", "optimize", "compile"]:
+            config = self._update_runtime_config(config, stage)
+        config = self._update_tool_config(config)
+        ordered_keys = [
+            "model_type",
+            "inputs",
+            "outputs",
+            "dataset",
+            "prepare",
+            "parse",
+            "baseline",
+            "optimize",
+            "compile",
+        ]
+        return {k: config[k] for k in ordered_keys if k in config}
 
     def run_pipe(self) -> dict:
         """Run the pipeline and return object.
@@ -111,19 +125,13 @@ class BaseManager(object):
         err_msg = None
         use_cache = self._config.get("use_cache", True)
         try:
-            msc_utils.time_stamp("prepare", True)
             self._sample_inputs = self.prepare(self._config["prepare"], use_cache)
-            msc_utils.time_stamp("parse", True)
             self._relax_mod = self.parse(self._config["parse"], use_cache)
             if "baseline" in self._config:
-                msc_utils.time_stamp("baseline", True)
                 self.baseline(self._config["baseline"], use_cache)
             if "optimize" in self._config:
-                msc_utils.time_stamp("optimize", True)
                 self.optimize(self._config["optimize"], use_cache)
-            msc_utils.time_stamp("compile", True)
             self.compile(self._config["compile"], use_cache)
-            msc_utils.time_stamp("end", True, False)
         except Exception as e:
             err_msg = "Pipeline failed:{}\nTrace: {}".format(e, traceback.format_exc())
         report = self.summary(err_msg)
@@ -146,6 +154,7 @@ class BaseManager(object):
             The sample inputs.
         """
 
+        msc_utils.time_stamp("prepare", True)
         golden_folder = msc_utils.get_dataset_dir().relpath("Golden", use_cache)
         input_names = [i[0] for i in self._config["inputs"]]
         sample_inputs = None
@@ -211,6 +220,19 @@ class BaseManager(object):
             else:
                 raise Exception("golden or runner should given in prepare to save golden")
             self._logger.debug("Saved {} golden to {}".format(golden_cnt, golden_folder))
+
+        def _to_abstract(info: dict) -> dict:
+            return {
+                "num_datas": info["num_datas"],
+                "inputs": {
+                    n: "{}({})".format(i["shape"], i["dtype"]) for n, i in info["inputs"].items()
+                },
+                "outputs": {
+                    n: "{}({})".format(i["shape"], i["dtype"]) for n, i in info["outputs"].items()
+                },
+            }
+
+        report["datas_info"] = _to_abstract(report["datas_info"])
         report["sample_inputs"] = sample_inputs
         self._logger.info(msc_utils.msg_block("GOLDEN", report))
 
@@ -244,13 +266,15 @@ class BaseManager(object):
             The parsed module.
         """
 
+        msc_utils.time_stamp("parse", True)
         cache_path = stage_config.get("cache_path") if use_cache else None
         if cache_path and os.path.isfile(cache_path):
-            relax_mod = tvm.ir.load_json(cache_path)
-            self._logger.debug("Load parsed mod from {}".format(cache_path))
+            with open(cache_path, "r") as f:
+                relax_mod = tvm.ir.load_json(f.read())
+            self._logger.info("Load parsed mod from {}".format(cache_path))
         else:
             parse_config = stage_config.get("parse_config", {})
-            self._logger.debug("Parse by {}({})".format(stage_config["parser"], parse_config))
+            self._logger.info("Parse by {}({})".format(stage_config["parser"], parse_config))
             relax_mod, _ = stage_config["parser"](self._model, as_msc=False, **parse_config)
             if cache_path:
                 with open(cache_path, "w") as f:
@@ -269,7 +293,8 @@ class BaseManager(object):
             Whether to use cache.
         """
 
-        self._runner = self._create_runner(stage_config, use_cache)
+        msc_utils.time_stamp("baseline", True)
+        self._runner = self._create_runner(stage_config, use_cache=use_cache)
         if "profile" in stage_config:
             self._report["profile"]["baseline"] = self._profile(stage_config)
         if use_cache:
@@ -295,7 +320,27 @@ class BaseManager(object):
             The runner or model.
         """
 
-        self._runner = self._create_runner(stage_config, use_cache)
+        # run prune
+        if "prune" in stage_config:
+            self._tools_config["prune"] = stage_config["prune"]
+            config_file = stage_config["prune"]["runtime_config"]
+            if os.path.isfile(stage_config["prune"]["runtime_config"]):
+                self._logger.info("Skip prune with runtime_config " + str(config_file))
+            else:
+                msc_utils.time_stamp("prune", True)
+                runner = self._create_runner(
+                    stage_config, tools_config=self._tools_config, use_cache=use_cache
+                )
+                runtime_config = runner.get_tool("prune").create_runtime_config()
+                with open(config_file, "w") as f:
+                    f.write(json.dumps(runtime_config, indent=2))
+                self._logger.info("Save prune runtime_config -> " + str(config_file))
+
+        # optimize and get the runner
+        msc_utils.time_stamp("optimize", True)
+        self._runner = self._create_runner(
+            stage_config, tools_config=self._tools_config, use_cache=use_cache
+        )
         if "profile" in stage_config:
             self._report["profile"]["optimize"] = self._profile(stage_config)
         if use_cache:
@@ -322,7 +367,10 @@ class BaseManager(object):
             The runner or model.
         """
 
-        self._runner = self._create_runner(stage_config, use_cache)
+        msc_utils.time_stamp("compile", True)
+        self._runner = self._create_runner(
+            stage_config, tools_config=self._tools_config, use_cache=use_cache
+        )
         if "profile" in stage_config:
             self._report["profile"]["compile"] = self._profile(stage_config)
         if use_cache:
@@ -343,6 +391,7 @@ class BaseManager(object):
             The report of the pipeline.
         """
 
+        msc_utils.time_stamp("summary", True, False)
         if err_msg:
             self._report.update({"success": False, "err_msg": err_msg})
         else:
@@ -357,6 +406,153 @@ class BaseManager(object):
             self._runner.destory()
         MSCMap.delete(MSCKey.TIME_STAMPS)
         self._workspace.destory()
+
+    def _update_prepare_config(self, config: dict) -> dict:
+        """Update prepare in stage config.
+
+        Parameters
+        ----------
+        config: dict
+            The config of a pipeline.
+
+        Returns
+        -------
+        config: dict
+            The updated config.
+        """
+
+        if config["model_type"] == MSCFramework.TORCH:
+            assert isinstance(
+                self._model, torch.nn.Module
+            ), "Model for torch should be nn.Module, get {}({})".format(
+                self._model, type(self._model)
+            )
+            config["prepare"]["runner"] = TorchRunner.run_native
+        elif config["model_type"] == MSCFramework.TENSORFLOW:
+            assert isinstance(
+                self._model, tf_v1.GraphDef
+            ), "Model for tenosrflow should be tf.GraphDef, get {}({})".format(
+                self._model, type(self._model)
+            )
+            config["prepare"]["runner"] = TensorflowRunner.run_native
+        else:
+            raise Exception("Unexpect model_type " + str(config["model_type"]))
+        return config
+
+    def _update_parse_config(self, config: dict) -> dict:
+        """Update parse in stage config.
+
+        Parameters
+        ----------
+        config: dict
+            The config of a pipeline.
+
+        Returns
+        -------
+        config: dict
+            The updated config.
+        """
+
+        if config["model_type"] == MSCFramework.TORCH:
+            config["parse"]["parser"] = from_torch
+            parse_config = config["parse"].get("parse_config", {})
+            parse_config.update(
+                {
+                    "input_info": [[i[1], i[2]] for i in config["inputs"]],
+                    "input_names": [i[0] for i in config["inputs"]],
+                }
+            )
+            config["parse"]["parse_config"] = parse_config
+        elif config["model_type"] == MSCFramework.TENSORFLOW:
+            config["parse"]["parser"] = from_tensorflow
+            parse_config = config["parse"].get("parse_config", {})
+            parse_config.update(
+                {
+                    "shape_dict": {i[0]: i[1] for i in config["inputs"]},
+                    "outputs": config["outputs"],
+                }
+            )
+            config["parse"]["parse_config"] = parse_config
+        else:
+            raise Exception("Unexpect model_type " + str(config["model_type"]))
+        if config.get("use_cache", True):
+            config["parse"]["cache_path"] = msc_utils.get_cache_dir().relpath("parsed_relax.json")
+        return config
+
+    def _update_runtime_config(self, config: dict, stage: str) -> dict:
+        """Update runtime stage in stage config.
+
+        Parameters
+        ----------
+        config: dict
+            The config of a pipeline.
+        stage: str
+            The stage to be updated
+        """
+
+        if stage not in config:
+            return
+        model_type = config["model_type"]
+        if "run_type" not in config[stage]:
+            config[stage]["run_type"] = model_type
+        # update run config
+        run_config = config[stage].get("run_config", {})
+        if "translate_config" not in run_config:
+            run_config["translate_config"] = {}
+        if "build" not in run_config["translate_config"]:
+            run_config["translate_config"]["build"] = {}
+        if "generate_config" not in run_config:
+            run_config["generate_config"] = {}
+        on_debug = MSCMap.get(MSCKey.ON_DEBUG, False)
+        run_config["generate_config"].update(
+            {
+                "build_folder": msc_utils.get_build_dir().create_dir(stage, cleanup=not on_debug),
+            }
+        )
+        run_config["translate_config"]["build"]["input_aliases"] = [i[0] for i in config["inputs"]]
+        run_config["translate_config"]["build"]["output_aliases"] = config["outputs"]
+        if model_type == MSCFramework.TORCH:
+            parameters = list(self._model.parameters())
+            if parameters:
+                ref_device = parameters[0].device
+                if ref_device.type == "cpu":
+                    device = "cpu"
+                else:
+                    device = "{}:{}".format(ref_device.type, ref_device.index)
+            else:
+                device = "cpu"
+            run_config.update({"device": device, "is_training": self._model.training})
+        config[stage]["run_config"] = run_config
+        if config.get("use_cache", True):
+            config[stage]["cache_dir"] = msc_utils.get_cache_dir().create_dir(stage)
+        return config
+
+    def _update_tool_config(self, config: dict) -> dict:
+        """Update tool in stage config.
+
+        Parameters
+        ----------
+        config: dict
+            The config of a pipeline.
+
+        Returns
+        -------
+        config: dict
+            The updated config.
+        """
+
+        if "optimize" not in config:
+            return config
+        for tool_type in ["prune", "quantize", "distill", "debug"]:
+            if tool_type not in config["optimize"]:
+                continue
+            tool_config = config["optimize"][tool_type]
+            if "runtime_config" not in tool_config:
+                tool_config["runtime_config"] = "msc_{}.json".format(tool_type)
+            tool_config["runtime_config"] = msc_utils.to_abs_path(
+                tool_config["runtime_config"], msc_utils.get_config_dir()
+            )
+        return config
 
     def _profile(self, stage_config: str) -> dict:
         """Profile the runner.
@@ -433,13 +629,17 @@ class BaseManager(object):
             return self._runner.model
         raise Exception("Unexpect return type " + str(ret_type))
 
-    def _create_runner(self, stage_config: dict, use_cache: bool = False) -> BaseRunner:
+    def _create_runner(
+        self, stage_config: dict, tools_config: dict = None, use_cache: bool = False
+    ) -> BaseRunner:
         """Create runner.
 
         Parameters
         ----------
         stage_config: dict
             The config of this stage.
+        tools_config: dict
+            The config of the tools
         use_cache: bool
             Whether to use cache.
 
@@ -449,119 +649,65 @@ class BaseManager(object):
             The runner.
         """
 
+        if self._runner:
+            self._runner.destory()
         stage = msc_utils.current_stage()
         cache_dir = stage_config["cache_dir"] if use_cache else None
         msc_utils.time_stamp(stage + ".build", False)
+        runner_cls = self._get_runner_cls(stage_config["run_type"])
         run_config = stage_config.get("run_config", {})
         self._logger.debug(
-            "Create runner({}) by {}({})".format(stage, stage_config["runner"].__name__, run_config)
+            "Create runner({}) by {}({})".format(stage, runner_cls.__name__, run_config)
         )
-        if self._runner:
-            self._runner.destory()
-        runner = stage_config["runner"](self._relax_mod, logger=self._logger, **run_config)
+        runner = runner_cls(
+            self._relax_mod, tools_config=tools_config, logger=self._logger, **run_config
+        )
         runner.build(cache_dir=cache_dir)
         self._report["info"][stage + "_by"] = "{}({})".format(runner.framework, runner.device)
         return runner
+
+    def _get_runner_cls(self, run_type: str) -> BaseRunner:
+        """Get the runner cls by type
+
+        Parameters
+        ----------
+        run_type: str
+            The run type.
+
+        Returns
+        -------
+        runner_cls: class
+            The runner class.
+        """
+
+        raise NotImplementedError("_get_runner_cls is not implemented for BaseManager")
 
 
 class MSCManager(BaseManager):
     """Normal manager in MSC"""
 
-    def update_config(self, model, config):
-        config = super().update_config(model, config)
-        for stage in ["prepare", "parse"]:
-            if stage not in config:
-                config[stage] = {}
-        if config["model_type"] == MSCFramework.TORCH:
-            assert isinstance(
-                model, torch.nn.Module
-            ), "Model for torch should be nn.Module, get {}({})".format(model, type(model))
-            assert "inputs" in config, "inputs should be given to parse torch model"
-            config["prepare"]["runner"] = TorchRunner.run_native
-            config["parse"]["parser"] = from_torch
-            parse_config = config["parse"].get("parse_config", {})
-            parse_config.update(
-                {
-                    "input_info": [[i[1], i[2]] for i in config["inputs"]],
-                    "input_names": [i[0] for i in config["inputs"]],
-                }
-            )
-            config["parse"]["parse_config"] = parse_config
-        elif config["model_type"] == MSCFramework.TENSORFLOW:
-            assert isinstance(
-                model, tf_v1.GraphDef
-            ), "Model for tenosrflow should be tf.GraphDef, get {}({})".format(model, type(model))
-            config["prepare"]["runner"] = TensorflowRunner.run_native
-            config["parse"]["parser"] = from_tensorflow
-            parse_config = config["parse"].get("parse_config", {})
-            parse_config.update(
-                {
-                    "shape_dict": {i[0]: i[1] for i in config["inputs"]},
-                    "outputs": config["outputs"],
-                }
-            )
-            config["parse"]["parse_config"] = parse_config
-        else:
-            raise Exception("Unexpect model_type " + str(config["model_type"]))
-        for stage in ["baseline", "optimize", "compile"]:
-            self.update_runner(config, stage, model)
-        return config
-
-    def update_runner(self, config: dict, stage: str, model: Any) -> dict:
-        """Update runner in stage config.
+    def _get_runner_cls(self, run_type: str) -> BaseRunner:
+        """Get the runner cls by type
 
         Parameters
         ----------
-        config: dict
-            The config of a pipeline.
-        stage: str
-            The stage to be updated
-        model: Any
-            The raw model in framwork.
+        run_type: str
+            The run type.
+
+        Returns
+        -------
+        runner_cls: class
+            The runner class.
         """
 
-        if stage not in config:
-            return
-        model_type = config["model_type"]
-        if "run_type" not in config[stage]:
-            config[stage]["run_type"] = model_type
-        run_type = config[stage]["run_type"]
-        # define runner
         if run_type == MSCFramework.TVM:
-            config[stage]["runner"] = TVMRunner
+            runner_cls = TVMRunner
         elif run_type == MSCFramework.TORCH:
-            config[stage]["runner"] = TorchRunner
+            runner_cls = TorchRunner
         elif run_type == MSCFramework.TENSORFLOW:
-            config[stage]["runner"] = TensorflowRunner
+            runner_cls = TensorflowRunner
         elif run_type == MSCFramework.TENSORRT:
-            config[stage]["runner"] = TensorRTRunner
+            runner_cls = TensorRTRunner
         else:
             raise Exception("Unexpect run_type " + str(run_type))
-
-        # update run config
-        run_config = config[stage].get("run_config", {})
-        if "translate_config" not in run_config:
-            run_config["translate_config"] = {}
-        if "build" not in run_config["translate_config"]:
-            run_config["translate_config"]["build"] = {}
-        if "generate_config" not in run_config:
-            run_config["generate_config"] = {}
-        run_config["generate_config"].update(
-            {
-                "build_folder": msc_utils.get_build_dir().create_dir(stage),
-            }
-        )
-        run_config["translate_config"]["build"]["input_aliases"] = [i[0] for i in config["inputs"]]
-        run_config["translate_config"]["build"]["output_aliases"] = config["outputs"]
-        if model_type == MSCFramework.TORCH:
-            parameters = list(model.parameters())
-            if parameters:
-                ref_device = parameters[0].device
-                if ref_device.type == "cpu":
-                    device = "cpu"
-                else:
-                    device = "{}:{}".format(ref_device.type, ref_device.index)
-            else:
-                device = "cpu"
-            run_config.update({"device": device, "is_training": model.training})
-        config[stage]["run_config"] = run_config
+        return runner_cls

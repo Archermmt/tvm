@@ -217,6 +217,8 @@ class MSCTensorNode : public Object {
   const Integer DimAt(int index) const;
   /*! \brief Get dim at given axis. */
   const Integer DimAt(const String& axis) const;
+  /*! \brief Get layout index of given axis. */
+  int32_t LayoutOf(const String& axis) const;
   /*! \brief Get size of the tensor. */
   const Integer GetSize() const;
   /*! \brief Get name of the dtype. */
@@ -290,8 +292,6 @@ class BaseJointNode : public Object {
   String name;
   /*! \brief The shared_ref of node, can be changed. */
   String shared_ref;
-  /*! \brief The op type of node. */
-  String optype;
   /*! \brief The attributes of node. */
   Map<String, String> attrs;
   /*! \brief The parents of node. */
@@ -333,15 +333,13 @@ class BaseJointNode : public Object {
     v->Visit("index", &index);
     v->Visit("name", &name);
     v->Visit("shared_ref", &shared_ref);
-    v->Visit("optype", &optype);
     v->Visit("attrs", &attrs);
     v->Visit("parents", &parents);
-    v->Visit("childern", &children);
+    v->Visit("children", &children);
   }
 
   bool SEqualReduce(const BaseJointNode* other, SEqualReducer equal) const {
-    return equal(name, other->name) &&
-           equal(shared_ref, other->shared_ref) & equal(optype, other->optype) &&
+    return equal(name, other->name) && equal(shared_ref, other->shared_ref) &&
            equal(attrs, other->attrs) && equal(parents, other->parents) &&
            equal(children, other->children);
   }
@@ -349,7 +347,6 @@ class BaseJointNode : public Object {
   void SHashReduce(SHashReducer hash_reduce) const {
     hash_reduce(name);
     hash_reduce(shared_ref);
-    hash_reduce(optype);
     hash_reduce(attrs);
     hash_reduce(parents);
     hash_reduce(children);
@@ -377,6 +374,8 @@ class BaseJoint : public ObjectRef {
 class MSCJoint;
 class MSCJointNode : public BaseJointNode {
  public:
+  /*! \brief The op type of node. */
+  String optype;
   /*! \brief The scope of node. */
   Array<String> scope;
   /*! \brief The inputs of node, can be changed. */
@@ -416,6 +415,7 @@ class MSCJointNode : public BaseJointNode {
 
   void VisitAttrs(AttrVisitor* v) {
     BaseJointNode::VisitAttrs(v);
+    v->Visit("optype", &optype);
     v->Visit("scope", &scope);
     v->Visit("inputs", &inputs);
     v->Visit("outputs", &outputs);
@@ -423,13 +423,14 @@ class MSCJointNode : public BaseJointNode {
   }
 
   bool SEqualReduce(const MSCJointNode* other, SEqualReducer equal) const {
-    return BaseJointNode::SEqualReduce(other, equal) && equal(scope, other->scope) &&
-           equal(inputs, other->inputs) && equal(outputs, other->outputs) &&
-           equal(weights, other->weights);
+    return BaseJointNode::SEqualReduce(other, equal) && equal(optype, other->optype) &&
+           equal(scope, other->scope) && equal(inputs, other->inputs) &&
+           equal(outputs, other->outputs) && equal(weights, other->weights);
   }
 
   void SHashReduce(SHashReducer hash_reduce) const {
     BaseJointNode::SHashReduce(hash_reduce);
+    hash_reduce(optype);
     hash_reduce(scope);
     hash_reduce(inputs);
     hash_reduce(outputs);
@@ -488,7 +489,7 @@ class WeightJoint;
 class WeightJointNode : public BaseJointNode {
  public:
   /*! \brief The weight reference of weight node. */
-  String wtype;
+  String weight_type;
   /*! \brief The weight of weight node. */
   MSCTensor weight;
   /*! \brief The friends of weight node. */
@@ -500,19 +501,19 @@ class WeightJointNode : public BaseJointNode {
 
   void VisitAttrs(AttrVisitor* v) {
     BaseJointNode::VisitAttrs(v);
-    v->Visit("wtype", &wtype);
+    v->Visit("weight_type", &weight_type);
     v->Visit("weight", &weight);
     v->Visit("friends", &friends);
   }
 
   bool SEqualReduce(const WeightJointNode* other, SEqualReducer equal) const {
-    return BaseJointNode::SEqualReduce(other, equal) && equal(wtype, other->wtype) &&
+    return BaseJointNode::SEqualReduce(other, equal) && equal(weight_type, other->weight_type) &&
            equal(weight, other->weight) && equal(friends, other->friends);
   }
 
   void SHashReduce(SHashReducer hash_reduce) const {
     BaseJointNode::SHashReduce(hash_reduce);
-    hash_reduce(wtype);
+    hash_reduce(weight_type);
     hash_reduce(weight);
     hash_reduce(friends);
   }
@@ -532,15 +533,15 @@ class WeightJoint : public BaseJoint {
    * \param index The index of the node.
    * \param name The name of the node.
    * \param shared_ref The shared_ref of the node.
-   * \param optype The optype of the node.
-   * \param wtype The weight type of the node.
+   * \param weight_type The weight type of the node.
    * \param weight The weight tensor of the node.
    * \param parents The parents of the node.
    * \param attrs The attributes of the node.
    * \param friends The friends of the node.
    */
-  TVM_DLL WeightJoint(int index, const String& name, const String& shared_ref, const String& optype,
-                      const String& wtype, const MSCTensor& weight, const Array<BaseJoint> parents,
+  TVM_DLL WeightJoint(int index, const String& name, const String& shared_ref,
+                      const String& weight_type, const MSCTensor& weight,
+                      const Array<BaseJoint> parents,
                       const Map<String, String>& attrs = Map<String, String>(),
                       const Array<BaseJoint>& friends = Array<BaseJoint>());
 
@@ -558,6 +559,8 @@ class BaseGraphNode : public Object {
   Array<String> node_names;
   /*! \brief The nodes in graph, can be changed. */
   Map<String, BaseJoint> nodes;
+  /*! \brief Check if node in the graph. */
+  const bool HasNode(const String& name) const;
 
   void VisitAttrs(AttrVisitor* v) {
     v->Visit("name", &name);
@@ -614,8 +617,6 @@ class MSCGraphNode : public BaseGraphNode {
   void FromJson(const std::string& json_str);
   /*! \brief Export graph to prototxt. */
   const String ToPrototxt() const;
-  /*! \brief Check if node in the graph. */
-  const bool HasNode(const String& name) const;
   /*! \brief Find node in graph. */
   const MSCJoint FindNode(const String& name) const;
   /*! \brief Get input from the graph. */
@@ -718,10 +719,10 @@ class WeightGraphNode : public BaseGraphNode {
   /*! \brief build from MSCGraph. */
   void Build(const MSCGraph& graph, const Map<String, Array<String>>& prunable_types,
              const Map<String, String>& relation_types);
-  /*! \brief Export graph to prototxt. */
-  const String ToPrototxt() const;
   /*! \brief Find node in graph. */
   const WeightJoint FindNode(const String& name) const;
+  /*! \brief Export graph to prototxt. */
+  const String ToPrototxt() const;
 
   void VisitAttrs(AttrVisitor* v) { BaseGraphNode::VisitAttrs(v); }
 
@@ -752,6 +753,8 @@ class WeightGraph : public BaseGraph {
 
   TVM_DEFINE_OBJECT_REF_METHODS(WeightGraph, BaseGraph, WeightGraphNode);
 };
+
+MSCGraph PruneWeights(const MSCGraph& graph, const Map<String, MSCTensor>& pruned_tensors);
 
 }  // namespace msc
 }  // namespace contrib

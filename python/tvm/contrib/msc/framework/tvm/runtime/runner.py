@@ -23,6 +23,7 @@ import tvm
 from tvm.contrib.msc.core.runtime import ModelRunner
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.framework.tvm.codegen import to_relax
+from tvm.contrib.msc.framework.tvm import tools
 
 
 class TVMRunner(ModelRunner):

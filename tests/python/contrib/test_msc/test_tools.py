@@ -26,12 +26,14 @@ from tvm.contrib.msc.pipeline import MSCManager
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 
 
-def _get_config(model_type, deploy_type, tools_config, inputs, outputs, atol=1e-2, rtol=1e-2):
+def _get_config(model_type, deploy_type, prune_config, inputs, outputs, atol=1e-2, rtol=1e-2):
     """Get msc config"""
     return {
         "model_type": model_type,
         "inputs": inputs,
         "outputs": outputs,
+        "debug": True,
+        "verbose": "debug",
         "dataset": {"loader": "from_random", "max_iter": 5},
         "prepare": {"profile": {"benchmark": {"repeat": 10}}},
         "baseline": {
@@ -40,9 +42,7 @@ def _get_config(model_type, deploy_type, tools_config, inputs, outputs, atol=1e-
         },
         "optimize": {
             "run_type": model_type,
-            "run_config": {
-                "tools_config": tools_config,
-            },
+            "prune": prune_config,
         },
         "compile": {
             "run_type": deploy_type,
@@ -68,7 +68,7 @@ def _get_torch_model(name, is_training=False):
         return None
 
 
-def _test_from_torch(deploy_type, tools_config, is_training=False, atol=1e-2, rtol=1e-2):
+def _test_from_torch(deploy_type, prune_config, is_training=False, atol=1e-2, rtol=1e-2):
     torch_model = _get_torch_model("resnet50", is_training)
     if torch_model:
         if torch.cuda.is_available():
@@ -76,7 +76,7 @@ def _test_from_torch(deploy_type, tools_config, is_training=False, atol=1e-2, rt
         config = _get_config(
             MSCFramework.TORCH,
             deploy_type,
-            tools_config,
+            prune_config,
             inputs=[["input_0", [1, 3, 224, 224], "float32"]],
             outputs=["output"],
             atol=atol,
@@ -91,8 +91,11 @@ def _test_from_torch(deploy_type, tools_config, is_training=False, atol=1e-2, rt
 def test_torch_pruner():
     """Test pruner for torch"""
 
-    tools_config = {"prune": {"runtime_config": "msc_prune.json", "strategy": [{"density": 0.8}]}}
-    _test_from_torch(MSCFramework.TORCH, tools_config, is_training=False)
+    prune_config = {
+        "runtime_config": "msc_prune.json",
+        "strategy": [{"method": "per_channel", "density": 0.8}],
+    }
+    _test_from_torch(MSCFramework.TVM, prune_config, is_training=False)
 
 
 if __name__ == "__main__":

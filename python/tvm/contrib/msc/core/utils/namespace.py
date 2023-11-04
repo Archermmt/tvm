@@ -53,10 +53,12 @@ class MSCKey:
 
     WORKSPACE = "workspace"
     VERBOSE = "verbose"
+    ON_DEBUG = "on_debug"
     GLOBALE_LOGGER = "global_logger"
     REGISTERED_FUNCS = "registered_funcs"
     REGISTERED_TOOLS_CLS = "registered_tools_cls"
     REGISTERED_TOOLS_IMPL = "registered_tools_impl"
+    REGISTERED_TOOLS_METHOD = "registered_tools_method"
 
     MSC_STAGE = "msc_stage"
     TIME_STAMPS = "time_stamps"
@@ -64,7 +66,7 @@ class MSCKey:
     PRUNER = "pruner"
     QUANTIZER = "quantizer"
     DISTILLER = "distiller"
-    RECORDER = "reocrder"
+    DEBUGGER = "debugger"
 
 
 class MSCFramework:
