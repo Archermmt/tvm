@@ -68,6 +68,9 @@ class MSCKey:
     DISTILLER = "distiller"
     DEBUGGER = "debugger"
 
+    MSC_STAGE = "msc_stage"
+    TIME_STAMPS = "time_stamps"
+
 
 class MSCFramework:
     """Framework type for the MSC"""

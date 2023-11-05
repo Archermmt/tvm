@@ -24,12 +24,12 @@
 #include <tvm/runtime/device_api.h>
 #include <tvm/runtime/logging.h>
 #include <tvm/runtime/memory.h>
+#include <tvm/runtime/memory/memory_manager.h>
 #include <tvm/runtime/ndarray.h>
 #include <tvm/runtime/packed_func.h>
 #include <tvm/runtime/registry.h>
 #include <tvm/runtime/relax_vm/builtin.h>
 #include <tvm/runtime/relax_vm/bytecode.h>
-#include <tvm/runtime/relax_vm/memory_manager.h>
 #include <tvm/runtime/relax_vm/vm.h>
 
 #include "../runtime_base.h"
@@ -246,7 +246,7 @@ void CheckTensorInfo(TVMArgs args, TVMRetValue* rv) {
   if (dtype != DataType::Void()) {
     CHECK(DataType(ptr->dl_tensor.dtype) == dtype)
         << "ValueError: " << err_ctx.value_or("") << " expect Tensor with dtype " << dtype
-        << " but get " << ptr->dl_tensor.dtype;
+        << " but get " << DataType(ptr->dl_tensor.dtype);
   }
 }
 

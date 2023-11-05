@@ -78,7 +78,7 @@ class MSCArray(object):
         return self._data
 
 
-def cast_array(data: Any):
+def cast_array(data: Any) -> np.ndarray:
     """Cast array like object to np.ndarray
 
     Parameters
