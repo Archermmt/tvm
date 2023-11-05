@@ -75,7 +75,7 @@ class BaseRunner(object):
         if self._tools_config:
             if "codegen" not in self._generate_config:
                 self._generate_config["codegen"] = {}
-            self._generate_config["codegen"]["use_tools"] = True
+            self._generate_config["codegen"].update({"use_tools": True, "tools_tag": name})
         self._name = name
         self._device = device if self._device_enabled(device) else "cpu"
         self._is_training = is_training

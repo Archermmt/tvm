@@ -345,6 +345,7 @@ class BaseManager(object):
             self._report["profile"]["optimize"] = self._profile(stage_config)
         if use_cache:
             self._runner.save_cache(stage_config["cache_dir"])
+        raise Exception("stop here!!")
         return self.get_runnable(ret_type)
 
     def compile(

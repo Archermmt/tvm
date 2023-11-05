@@ -36,7 +36,7 @@ void RelaxCodeGen::CodeGenGraph() {
   Array<String> idx_inputs;
   for (const auto& i : graph()->GetInputs()) {
     const auto& pair = graph()->FindProducerAndIdx(i);
-    const auto& idx_input = IdxOutputBase(pair.first, pair.second);
+    const auto& idx_input = IdxOutputBase(pair.first, pair.second, true);
     stack_.func_arg(idx_input, "relax.Var");
     idx_inputs.push_back(idx_input);
   }
@@ -46,7 +46,7 @@ void RelaxCodeGen::CodeGenGraph() {
   for (const auto& n : graph()->node_names) {
     const auto& node = graph()->FindNode(n);
     for (const auto& pair : node->weights) {
-      const auto& idx_weight = IdxWeightBase(node, pair.first);
+      const auto& idx_weight = IdxWeightBase(node, pair.first, true);
       stack_.func_call("relax.Var", idx_weight)
           .call_arg(DocUtils::ToStrDoc(pair.second->name))
           .func_call("relax.TensorStructInfo")

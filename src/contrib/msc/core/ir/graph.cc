@@ -983,10 +983,16 @@ MSCGraph PruneWeights(const MSCGraph& graph, const Map<String, MSCTensor>& prune
           pruned_tensors.count(pair.second->name) ? pruned_tensors[pair.second->name] : pair.second;
       weights.Set(pair.first, weight);
     }
+    // define attributes
+    Map<String, String> attrs = node->attrs;
+    if (node->optype == "reshape" && attrs.count("shape") &&
+        pruned_tensors.count(node->OutputAt(0)->name)) {
+      const auto& new_shape = pruned_tensors[node->OutputAt(0)->name]->shape;
+      attrs.Set("shape", StringUtils::ToString(new_shape));
+    }
     // create new node
-    const auto& new_node =
-        MSCJoint(static_cast<int>(nodes.size()), node->name, node->shared_ref, node->optype,
-                 node->attrs, node->scope, inputs, outputs, weights);
+    const auto& new_node = MSCJoint(static_cast<int>(nodes.size()), node->name, node->shared_ref,
+                                    node->optype, attrs, node->scope, inputs, outputs, weights);
     nodes.push_back(new_node);
     for (size_t i = 0; i < new_node->outputs.size(); i++) {
       inputs_map[new_node->OutputAt(i)->name] = std::make_pair(new_node, i);

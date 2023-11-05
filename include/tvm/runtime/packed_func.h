@@ -561,6 +561,10 @@ class TVMPODValue_ {
     TVM_CHECK_TYPE_CODE(type_code_, kDLInt);
     return value_.v_int64;
   }
+  operator u_long() const {
+    TVM_CHECK_TYPE_CODE(type_code_, kDLInt);
+    return value_.v_int64;
+  }
   operator int() const {
     TVM_CHECK_TYPE_CODE(type_code_, kDLInt);
     ICHECK_LE(value_.v_int64, std::numeric_limits<int>::max());
@@ -1484,6 +1488,10 @@ struct Type2Str<int64_t> {
 template <>
 struct Type2Str<uint64_t> {
   static std::string v() { return "uint64_t"; }
+};
+template <>
+struct Type2Str<u_long> {
+  static std::string v() { return "u_long"; }
 };
 template <>
 struct Type2Str<bool> {

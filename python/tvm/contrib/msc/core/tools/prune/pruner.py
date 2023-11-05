@@ -191,7 +191,12 @@ class MSCPruner(MSCTool):
                             pruned_tensors[out.name] = _prune_by_channel(
                                 out, pruned_tensors[node.input_at(0).name].dim_at("C")
                             )
-            new_graphs.append(_ffi_api.PruneWeights(graph, pruned_tensors))
+            pruned_graph = _ffi_api.PruneWeights(graph, pruned_tensors)
+            if MSCMap.get(MSCKey.ON_DEBUG, False):
+                pruned_graph.visualize(
+                    msc_utils.get_debug_dir().relpath(pruned_graph.name + "_pruned.prototxt")
+                )
+            new_graphs.append(pruned_graph)
             new_weights.append(pruned_weights)
         # log compress rate
         def _flatten_size(weights):
