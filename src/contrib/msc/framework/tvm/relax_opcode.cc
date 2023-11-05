@@ -41,7 +41,7 @@ const Array<Doc> RelaxOpCode::GetDocs() {
   }
   if (emit_var) {
     const auto& name = config()->explicit_name ? node()->name : "";
-    BuilderEmit(IdxNode(true), name);
+    BuilderEmit(IdxNode(), name);
   }
   return stack_.GetDocs();
 }

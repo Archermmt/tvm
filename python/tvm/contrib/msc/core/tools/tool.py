@@ -154,8 +154,8 @@ class MSCTool(object):
         self._verbose_step = verbose_step
         self._logger = logger or msc_utils.get_global_logger()
         self.setup(options)
-        init_title = "{}.init ({} on {})".format(
-            self.tool_type(), self.tool_style(), self._tool_impl.framework()
+        init_title = "{}.INIT ({}, {})".format(
+            self.tool_type().upper(), self.tool_style(), self._tool_impl.framework()
         )
         init_info = {
             "methods": self._methods,
@@ -165,7 +165,11 @@ class MSCTool(object):
         }
         self._logger.info(msc_utils.msg_block(init_title, init_info))
         if self._runtime_config:
-            self._logger.debug(msc_utils.msg_block("RUNTIME_CONFIG", self._runtime_config))
+            self._logger.debug(
+                msc_utils.msg_block(
+                    "{}.RUNTIME_CONFIG".format(self.tool_type().upper()), self._runtime_config
+                )
+            )
 
     def setup(self, options: dict):
         """Setup the tool
@@ -180,6 +184,7 @@ class MSCTool(object):
         self._enabled = True
         self._is_training = False
         self._graph_id = 0
+        self._forward_cnt = 0
         self._tool_impl.setup(options)
 
     def reset(

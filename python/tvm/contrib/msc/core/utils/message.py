@@ -106,7 +106,7 @@ def get_duration() -> dict:
     return duration
 
 
-def msg_block(title: str, msg: str):
+def msg_block(title: str, msg: str, width: int = 100):
     """Log message in block format
 
     Parameters
@@ -115,6 +115,8 @@ def msg_block(title: str, msg: str):
         The title of the block
     msg: str
         The message to log.
+    width: int
+        The max width of block message
 
     Returns
     -------
@@ -123,7 +125,7 @@ def msg_block(title: str, msg: str):
     """
 
     if isinstance(msg, dict):
-        msg = dump_dict(msg, "table")
+        msg = dump_dict(msg, "table:" + str(width))
     return "\n{0} {1} {0}\n{2}\n{3} {1} {3}".format(">" * 20, title.center(40), msg, "<" * 20)
 
 

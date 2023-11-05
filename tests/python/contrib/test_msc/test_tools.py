@@ -32,8 +32,7 @@ def _get_config(model_type, deploy_type, prune_config, inputs, outputs, atol=1e-
         "model_type": model_type,
         "inputs": inputs,
         "outputs": outputs,
-        "debug": True,
-        "verbose": "debug",
+        "verbose": "info",
         "dataset": {"loader": "from_random", "max_iter": 5},
         "prepare": {"profile": {"benchmark": {"repeat": 10}}},
         "baseline": {
@@ -43,6 +42,7 @@ def _get_config(model_type, deploy_type, prune_config, inputs, outputs, atol=1e-
         "optimize": {
             "run_type": model_type,
             "prune": prune_config,
+            "profile": {"check": {"atol": atol, "rtol": rtol}, "benchmark": {"repeat": 10}},
         },
         "compile": {
             "run_type": deploy_type,

@@ -79,21 +79,20 @@ using namespace tvm::script::printer;
                                                                                                   \
  protected:                                                                                       \
   const std::shared_ptr<ConfigType> config() { return config_; }                                  \
-  const String GetSuffix(bool as_raw = false) {                                                   \
-    const String& suffix = as_raw && config()->use_tools ? "_raw" : "";                           \
-    return suffix;                                                                                \
+  const String GetSuffix(const MSCJoint& node, bool process = true) {                             \
+    return process && config()->use_tools ? "c" + std::to_string(node->index) : "";               \
   }                                                                                               \
-  const String IdxNodeBase(const MSCJoint& node, bool as_raw = true) {                            \
-    return helper_.IdxNodeBase(node, config()->prefix, GetSuffix(as_raw));                        \
+  const String IdxNodeBase(const MSCJoint& node) {                                                \
+    return helper_.IdxNodeBase(node, config()->prefix, "");                                       \
   }                                                                                               \
-  const String IdxInputBase(const MSCJoint& node, int idx = 0, bool as_raw = false) {             \
-    return helper_.IdxInputBase(node, config()->prefix, idx, GetSuffix(as_raw));                  \
+  const String IdxInputBase(const MSCJoint& node, int idx = 0, bool process = true) {             \
+    return helper_.IdxInputBase(node, config()->prefix, idx, GetSuffix(node, process));           \
   }                                                                                               \
-  const String IdxOutputBase(const MSCJoint& node, int idx = 0, bool as_raw = false) {            \
-    return helper_.IdxOutputBase(node, config()->prefix, idx, GetSuffix(as_raw));                 \
+  const String IdxOutputBase(const MSCJoint& node, int idx = 0) {                                 \
+    return helper_.IdxOutputBase(node, config()->prefix, idx, "");                                \
   }                                                                                               \
-  const String IdxWeightBase(const MSCJoint& node, const String& wtype, bool as_raw = false) {    \
-    return helper_.IdxWeightBase(node, wtype, GetSuffix(as_raw));                                 \
+  const String IdxWeightBase(const MSCJoint& node, const String& wtype, bool process = true) {    \
+    return helper_.IdxWeightBase(node, wtype, GetSuffix(node, process));                          \
   }                                                                                               \
   const String Comment(const MSCJoint& node) { return helper_.Comment(node, config()->prefix); }  \
                                                                                                   \

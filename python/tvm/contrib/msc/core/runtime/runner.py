@@ -76,13 +76,16 @@ class BaseRunner(object):
             if "codegen" not in self._generate_config:
                 self._generate_config["codegen"] = {}
             self._generate_config["codegen"].update({"use_tools": True, "tools_tag": name})
+        if "build_folder" in self._generate_config:
+            self._generate_config["build_folder"] = msc_utils.msc_dir(
+                self._generate_config["build_folder"], cleanup=not MSCMap.get(MSCKey.ON_DEBUG)
+            )
         self._name = name
         self._device = device if self._device_enabled(device) else "cpu"
         self._is_training = is_training
         self._logger = logger or msc_utils.get_global_logger()
         self.setup()
         config = {
-            "class": self.__class__.__name__,
             "tools_config": self._tools_config,
             "translate_config": self._translate_config,
             "generate_config": self._generate_config,
@@ -90,7 +93,7 @@ class BaseRunner(object):
             "device": self._device,
             "is_training": self._is_training,
         }
-        self._logger.info(msc_utils.msg_block("RUNNER_CONFIG", config))
+        self._logger.info(msc_utils.msg_block("RUNNER_CONFIG({})".format(self.framework), config))
 
     def setup(self):
         """Setup the runner"""

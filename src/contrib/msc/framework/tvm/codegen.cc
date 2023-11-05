@@ -32,11 +32,14 @@ void RelaxCodeGen::CodeGenHeader() {
 }
 
 void RelaxCodeGen::CodeGenGraph() {
+  for (const auto& e : graph()->GetExits()) {
+    ICHECK(e->outputs.size() == 1) << "Relax exit should only has 1 output, get " << e;
+  }
   stack_.func_def(graph()->name, "tvm.IRModule");
   Array<String> idx_inputs;
   for (const auto& i : graph()->GetInputs()) {
     const auto& pair = graph()->FindProducerAndIdx(i);
-    const auto& idx_input = IdxOutputBase(pair.first, pair.second, true);
+    const auto& idx_input = IdxOutputBase(pair.first, pair.second);
     stack_.func_arg(idx_input, "relax.Var");
     idx_inputs.push_back(idx_input);
   }
@@ -46,7 +49,7 @@ void RelaxCodeGen::CodeGenGraph() {
   for (const auto& n : graph()->node_names) {
     const auto& node = graph()->FindNode(n);
     for (const auto& pair : node->weights) {
-      const auto& idx_weight = IdxWeightBase(node, pair.first, true);
+      const auto& idx_weight = IdxWeightBase(node, pair.first, false);
       stack_.func_call("relax.Var", idx_weight)
           .call_arg(DocUtils::ToStrDoc(pair.second->name))
           .func_call("relax.TensorStructInfo")
@@ -84,17 +87,19 @@ void RelaxCodeGen::CodeGenGraph() {
   }
   // mark outputs
   stack_.comment("Emit the outputs");
-  Array<String> idx_exits;
-  for (const auto& e : graph()->GetExits()) {
-    const auto& idx_exit = IdxNodeBase(e, false);
-    stack_.func_call("block_builder.emit_output", idx_exit).call_arg(idx_exit);
-    idx_exits.push_back(idx_exit);
+  Array<String> idx_outputs;
+  for (const auto& o : graph()->GetOutputs()) {
+    const auto& pair = graph()->FindProducerAndIdx(o);
+    const String& idx_output =
+        IdxOutputBase(pair.first, pair.second) + (config()->use_tools ? "_exit" : "");
+    idx_outputs.push_back(idx_output);
+    stack_.func_call("block_builder.emit_output", idx_output).call_arg(idx_output);
   }
   stack_.scope_end().func_call("block_builder.emit_func_output");
-  if (idx_exits.size() == 1) {
-    stack_.call_arg(idx_exits[0]);
+  if (idx_outputs.size() == 1) {
+    stack_.call_arg(idx_outputs[0]);
   } else {
-    stack_.call_arg(DocUtils::ToListDoc(idx_exits));
+    stack_.call_arg(DocUtils::ToListDoc(idx_outputs));
   }
   stack_.scope_end().assign("mod", "block_builder.get()").func_end("mod");
 }

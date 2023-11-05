@@ -192,17 +192,18 @@ def dump_dict(dict_obj: dict, flavor: str = "dmlc") -> str:
         return ""
     if flavor == "dmlc":
         return json.dumps({k: int(v) if isinstance(v, bool) else v for k, v in dict_obj.items()})
-    if flavor == "table":
+    if flavor.startswith("table:"):
 
         def _get_lines(value, indent=0):
+            max_size = int(flavor.split(":")[1]) - indent - 2
             lines = []
             for k, v in value.items():
                 if isinstance(v, (dict, tuple, list)) and not v:
                     continue
-                if isinstance(v, dict):
+                if isinstance(v, dict) and len(str(k) + str(v)) > max_size:
                     lines.append("{}{}:".format(indent * " ", k))
                     lines.extend(_get_lines(v, indent + 2))
-                elif isinstance(v, (tuple, list)) and len(str(v)) > 100:
+                elif isinstance(v, (tuple, list)) and len(str(k) + str(v)) > max_size:
                     if all(isinstance(e, (int, float)) for e in v):
                         lines.append("{}{}: {}".format(indent * " ", k, MSCArray(v).abstract()))
                     else:

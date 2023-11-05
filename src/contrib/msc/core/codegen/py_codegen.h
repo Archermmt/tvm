@@ -49,7 +49,11 @@ class PyCodeGen : public BaseCodeGen<ConfigType, HelperType> {
    * \param config the options for codegen.
    */
   explicit PyCodeGen(const MSCGraph& graph, const std::string& config = "")
-      : BaseCodeGen<ConfigType, HelperType>(graph, config) {}
+      : BaseCodeGen<ConfigType, HelperType>(graph, config) {
+    for (const auto& output : graph->GetOutputs()) {
+      graph_outputs_.insert(output);
+    }
+  }
 
   /*! \brief Stack the docs for the script*/
   virtual void CodeGenScript() {
@@ -144,11 +148,12 @@ class PyCodeGen : public BaseCodeGen<ConfigType, HelperType> {
   /*! \brief Stack the docs for the node*/
   virtual void CodeGenNode(const MSCJoint& node, bool use_tools) {
     this->stack_.comment(this->Comment(node));
+    // process inputs and weights by tools
     if (use_tools) {
       for (size_t i = 0; i < node->inputs.size(); i++) {
         const auto& input = node->InputAt(i);
-        this->stack_.func_call("msc_tools.process_tensor", this->IdxInputBase(node, i, false))
-            .call_arg(this->IdxInputBase(node, i, true))
+        this->stack_.func_call("msc_tools.process_tensor", this->IdxInputBase(node, i, true))
+            .call_arg(this->IdxInputBase(node, i, false))
             .call_arg(DocUtils::ToStrDoc(input->name))
             .call_arg(DocUtils::ToStrDoc(node->name))
             .call_arg(DocUtils::ToStrDoc(this->config()->tools_phase))
@@ -156,8 +161,8 @@ class PyCodeGen : public BaseCodeGen<ConfigType, HelperType> {
       }
       for (const auto& pair : node->weights) {
         this->stack_
-            .func_call("msc_tools.process_tensor", this->IdxWeightBase(node, pair.first, false))
-            .call_arg(this->IdxWeightBase(node, pair.first, true))
+            .func_call("msc_tools.process_tensor", this->IdxWeightBase(node, pair.first, true))
+            .call_arg(this->IdxWeightBase(node, pair.first, false))
             .call_arg(DocUtils::ToStrDoc(pair.second->name))
             .call_arg(DocUtils::ToStrDoc(node->name))
             .call_arg(DocUtils::ToStrDoc(this->config()->tools_phase))
@@ -166,6 +171,21 @@ class PyCodeGen : public BaseCodeGen<ConfigType, HelperType> {
     }
     for (const auto& d : this->GetOpCodes(node)) {
       this->stack_.line(d);
+    }
+    // process graph outputs by tools
+    if (use_tools) {
+      for (size_t i = 0; i < node->outputs.size(); i++) {
+        int index = static_cast<int>(i);
+        if (graph_outputs_.count(node->OutputAt(index))) {
+          this->stack_
+              .func_call("msc_tools.process_tensor", this->IdxOutputBase(node, index) + "_exit")
+              .call_arg(this->IdxOutputBase(node, index))
+              .call_arg(DocUtils::ToStrDoc(node->OutputAt(index)->name))
+              .call_arg(DocUtils::ToStrDoc("exit"))
+              .call_arg(DocUtils::ToStrDoc(this->config()->tools_phase))
+              .call_arg(DocUtils::ToStrDoc(this->config()->tools_tag));
+        }
+      }
     }
   }
 
@@ -177,6 +197,9 @@ class PyCodeGen : public BaseCodeGen<ConfigType, HelperType> {
 
   /*! \brief Get tensor type of the framework*/
   virtual const String TensorType() const { return "np.ndarray"; }
+
+ private:
+  std::set<MSCTensor> graph_outputs_;
 };
 
 }  // namespace msc

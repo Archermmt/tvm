@@ -135,7 +135,7 @@ class BaseManager(object):
         except Exception as e:
             err_msg = "Pipeline failed:{}\nTrace: {}".format(e, traceback.format_exc())
         report = self.summary(err_msg)
-        self._logger.info(msc_utils.msg_block("SUMMARY", report))
+        self._logger.info(msc_utils.msg_block("SUMMARY", report, 0))
         return report
 
     def prepare(self, stage_config: dict, use_cache: bool = False) -> Dict[str, np.ndarray]:
@@ -156,11 +156,10 @@ class BaseManager(object):
 
         msc_utils.time_stamp("prepare", True)
         golden_folder = msc_utils.get_dataset_dir().relpath("Golden", use_cache)
-        input_names = [i[0] for i in self._config["inputs"]]
-        sample_inputs = None
-        report = {"golden_folder": golden_folder}
+        input_names, sample_inputs = [i[0] for i in self._config["inputs"]], None
+        report, source_type = {"golden_folder": golden_folder}, "Unknown"
         if use_cache and msc_utils.is_dataset(golden_folder):
-            loader = msc_utils.MSCDataLoader(golden_folder)
+            loader, source_type = msc_utils.MSCDataLoader(golden_folder), "Cache"
             report["datas_info"] = loader.info
             sample_inputs = loader[0][0]
             self._logger.debug("Load {} cached golden from {}".format(len(loader), golden_folder))
@@ -176,7 +175,7 @@ class BaseManager(object):
                             i[0]: np.random.rand(*i[1]).astype(i[2]) for i in self._config["inputs"]
                         }
 
-                data_loader = get_inputs
+                data_loader, source_type = get_inputs, "Random"
             elif msc_utils.is_dataset(loader):
 
                 def get_inputs(max_num=-1):
@@ -185,9 +184,9 @@ class BaseManager(object):
                             i[0]: np.random.rand(*i[1]).astype(i[2]) for i in self._config["inputs"]
                         }
 
-                data_loader = get_inputs
+                data_loader, source_type = get_inputs, "Load"
             else:
-                data_loader = loader
+                data_loader, source_type = loader, "Custom"
             assert callable(data_loader), "Loader {} is not callable".format(data_loader)
 
             # save golden
@@ -234,7 +233,7 @@ class BaseManager(object):
 
         report["datas_info"] = _to_abstract(report["datas_info"])
         report["sample_inputs"] = sample_inputs
-        self._logger.info(msc_utils.msg_block("GOLDEN", report))
+        self._logger.info(msc_utils.msg_block("GOLDEN({})".format(source_type), report))
 
         # profile
         if "profile" in stage_config and "runner" in stage_config:
@@ -328,9 +327,7 @@ class BaseManager(object):
                 self._logger.info("Skip prune with runtime_config " + str(config_file))
             else:
                 msc_utils.time_stamp("prune", True)
-                runner = self._create_runner(
-                    stage_config, tools_config=self._tools_config, use_cache=use_cache
-                )
+                runner = self._create_runner(stage_config, tools_config=self._tools_config)
                 runtime_config = runner.get_tool("prune").create_runtime_config()
                 with open(config_file, "w") as f:
                     f.write(json.dumps(runtime_config, indent=2))
@@ -345,7 +342,6 @@ class BaseManager(object):
             self._report["profile"]["optimize"] = self._profile(stage_config)
         if use_cache:
             self._runner.save_cache(stage_config["cache_dir"])
-        raise Exception("stop here!!")
         return self.get_runnable(ret_type)
 
     def compile(
@@ -403,10 +399,11 @@ class BaseManager(object):
     def destory(self):
         """Destroy the manager"""
 
+        MSCMap.delete(MSCKey.TIME_STAMPS)
         if self._runner:
             self._runner.destory()
-        MSCMap.delete(MSCKey.TIME_STAMPS)
-        self._workspace.destory()
+        if not MSCMap.get(MSCKey.ON_DEBUG, False):
+            self._workspace.destory()
 
     def _update_prepare_config(self, config: dict) -> dict:
         """Update prepare in stage config.
@@ -504,11 +501,8 @@ class BaseManager(object):
             run_config["translate_config"]["build"] = {}
         if "generate_config" not in run_config:
             run_config["generate_config"] = {}
-        on_debug = MSCMap.get(MSCKey.ON_DEBUG, False)
         run_config["generate_config"].update(
-            {
-                "build_folder": msc_utils.get_build_dir().create_dir(stage, cleanup=not on_debug),
-            }
+            {"build_folder": msc_utils.get_build_dir().create_dir(stage).path}
         )
         run_config["translate_config"]["build"]["input_aliases"] = [i[0] for i in config["inputs"]]
         run_config["translate_config"]["build"]["output_aliases"] = config["outputs"]
@@ -587,8 +581,11 @@ class BaseManager(object):
                 passed += iter_report["passed"]
                 acc_report["iter_" + str(idx)] = iter_report["info"]
             title = "Check({}) pass {}/{}".format(stage, passed, total)
-            self._logger.info(msc_utils.msg_block(title, acc_report))
             report["accuracy"] = "{}/{}({:.2f}%)".format(passed, total, float(passed) * 100 / total)
+            self._logger.info(
+                "Accuracy({}) {} iters -> {}".format(stage, len(loader), report["accuracy"])
+            )
+            self._logger.debug(msc_utils.msg_block(title, acc_report))
 
         # benchmark model
         benchmark_config = profile_config.get("benchmark", {})
@@ -656,7 +653,7 @@ class BaseManager(object):
         cache_dir = stage_config["cache_dir"] if use_cache else None
         msc_utils.time_stamp(stage + ".build", False)
         runner_cls = self._get_runner_cls(stage_config["run_type"])
-        run_config = stage_config.get("run_config", {})
+        run_config = msc_utils.copy_dict(stage_config.get("run_config", {}))
         self._logger.debug(
             "Create runner({}) by {}({})".format(stage, runner_cls.__name__, run_config)
         )
