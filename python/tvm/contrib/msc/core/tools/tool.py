@@ -38,6 +38,10 @@ class MSCToolType(object):
     DISTILL = "distill"
     DEBUG = "debug"
 
+    @classmethod
+    def all_types(cls) -> List[str]:
+        return [cls.PRUNE, cls.QUANTIZE, cls.DISTILL, cls.DEBUG]
+
 
 class MSCToolImpl(object):
     def setup(self, options: dict):
@@ -154,14 +158,14 @@ class MSCTool(object):
         self._verbose_step = verbose_step
         self._logger = logger or msc_utils.get_global_logger()
         self.setup(options)
-        init_title = "{}.INIT ({}, {})".format(
-            self.tool_type().upper(), self.tool_style(), self._tool_impl.framework()
-        )
+        init_title = "{}.INIT ({})".format(self.tool_type().upper(), self._tool_impl.framework())
         init_info = {
+            "style": self.tool_style(),
             "methods": self._methods,
             "method_configs": self._method_configs,
             "options": self._options,
             "verbose_step": self._verbose_step,
+            "configed_num": len(self._runtime_config),
         }
         self._logger.info(msc_utils.msg_block(init_title, init_info))
         if self._runtime_config:
@@ -185,6 +189,8 @@ class MSCTool(object):
         self._is_training = False
         self._graph_id = 0
         self._forward_cnt = 0
+        self._graphs = []
+        self._weights = []
         self._tool_impl.setup(options)
 
     def reset(
@@ -323,6 +329,17 @@ class MSCTool(object):
         if not self._check_tensor(name, consumer, phase):
             return tensor
         return self._tool_impl.process_tensor(tensor, name, consumer, phase)
+
+    def visualize(self, visual_dir: msc_utils.MSCDirectory):
+        """Visualize MSCGraphs
+
+        Parameters
+        -------
+        visual_dir: MSCDirectory
+            Visualize path for saving graph
+        """
+
+        return
 
     def _check_tensor(self, name: str, consumer: str, phase: str) -> bool:
         """Check if the tensor should be processed
@@ -728,7 +745,7 @@ def get_tools(tag: str = "main") -> Iterable[MSCTool]:
         The saved tools.
     """
 
-    for t_type in [MSCToolType.PRUNE, MSCToolType.QUANTIZE, MSCToolType.DISTILL, MSCToolType.DEBUG]:
+    for t_type in MSCToolType.all_types():
         tool = get_tool(t_type, tag)
         if tool:
             yield tool

@@ -308,13 +308,19 @@ def get_workspace() -> MSCDirectory:
     return workspace
 
 
-def get_workspace_subdir(name: str = None) -> MSCDirectory:
+def get_workspace_subdir(
+    name: str = None, keep_history: bool = True, cleanup: bool = False
+) -> MSCDirectory:
     """Create sub dir for workspace
 
     Parameters
     ----------
     name: str
         The sub dir name under workspace.
+    keep_history: bool
+        Whether to remove files before start.
+    cleanup: bool
+        Whether to clean up before exit.
 
     Returns
     -------
@@ -322,12 +328,12 @@ def get_workspace_subdir(name: str = None) -> MSCDirectory:
         The created dir.
     """
 
-    return get_workspace().create_dir(name)
+    return get_workspace().create_dir(name, keep_history, cleanup)
 
 
 get_build_dir = partial(get_workspace_subdir, name="Build")
 get_config_dir = partial(get_workspace_subdir, name="Config")
 get_output_dir = partial(get_workspace_subdir, name="Output")
 get_dataset_dir = partial(get_workspace_subdir, name="Dataset")
-get_debug_dir = partial(get_workspace_subdir, name="Debug")
+get_visual_dir = partial(get_workspace_subdir, name="Visual")
 get_cache_dir = partial(get_workspace_subdir, name="Cache")

@@ -14,33 +14,17 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""tvm.contrib.msc.framework.tensorrt.runtime.runner"""
+"""tvm.contrib.msc.framework.tensorflow.tools.prune.pruner"""
 
-from tvm.contrib.msc.core.runtime import BYOCRunner
+from tvm.contrib.msc.core.tools.prune import MSCPrunerImpl
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
-from tvm.contrib.msc.framework.tensorrt.frontend import partition_for_tensorrt
-from tvm.contrib.msc.framework.tensorrt.codegen import to_tensorrt
-from tvm.contrib.msc.framework.tensorrt import tools
+from tvm.contrib.msc.core import utils as msc_utils
 
 
-class TensorRTRunner(BYOCRunner):
-    """Runner of tensorrt"""
+class TensorflowPrunerImpl(MSCPrunerImpl):
+    @classmethod
+    def framework(cls):
+        return MSCFramework.TENSORFLOW
 
-    def setup(self):
-        """Setup the runner"""
 
-        super().setup()
-        if not self._device.startswith("cuda"):
-            self._device = "cuda"
-
-    @property
-    def codegen_func(self):
-        return to_tensorrt
-
-    @property
-    def partition_func(self):
-        return partition_for_tensorrt
-
-    @property
-    def framework(self):
-        return MSCFramework.TENSORRT
+msc_utils.register_tool_impl(TensorflowPrunerImpl)

@@ -36,6 +36,19 @@ class MSCPrunerImpl(MSCToolImpl):
 class MSCPruner(MSCTool):
     """Base pruner for all"""
 
+    def setup(self, options: dict):
+        """Setup the tool
+
+        Parameters
+        ----------
+        options: dict
+            The options for setup the tool
+        """
+
+        super().setup(options)
+        self._prunable_types = {}
+        self._weight_graphs = []
+
     def reset(self, graphs: List[MSCGraph], weights: List[Dict[str, tvm.nd.array]]):
         """Reset the tool
 
@@ -79,11 +92,6 @@ class MSCPruner(MSCTool):
         self._weight_graphs = [
             _ffi_api.WeightGraph(graph, self._prunable_types, relation_types) for graph in graphs
         ]
-        # Save weight graphs for debug
-        if MSCMap.get(MSCKey.ON_DEBUG, False):
-            for w_graph in self._weight_graphs:
-                w_graph.visualize(msc_utils.get_debug_dir().relpath(w_graph.name + ".prototxt"))
-
         if not self._runtime_config:
             return super().reset(graphs, weights)
 
@@ -144,6 +152,7 @@ class MSCPruner(MSCTool):
 
         new_graphs, new_weights = [], []
         pruned_weights_cnt = 0
+        print("[TMINFO] has runtime_config " + str(self._runtime_config))
         for graph, sub_weights in zip(graphs, weights):
             pruned_tensors, pruned_weights = {}, {}
             for node in graph.get_nodes():
@@ -153,6 +162,9 @@ class MSCPruner(MSCTool):
                         data = msc_utils.cast_array(sub_weights[w_name])
                         in_axis, out_axis = self._get_io_axes(self.find_w_node(w_name))
                         w_config = self._runtime_config[w_name]
+                        print(
+                            "prune {}:{} with {}".format(w_name, msc_utils.MSCArray(data), w_config)
+                        )
                         if w_config["in_indices"]:
                             data = prune_axis(data, in_axis, w_config["in_indices"])
                         if w_config["out_indices"]:
@@ -192,10 +204,6 @@ class MSCPruner(MSCTool):
                                 out, pruned_tensors[node.input_at(0).name].dim_at("C")
                             )
             pruned_graph = _ffi_api.PruneWeights(graph, pruned_tensors)
-            if MSCMap.get(MSCKey.ON_DEBUG, False):
-                pruned_graph.visualize(
-                    msc_utils.get_debug_dir().relpath(pruned_graph.name + "_pruned.prototxt")
-                )
             new_graphs.append(pruned_graph)
             new_weights.append(pruned_weights)
         # log compress rate
@@ -209,7 +217,9 @@ class MSCPruner(MSCTool):
         raw_size = _flatten_size(weights)
         new_size = _flatten_size(new_weights)
         self._logger.info(
-            "Pruned {} weights to {:g}%".format(pruned_weights_cnt, new_size * 100 / raw_size)
+            "{} weights pruned, compress to {:g}%".format(
+                pruned_weights_cnt, new_size * 100 / raw_size
+            )
         )
         return new_graphs, new_weights
 
@@ -281,9 +291,21 @@ class MSCPruner(MSCTool):
             else:
                 rt_config[w_node.name]["out_indices"] = []
         rt_config = {n: c for n, c in rt_config.items() if c["in_indices"] or c["out_indices"]}
-        self._logger.info("Config prune for {} weights".format(len(rt_config)))
+        self._logger.info("{} weights configed by pruner".format(len(rt_config)))
         self._runtime_config = rt_config
         return self._runtime_config
+
+    def visualize(self, visual_dir: msc_utils.MSCDirectory):
+        """Visualize MSCGraphs
+
+        Parameters
+        -------
+        visual_dir: MSCDirectory
+            Visualize path for saving graph
+        """
+
+        for w_graph in self._weight_graphs:
+            w_graph.visualize(visual_dir.relpath(w_graph.name + ".prototxt"))
 
     def get_w_nodes(self) -> Iterable[WeightJoint]:
         """Get all the weight nodes in the weight_graphs.

@@ -29,6 +29,7 @@ from tvm.contrib.msc.core.runtime import ModelRunner
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.framework.tensorflow.codegen import to_tensorflow
 from tvm.contrib.msc.framework.tensorflow import tf_v1
+from tvm.contrib.msc.framework.tensorflow import tools
 
 
 class WrapSession(tf_v1.Session):

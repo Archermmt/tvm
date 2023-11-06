@@ -53,7 +53,6 @@ class MSCKey:
 
     WORKSPACE = "workspace"
     VERBOSE = "verbose"
-    ON_DEBUG = "on_debug"
     GLOBALE_LOGGER = "global_logger"
     REGISTERED_FUNCS = "registered_funcs"
     REGISTERED_TOOLS_CLS = "registered_tools_cls"

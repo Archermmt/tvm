@@ -76,10 +76,8 @@ class BaseRunner(object):
             if "codegen" not in self._generate_config:
                 self._generate_config["codegen"] = {}
             self._generate_config["codegen"].update({"use_tools": True, "tools_tag": name})
-        if "build_folder" in self._generate_config:
-            self._generate_config["build_folder"] = msc_utils.msc_dir(
-                self._generate_config["build_folder"], cleanup=not MSCMap.get(MSCKey.ON_DEBUG)
-            )
+        if "build_folder" not in self._generate_config:
+            self._generate_config["build_folder"] = msc_utils.get_build_dir()
         self._name = name
         self._device = device if self._device_enabled(device) else "cpu"
         self._is_training = is_training
@@ -142,11 +140,6 @@ class BaseRunner(object):
             for tool in get_tools():
                 self._graphs, self._weights = tool.reset(self._graphs, self._weights)
             self._logger.debug("Translate {} graphs from module".format(len(self._graphs)))
-
-        # Save graphs for debug
-        if MSCMap.get(MSCKey.ON_DEBUG, False):
-            for graph in self._graphs:
-                graph.visualize(msc_utils.get_debug_dir().relpath(graph.name + ".prototxt"))
 
         if cache_info.get("model") and not build_graph:
             # Load model from cache
@@ -253,6 +246,20 @@ class BaseRunner(object):
                 outputs = [outputs]
             outputs = [msc_utils.cast_array(data) for data in outputs]
         return outputs
+
+    def visualize(self, visual_dir: msc_utils.MSCDirectory):
+        """Visualize MSCGraphs
+
+        Parameters
+        -------
+        visual_dir: MSCDirectory
+            Visualize path for saving graph
+        """
+
+        for graph in self._graphs:
+            graph.visualize(visual_dir.relpath(graph.name + ".prototxt"))
+        for tool in self._tools.values():
+            tool.visualize(visual_dir)
 
     def get_tool(self, tool_type: str) -> MSCTool:
         """Get tool by type
@@ -620,7 +627,7 @@ class ModelRunner(BaseRunner):
             weights or self._weights[0],
             codegen_config=self._generate_config.get("codegen"),
             print_config=self._generate_config.get("build"),
-            build_folder=self._generate_config.get("build_folder", msc_utils.get_build_dir()),
+            build_folder=self._generate_config["build_folder"],
         )
 
     def _inspect_model(self) -> dict:
@@ -644,6 +651,18 @@ class BYOCRunner(BaseRunner):
         super().setup()
         self._byoc_mod, self._byoc_graph = None, None
 
+    def visualize(self, visual_dir: msc_utils.MSCDirectory):
+        """Visualize MSCGraphs
+
+        Parameters
+        -------
+        visual_dir: MSCDirectory
+            Visualize path for saving graph
+        """
+
+        super().visualize(visual_dir)
+        self._byoc_graph.visualize(visual_dir.relpath(self._byoc_graph.name + ".prototxt"))
+
     def _translate(self) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:
         """Translate IRModule to MSCgraphs
 
@@ -666,9 +685,6 @@ class BYOCRunner(BaseRunner):
             weights.append(sub_weights)
         self._byoc_graph = _ffi_api.BuildFromRelax(
             self._byoc_mod, "main", msc_utils.dump_dict(self._translate_config.get("build"))
-        )
-        self._byoc_graph.visualize(
-            msc_utils.get_debug_dir().relpath(self._byoc_graph.name + ".prototxt")
         )
         return graphs, weights
 
@@ -710,9 +726,6 @@ class BYOCRunner(BaseRunner):
             with open(cache_dir.relpath(f_weights), "rb") as f:
                 weights = tvm.runtime.load_param_dict(f.read())
         self._byoc_graph = MSCGraph.from_json(cache_dir.relpath(cache_info["byoc_graph"]))
-        self._byoc_graph.visualize(
-            msc_utils.get_debug_dir().relpath(self._byoc_graph.name + ".prototxt")
-        )
         return graphs, weights
 
     def _save_graphs(self, cache_dir: msc_utils.MSCDirectory) -> dict:
@@ -772,7 +785,7 @@ class BYOCRunner(BaseRunner):
             graph_infos,
             codegen_config=self._generate_config.get("codegen"),
             print_config=self._generate_config.get("build"),
-            build_folder=self._generate_config.get("build_folder", msc_utils.get_build_dir()),
+            build_folder=self._generate_config["build_folder"],
             output_folder=self._generate_config.get("output_folder", msc_utils.get_output_dir()),
         )
 
