@@ -194,7 +194,7 @@ def dump_dict(dict_obj: dict, flavor: str = "dmlc") -> str:
         return json.dumps({k: int(v) if isinstance(v, bool) else v for k, v in dict_obj.items()})
     if flavor.startswith("table:"):
 
-        def _get_lines(value, indent=0):
+        def _get_lines(value, indent=2):
             max_size = int(flavor.split(":")[1]) - indent - 2
             lines = []
             for k, v in value.items():

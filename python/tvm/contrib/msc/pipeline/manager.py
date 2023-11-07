@@ -55,7 +55,11 @@ class BaseManager(object):
             assert stage in config, "{} should be given to run the pipeline".format(stage)
         self._workspace = msc_utils.set_workspace(config.get("workspace"))
         log_path = config.get("log_path") or self._workspace.relpath("MSC_LOG", keep_history=False)
-        self._logger = msc_utils.set_global_logger(config.get("verbose", "info"), log_path)
+        if config.get("debug", False) and "verbose" not in config:
+            verbose = "debug"
+        else:
+            verbose = config.get("verbose", "info")
+        self._logger = msc_utils.set_global_logger(verbose, log_path)
         msc_utils.time_stamp("init", True)
         config_info = {"workspace": self._workspace.path, "config": config}
         self._logger.info(msc_utils.msg_block("CONFIG", config_info))
@@ -92,13 +96,14 @@ class BaseManager(object):
         # update prepare and parse
         assert "inputs" in config, "inputs should be given to run manager"
         assert "outputs" in config, "outputs should be given to run manager"
+        config = msc_utils.copy_dict(config)
         for stage in ["prepare", "parse"]:
             if stage not in config:
                 config[stage] = {}
         config = self._update_prepare_config(config)
         config = self._update_parse_config(config)
         for stage in ["baseline", "optimize", "compile"]:
-            config = self._update_runtime_config(config, stage)
+            config = self._update_runner_config(config, stage)
         config = self._update_tool_config(config)
         debug_config = {}
         if "debug" in config:
@@ -183,6 +188,8 @@ class BaseManager(object):
         golden_folder = msc_utils.get_dataset_dir().relpath("Golden", use_cache)
         input_names, sample_inputs = [i[0] for i in self._config["inputs"]], None
         report, source_type = {"golden_folder": golden_folder}, "Unknown"
+        runner_cls = self._get_runner_cls(self._config["model_type"])
+        run_func = runner_cls.run_native if hasattr(runner_cls, "run_native") else None
         if use_cache and msc_utils.is_dataset(golden_folder):
             loader, source_type = msc_utils.MSCDataLoader(golden_folder), "Cache"
             report["datas_info"] = loader.info
@@ -216,7 +223,7 @@ class BaseManager(object):
 
             # save golden
             golden_cnt, max_num = 0, self._config["dataset"].get("max_num", 5)
-            if "runner" in stage_config:
+            if run_func:
                 with msc_utils.MSCDataSaver(
                     golden_folder, input_names, self._config["outputs"]
                 ) as saver:
@@ -225,7 +232,7 @@ class BaseManager(object):
                             break
                         if not sample_inputs:
                             sample_inputs = inputs
-                        outputs, _ = stage_config["runner"](
+                        outputs, _ = run_func(
                             self._model, inputs, input_names, self._config["outputs"]
                         )
                         golden_cnt = saver.save(inputs, outputs)
@@ -261,13 +268,11 @@ class BaseManager(object):
         self._logger.info(msc_utils.msg_block("GOLDEN({})".format(source_type), report))
 
         # profile
-        if "profile" in stage_config and "runner" in stage_config:
+        if "profile" in stage_config and run_func:
             benchmark = stage_config["profile"].get("benchmark", {})
             repeat = benchmark.get("repeat", 100)
-            self._logger.debug(
-                "Prepare profile with {}({})".format(stage_config["runner"], benchmark)
-            )
-            _, avg_time = stage_config["runner"](
+            self._logger.debug("Prepare profile with {}({})".format(run_func, benchmark))
+            _, avg_time = run_func(
                 self._model, sample_inputs, input_names, self._config["outputs"], **benchmark
             )
             self._logger.info("Profile(prepare) {} times -> {:.2f} ms".format(repeat, avg_time))
@@ -298,8 +303,19 @@ class BaseManager(object):
             self._logger.info("Load parsed mod from {}".format(cache_path))
         else:
             parse_config = stage_config.get("parse_config", {})
-            self._logger.info("Parse by {}({})".format(stage_config["parser"], parse_config))
+            runner_cls = self._get_runner_cls(self._config["compile"]["run_type"])
+            trans_func = (
+                runner_cls.target_transform if hasattr(runner_cls, "target_transform") else None
+            )
+            parse_info = {
+                "parser": stage_config["parser"],
+                "config": parse_config,
+                "trans_func": trans_func,
+            }
+            self._logger.info(msc_utils.msg_block("PARSE", parse_info))
             relax_mod, _ = stage_config["parser"](self._model, as_msc=False, **parse_config)
+            if trans_func:
+                relax_mod = trans_func(relax_mod)
             if cache_path:
                 with open(cache_path, "w") as f:
                     f.write(tvm.ir.save_json(relax_mod))
@@ -343,16 +359,16 @@ class BaseManager(object):
         # run prune
         if "prune" in stage_config:
             self._tools_config["prune"] = stage_config["prune"]
-            config_file = stage_config["prune"]["runtime_config"]
-            if os.path.isfile(config_file):
-                self._logger.info("Skip prune with runtime_config " + str(config_file))
+            plan_file = stage_config["prune"]["plan_file"]
+            if os.path.isfile(plan_file):
+                self._logger.info("Skip prune with plan_file " + str(plan_file))
             else:
                 msc_utils.time_stamp("prune", True)
                 runner = self._create_tool_runner("prune", stage_config)
-                runtime_config = runner.get_tool("prune").create_runtime_config()
-                with open(config_file, "w") as f:
-                    f.write(json.dumps(runtime_config, indent=2))
-                self._logger.info("Save prune runtime_config -> " + str(config_file))
+                plan = runner.get_tool("prune").create_plan()
+                with open(plan_file, "w") as f:
+                    f.write(json.dumps(plan, indent=2))
+                self._logger.info("Save prune plan -> " + str(plan_file))
 
         # optimize and get the runner
         msc_utils.time_stamp("optimize", True)
@@ -409,13 +425,19 @@ class BaseManager(object):
         self._report["duration"] = msc_utils.get_duration()
         return self._report
 
-    def destory(self):
-        """Destroy the manager"""
+    def destory(self, keep_workspace: bool = False):
+        """Destroy the manager
+
+        Parameters
+        ----------
+        keep_workspace: bool
+            Whether to keep workspace.
+        """
 
         MSCMap.delete(MSCKey.TIME_STAMPS)
         if self._runner:
             self._runner.destory()
-        if not self._debug_config:
+        if not keep_workspace:
             self._workspace.destory()
 
     def _update_prepare_config(self, config: dict) -> dict:
@@ -438,14 +460,12 @@ class BaseManager(object):
             ), "Model for torch should be nn.Module, get {}({})".format(
                 self._model, type(self._model)
             )
-            config["prepare"]["runner"] = TorchRunner.run_native
         elif config["model_type"] == MSCFramework.TENSORFLOW:
             assert isinstance(
                 self._model, tf_v1.GraphDef
             ), "Model for tenosrflow should be tf.GraphDef, get {}({})".format(
                 self._model, type(self._model)
             )
-            config["prepare"]["runner"] = TensorflowRunner.run_native
         else:
             raise Exception("Unexpect model_type " + str(config["model_type"]))
         return config
@@ -488,7 +508,7 @@ class BaseManager(object):
             raise Exception("Unexpect model_type " + str(config["model_type"]))
         return config
 
-    def _update_runtime_config(self, config: dict, stage: str) -> dict:
+    def _update_runner_config(self, config: dict, stage: str) -> dict:
         """Update runtime stage in stage config.
 
         Parameters
@@ -548,10 +568,10 @@ class BaseManager(object):
             if tool_type not in config["optimize"]:
                 continue
             tool_config = config["optimize"][tool_type]
-            if "runtime_config" not in tool_config:
-                tool_config["runtime_config"] = "msc_{}.json".format(tool_type)
-            tool_config["runtime_config"] = msc_utils.to_abs_path(
-                tool_config["runtime_config"], msc_utils.get_config_dir()
+            if "plan_file" not in tool_config:
+                tool_config["plan_file"] = "msc_{}.json".format(tool_type)
+            tool_config["plan_file"] = msc_utils.to_abs_path(
+                tool_config["plan_file"], msc_utils.get_config_dir()
             )
         return config
 

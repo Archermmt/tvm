@@ -79,20 +79,17 @@ using namespace tvm::script::printer;
                                                                                                   \
  protected:                                                                                       \
   const std::shared_ptr<ConfigType> config() { return config_; }                                  \
-  const String GetSuffix(const MSCJoint& node, bool process = true) {                             \
-    return process && config()->use_tools ? "c" + std::to_string(node->index) : "";               \
-  }                                                                                               \
   const String IdxNodeBase(const MSCJoint& node) {                                                \
     return helper_.IdxNodeBase(node, config()->prefix, "");                                       \
   }                                                                                               \
   const String IdxInputBase(const MSCJoint& node, int idx = 0, bool process = true) {             \
-    return helper_.IdxInputBase(node, config()->prefix, idx, GetSuffix(node, process));           \
+    return helper_.IdxInputBase(node, config()->prefix, idx, "", process && config()->use_tools); \
   }                                                                                               \
   const String IdxOutputBase(const MSCJoint& node, int idx = 0) {                                 \
     return helper_.IdxOutputBase(node, config()->prefix, idx, "");                                \
   }                                                                                               \
   const String IdxWeightBase(const MSCJoint& node, const String& wtype, bool process = true) {    \
-    return helper_.IdxWeightBase(node, wtype, GetSuffix(node, process));                          \
+    return helper_.IdxWeightBase(node, wtype, "", process && config()->use_tools);                \
   }                                                                                               \
   const String Comment(const MSCJoint& node) { return helper_.Comment(node, config()->prefix); }  \
                                                                                                   \
@@ -145,21 +142,30 @@ class CodeGenUtils {
  */
 class BaseCodeGenHelper {
  public:
+  const String GetSuffix(const MSCJoint& node, bool process = false) {
+    return process ? "c" + std::to_string(node->index) : "";
+  }
+
   virtual const String IdxNodeBase(const MSCJoint& node, const String& prefix = "",
                                    const String& suffix = "") {
     return CodeGenUtils::IdxNode(node, prefix, suffix);
   }
   virtual const String IdxInputBase(const MSCJoint& node, const String& prefix = "", int idx = 0,
-                                    const String& suffix = "") {
-    return CodeGenUtils::IdxInput(node, prefix, idx, suffix);
+                                    const String& suffix = "", bool process = false) {
+    const auto& pair = node->ProducerAndIdxOf(idx);
+    size_t output_size = pair.first->outputs.size();
+    if (process && (output_size > 1 || pair.first->optype == "tuple")) {
+      return CodeGenUtils::IdxNode(pair.first, prefix, suffix) + "_" + std::to_string(pair.second);
+    }
+    return CodeGenUtils::IdxInput(node, prefix, idx, suffix + GetSuffix(node, process));
   }
   virtual const String IdxOutputBase(const MSCJoint& node, const String& prefix = "", int idx = 0,
                                      const String& suffix = "") {
     return CodeGenUtils::IdxOutput(node, prefix, idx, suffix);
   }
   virtual const String IdxWeightBase(const MSCJoint& node, const String& wtype,
-                                     const String& suffix = "") {
-    return CodeGenUtils::IdxWeight(node, wtype, suffix);
+                                     const String& suffix = "", bool process = false) {
+    return CodeGenUtils::IdxWeight(node, wtype, suffix + GetSuffix(node, process));
   }
   virtual const String Comment(const MSCJoint& node, const String& prefix = "") {
     return CodeGenUtils::CommentNode(node, prefix);

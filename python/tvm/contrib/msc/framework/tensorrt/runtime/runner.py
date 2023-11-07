@@ -16,9 +16,13 @@
 # under the License.
 """tvm.contrib.msc.framework.tensorrt.runtime.runner"""
 
+import tvm
 from tvm.contrib.msc.core.runtime import BYOCRunner
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
-from tvm.contrib.msc.framework.tensorrt.frontend import partition_for_tensorrt
+from tvm.contrib.msc.framework.tensorrt.frontend import (
+    partition_for_tensorrt,
+    transform_for_tensorrt,
+)
 from tvm.contrib.msc.framework.tensorrt.codegen import to_tensorrt
 from tvm.contrib.msc.framework.tensorrt import tools
 
@@ -32,6 +36,23 @@ class TensorRTRunner(BYOCRunner):
         super().setup()
         if not self._device.startswith("cuda"):
             self._device = "cuda"
+
+    @classmethod
+    def target_transform(cls, mod: tvm.IRModule):
+        """Transform the mod by target.
+
+        Parameters
+        ----------
+        mod: IRModule
+            The IRModule of relax.
+
+        Returns
+        -------
+        mod: IRModule
+            The IRModule of partitioned relax.
+        """
+
+        return transform_for_tensorrt(mod)
 
     @property
     def codegen_func(self):

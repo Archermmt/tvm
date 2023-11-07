@@ -72,6 +72,7 @@ class MSCPruner(MSCTool):
             self._prunable_types = self._options["prunable_types"]
         else:
             self._prunable_types = {
+                "constant": ["const"],
                 "nn.conv2d": ["weight"],
                 "msc.conv2d_bias": ["weight"],
                 "msc.linear": ["weight"],
@@ -92,7 +93,7 @@ class MSCPruner(MSCTool):
         self._weight_graphs = [
             _ffi_api.WeightGraph(graph, self._prunable_types, relation_types) for graph in graphs
         ]
-        if not self._runtime_config:
+        if not self._plan:
             return super().reset(graphs, weights)
 
         # Prune the weights
@@ -152,19 +153,15 @@ class MSCPruner(MSCTool):
 
         new_graphs, new_weights = [], []
         pruned_weights_cnt = 0
-        print("[TMINFO] has runtime_config " + str(self._runtime_config))
         for graph, sub_weights in zip(graphs, weights):
             pruned_tensors, pruned_weights = {}, {}
             for node in graph.get_nodes():
                 for weight in node.get_weights().values():
                     w_name = weight.name
-                    if w_name in self._runtime_config:
+                    if w_name in self._plan:
                         data = msc_utils.cast_array(sub_weights[w_name])
                         in_axis, out_axis = self._get_io_axes(self.find_w_node(w_name))
-                        w_config = self._runtime_config[w_name]
-                        print(
-                            "prune {}:{} with {}".format(w_name, msc_utils.MSCArray(data), w_config)
-                        )
+                        w_config = self._plan[w_name]
                         if w_config["in_indices"]:
                             data = prune_axis(data, in_axis, w_config["in_indices"])
                         if w_config["out_indices"]:
@@ -174,8 +171,13 @@ class MSCPruner(MSCTool):
                         pruned_weights_cnt += 1
                     else:
                         pruned_weights[w_name] = sub_weights[w_name]
-                if (
-                    node.optype in self._prunable_types
+                if node.optype == "constant" and node.weight_at("const").name in pruned_tensors:
+                    pruned_tensors[node.output_at(0).name] = _prune_by_channel(
+                        node.output_at(0),
+                        pruned_tensors[node.weight_at("const").name].dim_at("C"),
+                    )
+                elif (
+                    node.optype in ("nn.conv2d", "msc.conv2d_bias", "msc.linear", "msc.linear_bias")
                     and node.weight_at("weight").name in pruned_tensors
                 ):
                     out = node.output_at(0)
@@ -190,9 +192,9 @@ class MSCPruner(MSCTool):
                     )
                 else:
                     for out in node.get_outputs():
-                        if out.name in self._runtime_config:
+                        if out.name in self._plan:
                             pruned_tensors[out.name] = _prune_by_channel(
-                                out, len(self._runtime_config[out.name]["out_indices"])
+                                out, len(self._plan[out.name]["out_indices"])
                             )
                         elif (
                             node.get_inputs()
@@ -203,6 +205,7 @@ class MSCPruner(MSCTool):
                             pruned_tensors[out.name] = _prune_by_channel(
                                 out, pruned_tensors[node.input_at(0).name].dim_at("C")
                             )
+            self._logger.debug(msc_utils.msg_block("Pruned Tensors", pruned_tensors))
             pruned_graph = _ffi_api.PruneWeights(graph, pruned_tensors)
             new_graphs.append(pruned_graph)
             new_weights.append(pruned_weights)
@@ -223,30 +226,30 @@ class MSCPruner(MSCTool):
         )
         return new_graphs, new_weights
 
-    def create_runtime_config(self) -> dict:
-        """Create runtime config by strategy
+    def create_plan(self) -> dict:
+        """Create the plan
 
         Returns
         -------
-        runtime_config: dict
-           The runtime config
+        plan: dict
+            THe plan of the tool.
         """
 
-        rt_config = {}
+        plan = {}
 
         def _get_in_indices(w_node: WeightJoint) -> List[int]:
             """Get input indices for weight node"""
             if not w_node.parents:
                 return []
-            if w_node.name in rt_config and "in_indices" in rt_config[w_node.name]:
-                return rt_config[w_node.name]["in_indices"]
+            if w_node.name in plan and "in_indices" in plan[w_node.name]:
+                return plan[w_node.name]["in_indices"]
             assert all(
-                p.name in rt_config for p in w_node.parents
+                p.name in plan for p in w_node.parents
             ), "Missing some parents in runtime config " + str(w_node)
             if len(w_node.parents) == 1:
-                return rt_config[w_node.parents[0].name]["out_indices"]
+                return plan[w_node.parents[0].name]["out_indices"]
             if w_node.parents[0].friends:
-                return rt_config[w_node.parents[0].friends[0].name]["out_indices"]
+                return plan[w_node.parents[0].friends[0].name]["out_indices"]
             raise Exception("Unexpected w_node " + str(w_node))
 
         def _prunable(w_node: WeightJoint) -> bool:
@@ -265,17 +268,18 @@ class MSCPruner(MSCTool):
             return False
 
         for w_node in self.get_w_nodes():
-            in_indices = _get_in_indices(w_node)
             in_axis, out_axis = self._get_io_axes(w_node)
-            rt_config[w_node.name] = {"in_indices": in_indices}
+            if w_node.weight.dim_at(in_axis) == 1:
+                in_indices = []
+            else:
+                in_indices = _get_in_indices(w_node)
+            plan[w_node.name] = {"in_indices": in_indices}
             if w_node.friends and w_node != w_node.friends[0]:
-                rt_config[w_node.name]["out_indices"] = rt_config[w_node.friends[0].name][
-                    "out_indices"
-                ]
+                plan[w_node.name]["out_indices"] = plan[w_node.friends[0].name]["out_indices"]
             elif _prunable(w_node):
                 method_config = self._get_method_config(w_node.name)
                 method = self._get_method(w_node.name)
-                rt_config[w_node.name] = method(
+                plan[w_node.name] = method(
                     self,
                     name=w_node.name,
                     data=self.get_data(w_node.name),
@@ -285,15 +289,15 @@ class MSCPruner(MSCTool):
                     **method_config,
                 )
             elif w_node.get_attr("prune_strategy") == "follow":
-                rt_config[w_node.name]["out_indices"] = []
+                plan[w_node.name]["out_indices"] = []
             elif w_node.get_attr("prune_strategy") == "passby":
-                rt_config[w_node.name]["out_indices"] = in_indices
+                plan[w_node.name]["out_indices"] = in_indices
             else:
-                rt_config[w_node.name]["out_indices"] = []
-        rt_config = {n: c for n, c in rt_config.items() if c["in_indices"] or c["out_indices"]}
-        self._logger.info("{} weights configed by pruner".format(len(rt_config)))
-        self._runtime_config = rt_config
-        return self._runtime_config
+                plan[w_node.name]["out_indices"] = []
+        plan = {n: c for n, c in plan.items() if c["in_indices"] or c["out_indices"]}
+        self._logger.info("{} weights configed by pruner".format(len(plan)))
+        self._plan = plan
+        return self._plan
 
     def visualize(self, visual_dir: msc_utils.MSCDirectory):
         """Visualize MSCGraphs
@@ -357,6 +361,8 @@ class MSCPruner(MSCTool):
             return 0, 0
         if w_node.has_attr("in_axis") and w_node.has_attr("out_axis"):
             return int(w_node.get_attr("in_axis")), int(w_node.get_attr("out_axis"))
+        if w_node.weight_type == "const":
+            return -1, w_node.weight.layout_of("C")
         return w_node.weight.layout_of("I"), w_node.weight.layout_of("O")
 
     @classmethod

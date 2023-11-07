@@ -17,6 +17,7 @@
 
 """ Test Tools in MSC. """
 
+import os
 import pytest
 
 import torch
@@ -24,6 +25,7 @@ import torch
 import tvm.testing
 from tvm.contrib.msc.pipeline import MSCManager
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
+from tvm.contrib.msc.core import utils as msc_utils
 
 
 def _get_config(model_type, deploy_type, tools_config, inputs, outputs, atol=1e-2, rtol=1e-2):
@@ -32,8 +34,6 @@ def _get_config(model_type, deploy_type, tools_config, inputs, outputs, atol=1e-
         "model_type": model_type,
         "inputs": inputs,
         "outputs": outputs,
-        "verbose": "info",
-        "debug": True,
         "dataset": {"loader": "from_random", "max_iter": 5},
         "prepare": {"profile": {"benchmark": {"repeat": 10}}},
         "baseline": {
@@ -69,23 +69,6 @@ def _get_torch_model(name, is_training=False):
         return None
 
 
-def _get_tf_graph():
-    """Get graph from tensorflow"""
-    try:
-        tf_graph = tf_v1.Graph()
-        with tf_graph.as_default():
-            graph_def = tf_testing.get_workload(
-                "https://storage.googleapis.com/mobilenet_v2/checkpoints/mobilenet_v2_1.4_224.tgz",
-                "mobilenet_v2_1.4_224_frozen.pb",
-            )
-            # Call the utility to import the graph definition into default graph.
-            graph_def = tf_testing.ProcessGraphDefParam(graph_def)
-        return graph_def
-    except:
-        print("please install tensorflow package")
-        return None
-
-
 def _test_from_torch(deploy_type, tools_config, is_training=False, atol=1e-2, rtol=1e-2):
     torch_model = _get_torch_model("resnet50", is_training)
     if torch_model:
@@ -103,24 +86,10 @@ def _test_from_torch(deploy_type, tools_config, is_training=False, atol=1e-2, rt
         manager = MSCManager(torch_model, config)
         report = manager.run_pipe()
         assert report["success"], "Failed to run pipe for torch -> {}".format(deploy_type)
-        manager.destory()
-
-
-def _test_from_tf(deploy_type, tools_config, atol=1e-2, rtol=1e-2):
-    graphdef = _get_tf_graph()
-    if graphdef:
-        config = _get_config(
-            MSCFramework.TENSORFLOW,
-            deploy_type,
-            tools_config,
-            inputs=[["input", [1, 224, 224, 3], "float32"]],
-            outputs=["MobilenetV2/Predictions/Reshape_1:0"],
-            atol=atol,
-            rtol=rtol,
-        )
-        manager = MSCManager(graphdef, config)
-        report = manager.run_pipe()
-        assert report["success"], "Failed to run pipe for tensorflow -> {}".format(deploy_type)
+        for t_type, config in tools_config.items():
+            assert os.path.isfile(
+                msc_utils.get_config_dir().relpath(config["plan_file"])
+            ), "Failed to find plan of " + str(t_type)
         manager.destory()
 
 
@@ -129,14 +98,12 @@ def test_pruner():
 
     tools_config = {
         "prune": {
-            "runtime_config": "msc_prune.json",
+            "plan_file": "msc_prune.json",
             "strategy": [{"method": "per_channel", "density": 0.8}],
         }
     }
     _test_from_torch(MSCFramework.TVM, tools_config, is_training=False)
     # _test_from_torch(MSCFramework.TENSORRT, tools_config, is_training=False)
-    # _test_from_tf(MSCFramework.TVM, tools_config)
-    # _test_from_tf(MSCFramework.TENSORRT, tools_config)
 
 
 if __name__ == "__main__":

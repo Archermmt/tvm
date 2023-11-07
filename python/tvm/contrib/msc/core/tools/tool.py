@@ -128,8 +128,8 @@ class MSCTool(object):
     ----------
     tool_impl: MSCToolImpl
         The implement of the tool
-    runtime_config: str
-        The runtime config file path.
+    plan_file: str
+        The plan file path.
     strategy: dict
         The strategy of the tool.
     options: dict
@@ -143,17 +143,17 @@ class MSCTool(object):
     def __init__(
         self,
         tool_impl: MSCToolImpl,
-        runtime_config: str,
+        plan_file: str,
         strategy: dict,
         options: dict = None,
         verbose_step: int = 50,
         logger: logging.Logger = None,
     ):
         self._tool_impl = tool_impl
-        if os.path.isfile(runtime_config):
-            self._runtime_config = msc_utils.load_dict(runtime_config)
+        if os.path.isfile(plan_file):
+            self._plan = msc_utils.load_dict(plan_file)
         else:
-            self._runtime_config = {}
+            self._plan = {}
         self._methods, self._method_configs = self._parse_strategy(msc_utils.copy_dict(strategy))
         self._verbose_step = verbose_step
         self._logger = logger or msc_utils.get_global_logger()
@@ -165,14 +165,12 @@ class MSCTool(object):
             "method_configs": self._method_configs,
             "options": self._options,
             "verbose_step": self._verbose_step,
-            "configed_num": len(self._runtime_config),
+            "planed_num": len(self._plan),
         }
         self._logger.info(msc_utils.msg_block(init_title, init_info))
-        if self._runtime_config:
+        if self._plan:
             self._logger.debug(
-                msc_utils.msg_block(
-                    "{}.RUNTIME_CONFIG".format(self.tool_type().upper()), self._runtime_config
-                )
+                msc_utils.msg_block("{}.PLAN".format(self.tool_type().upper()), self._plan)
             )
 
     def setup(self, options: dict):
@@ -361,16 +359,27 @@ class MSCTool(object):
 
         return True
 
-    def update_runtime_config(self, config: dict):
-        """Update the runtime config
+    def update_plan(self, plan: dict):
+        """Update the plan
 
         Parameters
         ----------
-        config: dict
-            The new config.
+        plan: dict
+            The new plan.
         """
 
-        self._runtime_config.update(config)
+        self._plan.update(plan)
+
+    def create_plan(self) -> dict:
+        """Create the plan
+
+        Returns
+        -------
+        plan: dict
+            THe plan of the tool.
+        """
+
+        return self._plan
 
     def enable(self):
         """Enable the tool"""
