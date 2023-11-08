@@ -90,6 +90,12 @@ class MSCTensorRTRuntime : public JSONRuntimeBase {
     ICHECK_EQ(consts.size(), const_idx_.size())
         << "The number of input constants must match the number of required.";
     LoadGlobalOptions();
+    for (size_t nid = 0; nid < nodes_.size(); nid++) {
+      for (size_t oid = 0; oid < nodes_[nid].GetNumOutput(); oid++) {
+        const auto& t_name = nodes_[nid].GetOpName() + ":" + std::to_string(oid);
+        tensor_ids_[t_name] = std::make_pair(nid, oid);
+      }
+    }
     LoadEngine(engine_file_);
   }
 
@@ -99,6 +105,13 @@ class MSCTensorRTRuntime : public JSONRuntimeBase {
     for (size_t i = 0; i < nodes_.size(); ++i) {
       if (nodes_[i].HasAttr("msc_global_options_num")) {
         engine_file_ = nodes_[i].GetAttr<std::vector<std::string>>("msc_global_engine")[0];
+        graph_name_ = nodes_[i].GetAttr<std::vector<std::string>>("msc_global_graph_name")[0];
+        std::string stage = nodes_[i].GetAttr<std::vector<std::string>>("msc_global_stage")[0];
+        if (stage == "compile") {
+          tool_tag_ = "";
+        } else {
+          tool_tag_ = nodes_[i].GetAttr<std::vector<std::string>>("msc_global_tool_tag")[0];
+        }
       }
     }
   }
@@ -107,6 +120,19 @@ class MSCTensorRTRuntime : public JSONRuntimeBase {
   void Run() override {
     SetInputOutputBinds();
     auto tvm_stream = CUDAThreadEntry::ThreadLocal()->stream;
+    if (tool_tag_.size() > 0) {
+      const auto* pf = runtime::Registry::Get("msc_tool.execute_hook");
+      ICHECK(pf != nullptr) << "Cannot find msc_tool.execute_hook func.";
+      Map<String, runtime::NDArray> input_datas;
+      for (const auto& pair : input_bindings_) {
+        const auto& tensor_name = engine_->getBindingName(pair.first);
+        if (data_entry_[pair.second]->device.device_type == kDLCUDA) {
+          device_buffers_[pair.first].CopyFrom(data_entry_[pair.second]);
+        }
+        input_datas.Set(tensor_name, device_buffers_[pair.first]);
+      }
+      (*pf)(input_datas, graph_name_, "before_forward", tool_tag_);
+    }
 #if TRT_VERSION_GE(6, 0, 1)
     ICHECK(context_->enqueueV2(bindings_.data(), tvm_stream, nullptr))
         << "Running TensorRT failed.";
@@ -124,6 +150,25 @@ class MSCTensorRTRuntime : public JSONRuntimeBase {
         auto device_buffer = GetOrAllocateDeviceBuffer(eid, binding_index);
         device_buffer.CopyTo(const_cast<DLTensor*>(data_entry_[eid]));
       }
+    }
+    if (tool_tag_.size() > 0) {
+      const auto* pf = runtime::Registry::Get("msc_tool.execute_hook");
+      ICHECK(pf != nullptr) << "Cannot find msc_tool.execute_hook func.";
+      Map<String, runtime::NDArray> output_datas;
+      for (int bid = 0; bid < engine_->getNbBindings(); bid++) {
+        if (input_bindings_.count(bid)) {
+          continue;
+        }
+        const auto& tensor_name = engine_->getBindingName(pair.first);
+        if (output_bindings_.count(bid)) {
+          uint32_t eid = output_bindings_[bid];
+          if (data_entry_[eid]->device.device_type == kDLCUDA) {
+            device_buffers_[bid].CopyFrom(data_entry_[eid]);
+          }
+        }
+        output_datas.Set(tensor_name, device_buffers_[bid]);
+      }
+      (*pf)(output_datas, graph_name_, "after_forward", tool_tag_);
     }
   }
 
@@ -190,6 +235,7 @@ class MSCTensorRTRuntime : public JSONRuntimeBase {
 
   void SetInputOutputBinds() {
     // Setup input bindings
+    std::set<int> binded;
     for (size_t i = 0; i < input_nodes_.size(); ++i) {
       auto nid = input_nodes_[i];
       if (nodes_[nid].GetOpType() == "input") {
@@ -214,6 +260,8 @@ class MSCTensorRTRuntime : public JSONRuntimeBase {
           int num_elements = 1;
           for (int i = 0; i < dims.nbDims; ++i) num_elements *= dims.d[i];
           binding_sizes_[binding_index] = num_elements;
+          input_bindings_[binding_index] = eid;
+          binded.insert(binding_index);
         }
       }
     }
@@ -230,6 +278,24 @@ class MSCTensorRTRuntime : public JSONRuntimeBase {
         auto device_buffer = GetOrAllocateDeviceBuffer(eid, binding_index);
         bindings_[binding_index] = device_buffer->data;
       }
+      output_bindings_[binding_index] = eid;
+      binded.insert(binding_index);
+    }
+    // Setup tool bindings
+    for (int bid = 0; bid < engine_->getNbBindings(); bid++) {
+      if (binded.count(bid)) {
+        continue;
+      }
+      if (!device_buffers_.count(bid)) {
+        const auto& tensor_name = engine_->getBindingName(i);
+        ICHECK(tensor_ids_.count(tensor_name)) << "Can not find tensor_name " << tensor_name;
+        const auto& pair = tensor_ids_[tensor_name];
+        const auto& shape = nodes_[pair.first].GetOpShape()[pair.second];
+        const auto& dtype = nodes_[pair.first].GetOpDataType()[pair.second];
+        device_buffers_[bid] = runtime::NDArray::Empty(shape, dtype, {kDLCUDA, 0});
+      }
+      bindings_[bid] = device_buffers_[bid]->data;
+      binded.insert(bid);
     }
   }
 
@@ -267,10 +333,15 @@ class MSCTensorRTRuntime : public JSONRuntimeBase {
 
  private:
   String engine_file_;
+  String tool_tag_;
+  String graph_name_;
+  std::unordered_map<std::string, std::pair<size_t, size_t>> tensor_ids_;
 #ifdef TVM_GRAPH_EXECUTOR_TENSORRT
   TensorRTLogger logger_;
   ICudaEngine* engine_{nullptr};
   IExecutionContext* context_{nullptr};
+  std::unordered_map<int, uint32_t> input_bindings_;
+  std::unordered_map<int, uint32_t> output_bindings_;
   std::vector<void*> bindings_;
   std::vector<size_t> binding_sizes_;
   std::unordered_map<int, NDArray> device_buffers_;

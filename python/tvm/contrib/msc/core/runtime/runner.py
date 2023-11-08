@@ -78,6 +78,8 @@ class BaseRunner(object):
             self._generate_config["codegen"].update({"use_tools": True, "tools_tag": name})
         if "build_folder" not in self._generate_config:
             self._generate_config["build_folder"] = msc_utils.get_build_dir()
+        for t_config in self._tools_config.values():
+            t_config["workspace"] = self._generate_config["build_folder"]
         self._name = name
         self._device = device if self._device_enabled(device) else "cpu"
         self._is_training = is_training
@@ -780,11 +782,14 @@ class BYOCRunner(BaseRunner):
         """
 
         graph_infos = list(zip(graphs or self._graphs, weights or self._weights))
+        extra_option = self._generate_config.get("extra_option", {})
+        extra_option["tool_tag"] = self._name
         return self.codegen_func(
             self._byoc_mod,
             graph_infos,
             codegen_config=self._generate_config.get("codegen"),
             print_config=self._generate_config.get("build"),
+            extra_option=extra_option,
             build_folder=self._generate_config["build_folder"],
             output_folder=self._generate_config.get("output_folder", msc_utils.get_output_dir()),
         )

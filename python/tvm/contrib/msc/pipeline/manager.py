@@ -545,6 +545,10 @@ class BaseManager(object):
             else:
                 device = "cpu"
             run_config.update({"device": device, "is_training": self._model.training})
+        if config[stage]["run_type"] == MSCFramework.TENSORRT:
+            if "extra_option" not in run_config["generate_config"]:
+                run_config["generate_config"]["extra_option"] = {}
+            run_config["generate_config"]["extra_option"]["stage"] = stage
         config[stage]["run_config"] = run_config
         return config
 

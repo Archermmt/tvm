@@ -132,6 +132,8 @@ class MSCTool(object):
         The plan file path.
     strategy: dict
         The strategy of the tool.
+    workspace: MSCDirectory
+        The workspace of the tool.
     options: dict
         The extra options for the tool
     verbose_step: int
@@ -145,6 +147,7 @@ class MSCTool(object):
         tool_impl: MSCToolImpl,
         plan_file: str,
         strategy: dict,
+        workspace: msc_utils.MSCDirectory,
         options: dict = None,
         verbose_step: int = 50,
         logger: logging.Logger = None,
@@ -155,6 +158,7 @@ class MSCTool(object):
         else:
             self._plan = {}
         self._methods, self._method_configs = self._parse_strategy(msc_utils.copy_dict(strategy))
+        self._workspace = workspace
         self._verbose_step = verbose_step
         self._logger = logger or msc_utils.get_global_logger()
         self.setup(options)
@@ -183,12 +187,10 @@ class MSCTool(object):
         """
 
         self._options = options or {}
-        self._enabled = True
-        self._is_training = False
-        self._graph_id = 0
-        self._forward_cnt = 0
-        self._graphs = []
-        self._weights = []
+        self._tensor_status = {}
+        self._enabled, self._is_training = True, True
+        self._graphs, self._weights = [], []
+        self._graph_id, self._forward_cnt = 0, 0
         self._tool_impl.setup(options)
 
     def reset(
@@ -228,7 +230,7 @@ class MSCTool(object):
         """
 
         if self._enabled:
-            self._graph_id = kwargs.get("graph_id", 0)
+            self._graph_id = self._infer_graph_id(kwargs)
             self._logger.debug(
                 "<{}> before build graph[{}]({})".format(
                     self.tool_type(), self._graph_id, "train" if self._is_training else "eval"
@@ -271,6 +273,7 @@ class MSCTool(object):
         """
 
         if self._enabled:
+            self._graph_id = self._infer_graph_id(kwargs)
             if self.should_log():
                 self._logger.debug(
                     "<{}> start graph[{}] forward[{}]".format(
@@ -324,7 +327,15 @@ class MSCTool(object):
             The processed tensor.
         """
 
-        if not self._check_tensor(name, consumer, phase):
+        edge_id = self.to_edge_id(name, consumer)
+        if edge_id not in self._tensor_status:
+            self._tensor_status[edge_id] = {}
+        if "process" not in self._tensor_status[edge_id]:
+            self._tensor_status[edge_id]["process"] = self._check_tensor(name, consumer, phase)
+            self._logger.debug(
+                "Update tensor status(process) {}: {}".format(edge_id, self._tensor_status[edge_id])
+            )
+        if not self._tensor_status[edge_id]["process"]:
             return tensor
         return self._tool_impl.process_tensor(tensor, name, consumer, phase)
 
@@ -447,6 +458,21 @@ class MSCTool(object):
         """
 
         return self._forward_cnt % self._verbose_step == 0
+
+    def _infer_graph_id(self, kwargs: dict) -> int:
+        """Infer graph id from kwargs
+
+        Parameters
+        ----------
+        kwargs: dict
+           The kwargs for execute.
+        """
+
+        if "graph_name" in kwargs:
+            for idx, g in enumerate(self._graphs):
+                if g.name == kwargs["graph_name"]:
+                    return idx
+        return kwargs.get("graph_id", 0)
 
     def get_nodes(self) -> Iterable[MSCJoint]:
         """Get all the nodes in the graphs.
@@ -826,3 +852,61 @@ def process_tensor(tensor: Any, name: str, consumer: str, phase: str, tag: str =
     for tool in get_tools(tag):
         tensor = tool.process_tensor(tensor, name, consumer, phase)
     return tensor
+
+
+@tvm.register_func("msc_tool.execute_hook")
+def execute_hook(datas: Dict[str, tvm.nd.array], graph_name: str, stage: str, tag: str = "main"):
+    """Hook for tool execution
+
+    Parameters
+    -------
+    datas: dict<str, tvm.nd.array>
+        The datas to be processed
+    graph_name: str
+        The graph name.
+    stage: str
+        The stage for tool execution build| forward
+    tag: str
+        The tag of the tool.
+    """
+
+    for tool in get_tools(tag):
+        if stage == "before_build":
+            tool.execute_before_build(datas, graph_name=graph_name)
+        elif stage == "after_build":
+            tool.execute_after_build(datas, graph_name=graph_name)
+        elif stage == "before_forward":
+            tool.execute_before_forward(datas, graph_name=graph_name)
+        elif stage == "after_forward":
+            tool.execute_after_forward(datas, graph_name=graph_name)
+        else:
+            raise TypeError("Unexpected stage " + str(stage))
+
+
+@tvm.register_func("msc_tool.process_tensor_codegen")
+def process_tensor_codegen(
+    tensor_ctx: Dict[str, str], name: str, consumer: str, phase: str, tag: str = "main"
+) -> List[str]:
+    """Codegen processed tensor describe with tools
+
+    Parameters
+    -------
+    tensor_ctx: dict<str, str>
+        Tensor describe items.
+    name: str
+        The name of the tensor.
+    consumer: str
+        The name of the consumer.
+    phase: str
+        The phase mark teacher| student| null
+    tag: str
+        The tag of the tool.
+
+    Returns
+    -------
+    processed: list<str>
+        The tensor describe for processed tensor.
+    """
+
+    tensor = process_tensor(tensor_ctx, name, consumer, phase, tag)
+    return tensor.get("processed", [])
