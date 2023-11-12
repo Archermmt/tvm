@@ -14,6 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+# pylint: disable=import-outside-toplevel
 """tvm.contrib.msc.pipeline.manager"""
 
 import os
@@ -22,21 +23,12 @@ import time
 from typing import Dict, Any
 import numpy as np
 import traceback
-import torch
 
 import tvm
 from tvm.contrib.msc.core.runtime import BaseRunner
 from tvm.contrib.msc.core.tools import MSCToolType
 from tvm.contrib.msc.core.utils.namespace import MSCFramework, MSCMap, MSCKey
 from tvm.contrib.msc.core import utils as msc_utils
-from tvm.contrib.msc.framework.tvm.runtime import TVMRunner
-from tvm.contrib.msc.framework.torch.frontend import from_torch
-from tvm.contrib.msc.framework.torch.runtime import TorchRunner
-from tvm.contrib.msc.framework.tensorflow import tf_v1
-from tvm.contrib.msc.framework.tensorflow.frontend import from_tensorflow
-from tvm.contrib.msc.framework.tensorflow.runtime import TensorflowRunner
-from tvm.contrib.msc.framework.tensorrt.runtime import TensorRTRunner
-
 
 class BaseManager(object):
     """Base Manager of MSC
@@ -455,12 +447,16 @@ class BaseManager(object):
         """
 
         if config["model_type"] == MSCFramework.TORCH:
+            import torch
+
             assert isinstance(
                 self._model, torch.nn.Module
             ), "Model for torch should be nn.Module, get {}({})".format(
                 self._model, type(self._model)
             )
         elif config["model_type"] == MSCFramework.TENSORFLOW:
+            from tvm.contrib.msc.framework.tensorflow import tf_v1
+
             assert isinstance(
                 self._model, tf_v1.GraphDef
             ), "Model for tenosrflow should be tf.GraphDef, get {}({})".format(
@@ -485,6 +481,8 @@ class BaseManager(object):
         """
 
         if config["model_type"] == MSCFramework.TORCH:
+            from tvm.contrib.msc.framework.torch.frontend import from_torch
+
             config["parse"]["parser"] = from_torch
             parse_config = config["parse"].get("parse_config", {})
             parse_config.update(
@@ -495,6 +493,8 @@ class BaseManager(object):
             )
             config["parse"]["parse_config"] = parse_config
         elif config["model_type"] == MSCFramework.TENSORFLOW:
+            from tvm.contrib.msc.framework.tensorflow.frontend import from_tensorflow
+
             config["parse"]["parser"] = from_tensorflow
             parse_config = config["parse"].get("parse_config", {})
             parse_config.update(
@@ -520,7 +520,7 @@ class BaseManager(object):
         """
 
         if stage not in config:
-            return
+            return config
         model_type = config["model_type"]
         if "run_type" not in config[stage]:
             config[stage]["run_type"] = model_type
@@ -784,12 +784,20 @@ class MSCManager(BaseManager):
         """
 
         if run_type == MSCFramework.TVM:
+            from tvm.contrib.msc.framework.tvm.runtime import TVMRunner
+
             runner_cls = TVMRunner
         elif run_type == MSCFramework.TORCH:
+            from tvm.contrib.msc.framework.torch.runtime import TorchRunner
+
             runner_cls = TorchRunner
         elif run_type == MSCFramework.TENSORFLOW:
+            from tvm.contrib.msc.framework.tensorflow.runtime import TensorflowRunner
+
             runner_cls = TensorflowRunner
         elif run_type == MSCFramework.TENSORRT:
+            from tvm.contrib.msc.framework.tensorrt.runtime import TensorRTRunner
+
             runner_cls = TensorRTRunner
         else:
             raise Exception("Unexpect run_type " + str(run_type))

@@ -159,7 +159,7 @@ class MSCTensorRTRuntime : public JSONRuntimeBase {
         if (input_bindings_.count(bid)) {
           continue;
         }
-        const auto& tensor_name = engine_->getBindingName(pair.first);
+        const auto& tensor_name = engine_->getBindingName(bid);
         if (output_bindings_.count(bid)) {
           uint32_t eid = output_bindings_[bid];
           if (data_entry_[eid]->device.device_type == kDLCUDA) {
@@ -287,7 +287,7 @@ class MSCTensorRTRuntime : public JSONRuntimeBase {
         continue;
       }
       if (!device_buffers_.count(bid)) {
-        const auto& tensor_name = engine_->getBindingName(i);
+        const auto& tensor_name = engine_->getBindingName(bid);
         ICHECK(tensor_ids_.count(tensor_name)) << "Can not find tensor_name " << tensor_name;
         const auto& pair = tensor_ids_[tensor_name];
         const auto& shape = nodes_[pair.first].GetOpShape()[pair.second];

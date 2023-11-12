@@ -1102,6 +1102,7 @@ class PatternBasedPartitioner : ExprVisitor {
       auto parent_group = GetGroupForBoundVar(binding->var);
       ICHECK(parent_group);
       parent_group->attrs.Set(attr::kComposite, pat_name_);
+      parent_group->attrs.Set("unique_name", binding->var->name_hint());
       for (const auto& [pat, match] : matches_opt.value()) {
         // Put all matching expressions into the parent group. But we need to be careful not to
         // merge expressions matched by a wildcard pattern, since a wildcard can match an output of

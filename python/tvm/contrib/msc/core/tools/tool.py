@@ -870,6 +870,8 @@ def execute_hook(datas: Dict[str, tvm.nd.array], graph_name: str, stage: str, ta
         The tag of the tool.
     """
 
+    print("[TMINFO] execute_hook with datas "+str(datas))
+    print("[TMINFO] graph_name {}, stage {}, tag {}".format(graph_name, stage,tag))
     for tool in get_tools(tag):
         if stage == "before_build":
             tool.execute_before_build(datas, graph_name=graph_name)

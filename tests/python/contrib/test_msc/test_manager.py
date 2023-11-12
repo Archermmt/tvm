@@ -39,6 +39,7 @@ def _get_config(model_type, deploy_type, inputs, outputs, atol=1e-2, rtol=1e-2):
         "model_type": model_type,
         "inputs": inputs,
         "outputs": outputs,
+        "debug": True,
         "dataset": {"loader": "from_random", "max_iter": 5},
         "prepare": {"profile": {"benchmark": {"repeat": 10}}},
         "baseline": {
@@ -141,7 +142,7 @@ def test_tensorflow_manager():
     _test_from_tf(MSCFramework.TENSORFLOW)
 
 
-@requires_tensorrt
+# @requires_tensorrt
 def test_tensorrt_manager():
     """Test manager for tensorrt"""
 
@@ -149,4 +150,5 @@ def test_tensorrt_manager():
 
 
 if __name__ == "__main__":
-    tvm.testing.main()
+    # tvm.testing.main()
+    test_tensorrt_manager()

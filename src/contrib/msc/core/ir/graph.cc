@@ -1100,6 +1100,7 @@ TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable)
           p->stream << pair.first << "=" << pair.second << " ";
         }
       }
+      p->stream << "\n";
     });
 
 TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable)
