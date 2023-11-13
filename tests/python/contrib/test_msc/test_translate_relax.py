@@ -23,7 +23,7 @@ from torch.nn import Module
 
 import tvm.testing
 from tvm.relax.frontend.torch import from_fx
-from tvm.contrib.msc.core.ir import translate
+from tvm.contrib.msc.core.frontend import translate
 from tvm.contrib.msc.framework.tvm import codegen as tvm_codegen
 
 
@@ -1105,4 +1105,11 @@ def test_attention():
 
 
 if __name__ == "__main__":
-    tvm.testing.main()
+    # tvm.testing.main()
+    """
+    FAILED test_translate_relax.py::test_split - tvm.error.InternalError: Traceback (most recent call last):
+    FAILED test_translate_relax.py::test_chunk - tvm.error.InternalError: Traceback (most recent call last):
+    FAILED test_translate_relax.py::test_unwrap_unit_return_tuple - TypeError: 'Tuple' object does not support item assignment
+    FAILED test_translate_relax.py::test_no_bind_return_tuple - tvm.error.InternalError: Traceback (most recent call last):
+    """
+    test_split()

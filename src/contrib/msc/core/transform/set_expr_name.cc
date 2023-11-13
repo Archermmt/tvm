@@ -178,23 +178,15 @@ class RelaxExprNameSetter : public ExprVisitor {
       const auto& func = Downcast<Function>(ref_module_->Lookup(v_node->name_hint));
       ExprVisitor::VisitExpr(func);
       optype = GetFuncType(func);
-      Array<String> arg_names;
-      for (const auto& a : val->args) {
-        arg_names.push_back(expr_names_.count(a) ? expr_names_[a] : "");
-      }
-      name_hint = FuncNameGetter(arg_names).HintName(func);
-      if (name_hint.size() == 0) {
-        if (optype == "extern_func") {
-          name_hint = v_node->name_hint;
-        } else {
-          name_hint = optype;
-        }
+      if (optype == "extern_func") {
+        name_hint = v_node->name_hint;
       } else {
-        use_unique = false;
+        name_hint = optype;
       }
     } else if (local_funcs_.count(val->op)) {
-      optype = GetFuncType(local_funcs_[val->op]);
       ExprVisitor::VisitExpr(local_funcs_[val->op]);
+      optype = GetFuncType(local_funcs_[val->op]);
+      // get name_hint from expr in func
       Array<String> arg_names;
       for (const auto& a : val->args) {
         arg_names.push_back(expr_names_.count(a) ? expr_names_[a] : "");

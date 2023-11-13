@@ -1109,7 +1109,6 @@ class PatternBasedPartitioner : ExprVisitor {
       if (attrs_getter_ != nullptr) {
         const auto& custom_attrs =
             attrs_getter_(CreatePatternCheckContext(call, matches_opt.value()));
-        std::cout << "[TMINFO] custom_attrs " << custom_attrs << std::endl;
         for (const auto& pair : custom_attrs) {
           parent_group->attrs.Set(pair.first, pair.second);
         }
