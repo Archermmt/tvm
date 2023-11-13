@@ -17,7 +17,7 @@
 # pylint: disable=unused-argument
 """tvm.contrib.msc.core.transform.pattern"""
 
-from typing import Mapping, Tuple
+from typing import Mapping, Tuple, Dict
 
 import tvm
 from tvm.relax.dpl import pattern as relax_pattern
@@ -26,6 +26,28 @@ from tvm.relay import dataflow_pattern as relay_pattern
 from tvm.relax.transform import PatternCheckContext
 from tvm.relax.backend.pattern_registry import register_patterns
 from tvm.relay.op.contrib.register import register_pattern_table
+from tvm.contrib.msc.core.utils.namespace import MSCMap, MSCKey
+from tvm.contrib.msc.core import utils as msc_utils
+
+
+def msc_attrs_getter(context: PatternCheckContext) -> Dict[str, str]:
+    """Get attributes for fused pattern
+
+    Returns
+    -------
+    attrs: dict<str,str>
+        The extra attributes for msc.
+    """
+
+    fused_cnt = MSCMap.get(MSCKey.FUSED_CNT, 0)
+    unique_name = "msc_fused_" + str(fused_cnt)
+    if "out" in context.annotated_expr:
+        name = msc_utils.get_expr_name(context.annotated_expr["out"])
+        if name:
+            unique_name = name
+    MSCMap.set(MSCKey.FUSED_CNT, fused_cnt + 1)
+    print("unique_name of {}:{}".format(context.annotated_expr["out"], unique_name))
+    return {"unique_name": unique_name}
 
 
 def make_relax_conv_bias_pattern(
@@ -56,7 +78,7 @@ def make_relax_conv_bias_pattern(
     shape = relax_pattern.wildcard()
     reshape = relax_pattern.is_op("relax.reshape")(bias, shape)
     out = relax_pattern.is_op("relax.add")(conv, reshape)
-    annotations = {"bias": bias, "reshape": reshape}
+    annotations = {"bias": bias, "reshape": reshape, "out": out}
     return out, annotations
 
 
@@ -95,7 +117,7 @@ def make_relax_linear_pattern() -> Tuple[
     weight = relax_pattern.is_const()
     permute = relax_pattern.is_op("relax.permute_dims")(weight)
     out = relax_pattern.is_op("relax.matmul")(data, permute)
-    annotations = {"weight": weight, "permute": permute}
+    annotations = {"weight": weight, "permute": permute, "out": out}
     return out, annotations
 
 
@@ -172,7 +194,7 @@ def make_relax_embedding_pattern() -> Tuple[
     data = relax_pattern.wildcard()
     astype = relax_pattern.is_op("relax.astype")(data)
     out = relax_pattern.is_op("relax.take")(weight, astype)
-    annotations = {"weight": weight, "astype": astype}
+    annotations = {"weight": weight, "astype": astype, "out": out}
     return out, annotations
 
 
@@ -218,7 +240,7 @@ def make_relax_reshape_embedding_pattern() -> Tuple[
     take = relax_pattern.is_op("relax.take")(weight, reduce_in)
     expand_shape = relax_pattern.wildcard()
     out = relax_pattern.is_op("relax.reshape")(take, expand_shape)
-    annotations = {"weight": weight, "astype": astype, "reduce_in": reduce_in}
+    annotations = {"weight": weight, "astype": astype, "reduce_in": reduce_in, "out": out}
     return out, annotations
 
 
@@ -264,7 +286,7 @@ def make_relax_attention_pattern() -> Tuple[
     k_trans = relax_pattern.is_op("relax.permute_dims")(weight_k)
     v_trans = relax_pattern.is_op("relax.permute_dims")(weight_v)
     out = relax_pattern.is_op("relax.nn.attention")(q_trans, k_trans, v_trans)
-    annotations = {"q_trans": q_trans, "k_trans": k_trans, "v_trans": v_trans}
+    annotations = {"q_trans": q_trans, "k_trans": k_trans, "v_trans": v_trans, "out": out}
     return out, annotations
 
 
@@ -304,7 +326,7 @@ def make_relax_mask_attention_pattern() -> Tuple[
     k_trans = relax_pattern.is_op("relax.permute_dims")(weight_k)
     v_trans = relax_pattern.is_op("relax.permute_dims")(weight_v)
     out = relax_pattern.is_op("relax.nn.attention_bias")(q_trans, k_trans, v_trans, mask)
-    annotations = {"q_trans": q_trans, "k_trans": k_trans, "v_trans": v_trans}
+    annotations = {"q_trans": q_trans, "k_trans": k_trans, "v_trans": v_trans, "out": out}
     return out, annotations
 
 
@@ -384,7 +406,7 @@ def make_opt_relax_linear_pattern() -> Tuple[
     data = relax_pattern.wildcard()
     weight = relax_pattern.is_const()
     out = relax_pattern.is_op("relax.matmul")(data, weight)
-    annotations = {"weight": weight}
+    annotations = {"weight": weight, "out": out}
     return out, annotations
 
 
@@ -451,6 +473,7 @@ register_patterns(
                 "relax.nn.conv1d",
             ),
             _check_opt_relax_conv_bias,
+            msc_attrs_getter,
         ),
         (
             "msc.conv2d_bias",
@@ -458,16 +481,19 @@ register_patterns(
                 "relax.nn.conv2d",
             ),
             _check_opt_relax_conv_bias,
+            msc_attrs_getter,
         ),
         (
             "msc.linear",
             *make_opt_relax_linear_pattern(),
             _check_opt_relax_linear,
+            msc_attrs_getter,
         ),
         (
             "msc.linear_bias",
             *make_opt_relax_linear_bias_pattern(),
             _check_opt_relax_linear_bias,
+            msc_attrs_getter,
         ),
         (
             "msc.conv1d_bias",
@@ -475,6 +501,7 @@ register_patterns(
                 "relax.nn.conv1d",
             ),
             _check_relax_conv_bias,
+            msc_attrs_getter,
         ),
         (
             "msc.conv2d_bias",
@@ -482,36 +509,43 @@ register_patterns(
                 "relax.nn.conv2d",
             ),
             _check_relax_conv_bias,
+            msc_attrs_getter,
         ),
         (
             "msc.linear",
             *make_relax_linear_pattern(),
             _check_relax_linear,
+            msc_attrs_getter,
         ),
         (
             "msc.linear_bias",
             *make_relax_linear_bias_pattern(),
             _check_relax_linear_bias,
+            msc_attrs_getter,
         ),
         (
             "msc.embedding",
             *make_relax_embedding_pattern(),
             _check_relax_embedding,
+            msc_attrs_getter,
         ),
         (
             "msc.embedding",
             *make_relax_reshape_embedding_pattern(),
             _check_relax_reshape_embedding,
+            msc_attrs_getter,
         ),
         (
             "msc.attention",
             *make_relax_attention_pattern(),
             _check_relax_attention,
+            msc_attrs_getter,
         ),
         (
             "msc.attention",
             *make_relax_mask_attention_pattern(),
             _check_relax_mask_attention,
+            msc_attrs_getter,
         ),
     ]
 )
