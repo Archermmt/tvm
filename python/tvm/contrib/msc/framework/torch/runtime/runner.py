@@ -27,8 +27,8 @@ from tvm.contrib.msc.core.ir import MSCGraph
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.framework.torch.codegen import to_torch
 from tvm.contrib.msc.framework.torch.frontend import set_weight_alias
-from tvm.contrib.msc.framework.torch import tools
 from tvm.contrib.msc.core import utils as msc_utils
+from tvm.contrib.msc.framework.torch import tools
 
 
 class TorchRunner(ModelRunner):
@@ -44,7 +44,6 @@ class TorchRunner(ModelRunner):
         weights_list: list<dict<str, tvm.nd.array>>
             The translated weights
         """
-
         graphs, weights = super()._translate()
         return [set_weight_alias(graphs[0])], weights
 

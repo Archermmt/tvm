@@ -58,6 +58,8 @@ def _get_torch_model(name, is_training=False):
 
 
 def _get_tf_graph():
+    """Get tensorflow graphdef"""
+
     try:
         tf_graph = tf_v1.Graph()
         with tf_graph.as_default():
@@ -68,12 +70,14 @@ def _get_tf_graph():
             # Call the utility to import the graph definition into default graph.
             graph_def = tf_testing.ProcessGraphDefParam(graph_def)
         return tf_graph, graph_def
-    except:
+    except:  # pylint: disable=bare-except
         print("please install tensorflow package")
         return None, None
 
 
 def _test_from_torch(runner_cls, device, is_training=False, atol=1e-3, rtol=1e-3):
+    """Test runner from torch model"""
+
     torch_model = _get_torch_model("resnet50", is_training)
     if torch_model:
         workspace = msc_utils.set_workspace()
@@ -129,6 +133,8 @@ def test_tensorrt_runner():
 
 
 def test_tensorflow_runner():
+    """Test runner from tf graph"""
+
     tf_graph, graph_def = _get_tf_graph()
     if tf_graph and graph_def:
         workspace = msc_utils.set_workspace()

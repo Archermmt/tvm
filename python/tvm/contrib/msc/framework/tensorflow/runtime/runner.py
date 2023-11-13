@@ -14,6 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+# pylint: disable=not-context-manager
 """tvm.contrib.msc.framework.tensorflow.runtime.runner"""
 
 import time
@@ -53,8 +54,8 @@ class WrapSession(tf_v1.Session):
         self._inputs = inputs
         self._outputs = outputs
 
-    def run(self, fetches, feed_dict=None, *args, **kwargs):
-        return super().run(fetches, feed_dict, *args, **kwargs)
+    def run(self, fetches, *args, **kwargs):  # pylint: disable=useless-parent-delegation
+        return super().run(fetches, *args, **kwargs)
 
 
 class TensorflowRunner(ModelRunner):
@@ -224,5 +225,5 @@ class TensorflowRunner(ModelRunner):
                 else:
                     outputs = sess.run(output_names, feed_dict)
                     avg_time = -1
-        outputs = {o_name: o_data for o_name, o_data in zip(output_names, outputs)}
+        outputs = dict(zip(output_names, outputs))
         return outputs, avg_time

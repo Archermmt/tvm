@@ -17,34 +17,27 @@
  * under the License.
  */
 
-/*!
- * \file ccl.h
- * \brief The functions to make Relax ccl operator calls.
- */
-
-#ifndef TVM_RELAX_OP_CCL_CCL_H_
-#define TVM_RELAX_OP_CCL_CCL_H_
-
-#include <tvm/relax/attrs/ccl.h>
-
-#include "../op_common.h"
+#include <tvm/relax/expr_functor.h>
+#include <tvm/relax/transform.h>
 
 namespace tvm {
 namespace relax {
+namespace testing {
 
-/*! \brief AllReduce. */
-Expr allreduce(Expr data, String op_type);
+class EmptyCppMutator : public relax::ExprMutator {};
 
-/*! \brief AllGather. */
-Expr allgather(Expr data, Expr num_workers);
+tvm::transform::Pass ApplyEmptyCppMutator() {
+  auto pass_func = [](Function func, IRModule, tvm::transform::PassContext) -> Function {
+    EmptyCppMutator mutator;
+    return Downcast<Function>(mutator.VisitExpr(std::move(func)));
+  };
+  return tvm::relax::transform::CreateFunctionPass(pass_func, 0,
+                                                   "relax.testing.ApplyEmptyCppMutator", {});
+}
 
-/*! \brief Broadcast data from worker-0 to all other workers. */
-Expr broadcast_from_worker0(Expr data);
+TVM_REGISTER_GLOBAL("relax.testing.transform.ApplyEmptyCppMutator")
+    .set_body_typed(ApplyEmptyCppMutator);
 
-/*! \brief Perform a scatter operation from worker-0, chunking the given buffer into equal parts. */
-Expr scatter_from_worker0(Expr data, int num_workers, int axis);
-
+}  // namespace testing
 }  // namespace relax
 }  // namespace tvm
-
-#endif  // TVM_RELAX_OP_CCL_CCL_H_
