@@ -521,6 +521,10 @@ class BaseRunner(object):
         return self._runnable
 
     @property
+    def model_info(self):
+        return self._model_info
+
+    @property
     def device(self):
         return self._device
 
@@ -685,8 +689,6 @@ class BYOCRunner(BaseRunner):
         for graph, sub_weights in graph_infos:
             graphs.append(graph)
             weights.append(sub_weights)
-            print("[TMINFO] byoc graph " + str(graph))
-        raise Exception("stop here!!")
         self._byoc_graph = _ffi_api.BuildFromRelax(
             self._byoc_mod, "main", msc_utils.dump_dict(self._translate_config.get("build"))
         )

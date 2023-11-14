@@ -177,9 +177,8 @@ class PyCodeGen : public BaseCodeGen<ConfigType, HelperType> {
       for (size_t i = 0; i < node->outputs.size(); i++) {
         int index = static_cast<int>(i);
         if (graph_outputs_.count(node->OutputAt(index))) {
-          this->stack_
-              .func_call("msc_tools.process_tensor", this->IdxOutputBase(node, index) + "_exit")
-              .call_arg(this->IdxOutputBase(node, index))
+          this->stack_.func_call("msc_tools.process_tensor", this->IdxOutputBase(node, index, true))
+              .call_arg(this->IdxOutputBase(node, index, false))
               .call_arg(DocUtils::ToStrDoc(node->OutputAt(index)->name))
               .call_arg(DocUtils::ToStrDoc("exit"))
               .call_arg(DocUtils::ToStrDoc(this->config()->tools_phase))

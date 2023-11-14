@@ -178,29 +178,13 @@ class RelaxExprNameSetter : public ExprVisitor {
       const auto& func = Downcast<Function>(ref_module_->Lookup(v_node->name_hint));
       ExprVisitor::VisitExpr(func);
       optype = GetFuncType(func);
-      if (optype == "extern_func") {
-        name_hint = v_node->name_hint;
-      } else {
-        name_hint = optype;
-      }
+      name_hint = GetFuncName(GetRef<Call>(val), func);
+      use_unique = false;
     } else if (local_funcs_.count(val->op)) {
       ExprVisitor::VisitExpr(local_funcs_[val->op]);
       optype = GetFuncType(local_funcs_[val->op]);
-      // get name_hint from expr in func
-      Array<String> arg_names;
-      for (const auto& a : val->args) {
-        arg_names.push_back(expr_names_.count(a) ? expr_names_[a] : "");
-      }
-      name_hint = FuncNameGetter(arg_names).HintName(local_funcs_[val->op]);
-      if (name_hint.size() == 0) {
-        if (optype == "extern_func") {
-          name_hint = Downcast<Var>(val->op)->name_hint();
-        } else {
-          name_hint = optype;
-        }
-      } else {
-        use_unique = false;
-      }
+      name_hint = GetFuncName(GetRef<Call>(val), local_funcs_[val->op]);
+      use_unique = false;
     }
     if (name_hint.size() > 0) {
       // set name
@@ -263,16 +247,51 @@ class RelaxExprNameSetter : public ExprVisitor {
 
   const String GetFuncType(const Function& func) {
     String optype;
-    const auto& name_opt = func->GetAttr<runtime::String>(attr::kComposite);
-    if (name_opt.defined()) {
-      optype = name_opt.value();
-      if (target_.size() > 0) {
-        optype = StringUtils::Replace(optype, target_ + ".", "");
-      }
+    const auto& comp_opt = func->GetAttr<runtime::String>(attr::kComposite);
+    const auto& code_opt = func->GetAttr<runtime::String>(attr::kCodegen);
+    if (comp_opt.defined()) {
+      optype = comp_opt.value();
+    } else if (code_opt.defined()) {
+      optype = code_opt.value();
     } else {
       optype = "extern_func";
     }
+    if (target_.size() > 0) {
+      optype = StringUtils::Replace(optype, target_ + ".", "");
+    }
     return optype;
+  }
+
+  const String GetFuncName(const Call& call, const Function& func) {
+    String name;
+    // get from byoc_name
+    if (target_.size() > 0) {
+      const auto& byoc_name_opt = func->GetAttr<runtime::String>("byoc_name");
+      if (byoc_name_opt.defined()) {
+        return byoc_name_opt.value();
+      }
+    }
+    // get from attribute
+    const auto& name_opt = func->GetAttr<runtime::String>("unique_name");
+    if (name_opt.defined()) {
+      return name_opt.value();
+    }
+    // get from exprs in the func
+    Array<String> arg_names;
+    for (const auto& a : call->args) {
+      arg_names.push_back(expr_names_.count(a) ? expr_names_[a] : "");
+    }
+    name = FuncNameGetter(arg_names).HintName(local_funcs_[call->op]);
+    if (name.size() > 0) {
+      return name;
+    }
+    const auto& optype = GetFuncType(func);
+    if (optype == "extern_func") {
+      name = Downcast<Var>(call->op)->name_hint();
+    } else {
+      name = optype;
+    }
+    return GetUniqueName(call, name);
   }
 
   Map<String, Expr> setted_names_;

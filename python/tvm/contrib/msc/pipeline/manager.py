@@ -30,6 +30,7 @@ from tvm.contrib.msc.core.tools import MSCToolType
 from tvm.contrib.msc.core.utils.namespace import MSCFramework, MSCMap, MSCKey
 from tvm.contrib.msc.core import utils as msc_utils
 
+
 class BaseManager(object):
     """Base Manager of MSC
 
@@ -114,7 +115,7 @@ class BaseManager(object):
             for stage in ["baseline", "optimize", "compile"]:
                 if stage not in config:
                     continue
-                if config[stage].get("debug", True):
+                if config[stage].get("debug", False):
                     debug_config[stage] = True
             if "optimize" in config:
                 for t_type in MSCToolType.all_types():
@@ -140,8 +141,8 @@ class BaseManager(object):
 
         Returns
         -------
-        summary:
-            The pipeline summary.
+        report:
+            The pipeline report.
         """
 
         err_msg = None
@@ -150,10 +151,10 @@ class BaseManager(object):
             self._sample_inputs = self.prepare(self._config["prepare"], use_cache)
             self._relax_mod = self.parse(self._config["parse"], use_cache)
             if "baseline" in self._config:
-                self.baseline(self._config["baseline"], use_cache)
+                self._runner = self.baseline(self._config["baseline"], use_cache)
             if "optimize" in self._config:
-                self.optimize(self._config["optimize"], use_cache)
-            self.compile(self._config["compile"], use_cache)
+                self._runner = self.optimize(self._config["optimize"], use_cache)
+            self._runner = self.compile(self._config["compile"], use_cache)
         except Exception as e:
             err_msg = "Pipeline failed:{}\nTrace: {}".format(e, traceback.format_exc())
         report = self.summary(err_msg)
@@ -314,7 +315,7 @@ class BaseManager(object):
                 self._logger.debug("Save parsed mod to {}".format(cache_path))
         return relax_mod
 
-    def baseline(self, stage_config: dict, use_cache: bool = False):
+    def baseline(self, stage_config: dict, use_cache: bool = False) -> BaseRunner:
         """Run the baseline.
 
         Parameters
@@ -323,14 +324,17 @@ class BaseManager(object):
             The config of this stage.
         use_cache: bool
             Whether to use cache.
+
+        Returns
+        -------
+        runner: BaseRunner
+            The runner.
         """
 
         msc_utils.time_stamp("baseline", True)
-        self._runner = self._create_runner("baseline", stage_config, use_cache=use_cache)
+        return self._create_runner("baseline", stage_config, use_cache=use_cache)
 
-    def optimize(
-        self, stage_config: dict, use_cache: bool = False, ret_type: str = "runnable"
-    ) -> Any:
+    def optimize(self, stage_config: dict, use_cache: bool = False) -> BaseRunner:
         """Run the optimize and return object.
 
         Parameters
@@ -339,13 +343,11 @@ class BaseManager(object):
             The config of this stage.
         use_cache: bool
             Whether to use cache.
-        ret_type: str
-            The return type runner| model.
 
         Returns
         -------
-        runnable:
-            The runner or model.
+        runner: BaseRunner
+            The runner.
         """
 
         # run prune
@@ -364,14 +366,11 @@ class BaseManager(object):
 
         # optimize and get the runner
         msc_utils.time_stamp("optimize", True)
-        self._runner = self._create_runner(
+        return self._create_runner(
             "optimize", stage_config, tools_config=self._tools_config, use_cache=use_cache
         )
-        return self.get_runnable(ret_type)
 
-    def compile(
-        self, stage_config: dict, use_cache: bool = False, ret_type: str = "runnable"
-    ) -> Any:
+    def compile(self, stage_config: dict, use_cache: bool = False) -> BaseRunner:
         """Run the compile and return object.
 
         Parameters
@@ -385,15 +384,14 @@ class BaseManager(object):
 
         Returns
         -------
-        runnable:
-            The runner or model.
+        runner: BaseRunner
+            The runner.
         """
 
         msc_utils.time_stamp("compile", True)
-        self._runner = self._create_runner(
+        return self._create_runner(
             "compile", stage_config, tools_config=self._tools_config, use_cache=use_cache
         )
-        return self.get_runnable(ret_type)
 
     def summary(self, err_msg=None):
         """Summary the pipeline.
@@ -613,11 +611,19 @@ class BaseManager(object):
                 passed += iter_report["passed"]
                 acc_report["iter_" + str(idx)] = iter_report["info"]
             title = "Check({}) pass {}/{}".format(stage, passed, total)
-            report["accuracy"] = "{}/{}({:.2f}%)".format(passed, total, float(passed) * 100 / total)
+            pass_rate = float(passed) / total
+            report["accuracy"] = "{}/{}({:.2f}%)".format(passed, total, pass_rate * 100)
             self._logger.info(
                 "Accuracy({}) {} iters -> {}".format(stage, len(loader), report["accuracy"])
             )
             self._logger.debug(msc_utils.msg_block(title, acc_report))
+            required_err, err_rate = check_config.get("err_rate", 0), (1 - pass_rate)
+            if err_rate > required_err >= 0:
+                raise Exception(
+                    "Failed to profile the runner, err_rate {} > required {}".format(
+                        err_rate, required_err
+                    )
+                )
 
         # benchmark model
         benchmark_config = profile_config.get("benchmark", {})
@@ -764,6 +770,10 @@ class BaseManager(object):
         """
 
         raise NotImplementedError("_get_runner_cls is not implemented for BaseManager")
+
+    @property
+    def runner(self):
+        return self._runner
 
 
 class MSCManager(BaseManager):

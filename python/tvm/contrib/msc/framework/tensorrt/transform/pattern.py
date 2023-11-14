@@ -18,7 +18,7 @@
 """tvm.contrib.msc.framework.tensorrt.transform.pattern"""
 
 from typing import Mapping, Tuple, List, Union, Callable, Dict
-from functools import wraps
+from functools import wraps, partial
 
 from tvm import relax
 from tvm.relax.dpl import pattern
@@ -254,18 +254,6 @@ def wrap_basic_check(
     return wrapper
 
 
-def _basic_getter(context: PatternCheckContext) -> Dict[str, str]:
-    """Get attributes for fused pattern
-
-    Returns
-    -------
-    attrs: dict<str,str>
-        The extra attributes for msc.
-    """
-
-    return msc_pattern.msc_attrs_getter(context)
-
-
 CheckFunc = Callable[[Mapping[pattern.DFPattern, relax.Expr], relax.Expr], bool]
 GetterFunc = Callable[[Mapping[pattern.DFPattern, relax.Expr], relax.Expr], Dict[str, str]]
 Pattern = Union[
@@ -325,7 +313,7 @@ def get_patterns(target) -> List[Pattern]:
                 target + "." + op,
                 *basic_pattern("relax." + op, in_types),
                 _basic_check,
-                _basic_getter,
+                partial(msc_pattern.msc_attrs_getter, anchor="out"),
             )
         )
     # activation ops
@@ -335,7 +323,7 @@ def get_patterns(target) -> List[Pattern]:
                 target + "." + op,
                 *basic_pattern("relax." + op, ["input"]),
                 _basic_check,
-                _basic_getter,
+                partial(msc_pattern.msc_attrs_getter, anchor="out"),
             )
         )
     # reduce ops
@@ -345,7 +333,7 @@ def get_patterns(target) -> List[Pattern]:
                 target + "." + op,
                 *basic_pattern("relax." + op, ["input"]),
                 _basic_check,
-                _basic_getter,
+                partial(msc_pattern.msc_attrs_getter, anchor="out"),
             )
         )
     # unary ops
@@ -355,18 +343,28 @@ def get_patterns(target) -> List[Pattern]:
                 target + "." + op,
                 *basic_pattern("relax." + op, ["input"]),
                 _basic_check,
-                _basic_getter,
+                partial(msc_pattern.msc_attrs_getter, anchor="out"),
             )
         )
     # elemwise ops
     for op in elemwise_ops:
         patterns.append(
-            (target + "." + op, *elemwise_pattern("relax." + op), _elemwise_check, _basic_getter)
+            (
+                target + "." + op,
+                *elemwise_pattern("relax." + op),
+                _elemwise_check,
+                partial(msc_pattern.msc_attrs_getter, anchor="out"),
+            )
         )
     # compare ops
     for op in compare_ops:
         patterns.append(
-            (target + "." + op, *elemwise_pattern("relax." + op), _compare_check, _basic_getter)
+            (
+                target + "." + op,
+                *elemwise_pattern("relax." + op),
+                _compare_check,
+                partial(msc_pattern.msc_attrs_getter, anchor="out"),
+            )
         )
 
     # special ops
@@ -376,25 +374,25 @@ def get_patterns(target) -> List[Pattern]:
                 target + ".take",
                 *basic_pattern("relax.take", ["input", "input"]),
                 _take_check,
-                _basic_getter,
+                partial(msc_pattern.msc_attrs_getter, anchor="out"),
             ),
             (
                 target + ".argmax",
                 *argmaxmin_pattern("relax.argmax"),
                 _argmaxmin_check,
-                _basic_getter,
+                partial(msc_pattern.msc_attrs_getter, anchor="out"),
             ),
             (
                 target + ".argmin",
                 *argmaxmin_pattern("relax.argmin"),
                 _argmaxmin_check,
-                _basic_getter,
+                partial(msc_pattern.msc_attrs_getter, anchor="out"),
             ),
             (
                 target + ".reshape",
                 *basic_pattern("relax.reshape", ["input", "input"]),
                 _reshape_check,
-                _basic_getter,
+                partial(msc_pattern.msc_attrs_getter, anchor="out"),
             ),
         ]
     )
@@ -405,7 +403,7 @@ def get_patterns(target) -> List[Pattern]:
                 target + ".msc.conv2d_bias",
                 *msc_pattern.make_opt_relax_conv_bias_pattern("relax.nn.conv2d"),
                 wrap_basic_check(msc_pattern._check_opt_relax_conv_bias),
-                _basic_getter,
+                partial(msc_pattern.msc_attrs_getter, anchor="conv"),
             ),
         ]
     )

@@ -53,7 +53,7 @@ class TensorRTCodeGenHelper : public BaseCodeGenHelper {
 
   /*! \brief Get describe for default node output*/
   const String IdxOutputBase(const MSCJoint& node, const String& prefix = "", int idx = 0,
-                             const String& suffix = "") final {
+                             const String& suffix = "", bool mark_exit = false) final {
     if (node->optype == "argmax" || node->optype == "argmin") {
       ICHECK_EQ(idx, 0) << "argmax and argmin only has 1 output, get " << idx;
       return IdxNodeBase(node, prefix, suffix) + "->getOutput(1)";

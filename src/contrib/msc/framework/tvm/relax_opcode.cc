@@ -334,14 +334,7 @@ class RelaxEinsumCodeGen : public RelaxOpCode {
  protected:
   void CodeGenBuild() final {
     const String& key = config()->from_relay ? "equation" : "subscripts";
-    const auto& producer = node()->ProducerOf(0);
-    stack_.op_call();
-    if (node()->inputs.size() == 1 && producer->optype == "tuple") {
-      stack_.op_input_arg();
-    } else {
-      stack_.op_inputs_arg();
-    }
-    stack_.op_str_arg(key, "subscripts");
+    stack_.op_call().op_inputs_arg().op_str_arg(key, "subscripts");
   }
 };
 

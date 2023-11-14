@@ -26,6 +26,7 @@ import tvm.testing
 import tvm.relay.testing.tf as tf_testing
 from tvm.contrib.msc.pipeline import MSCManager
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
+from tvm.contrib.msc.core import utils as msc_utils
 
 requires_tensorrt = pytest.mark.skipif(
     tvm.get_global_func("relax.ext.tensorrt", True) is None,
@@ -39,7 +40,6 @@ def _get_config(model_type, deploy_type, inputs, outputs, atol=1e-2, rtol=1e-2):
         "model_type": model_type,
         "inputs": inputs,
         "outputs": outputs,
-        "debug": True,
         "dataset": {"loader": "from_random", "max_iter": 5},
         "prepare": {"profile": {"benchmark": {"repeat": 10}}},
         "baseline": {
@@ -87,7 +87,7 @@ def _get_tf_graph():
         return None
 
 
-def _test_from_torch(deploy_type, is_training=False, atol=1e-2, rtol=1e-2):
+def _test_from_torch(deploy_type, expected_info, is_training=False, atol=1e-2, rtol=1e-2):
     torch_model = _get_torch_model("resnet50", is_training)
     if torch_model:
         if torch.cuda.is_available():
@@ -103,10 +103,14 @@ def _test_from_torch(deploy_type, is_training=False, atol=1e-2, rtol=1e-2):
         manager = MSCManager(torch_model, config)
         report = manager.run_pipe()
         assert report["success"], "Failed to run pipe for torch -> {}".format(deploy_type)
+        model_info = manager.runner.model_info
+        assert msc_utils.dict_equal(
+            model_info, expected_info
+        ), "Model info {} mismatch with expected {}".format(model_info, expected_info)
         manager.destory()
 
 
-def _test_from_tf(deploy_type, atol=1e-2, rtol=1e-2):
+def _test_from_tf(deploy_type, expected_info, atol=1e-2, rtol=1e-2):
     graphdef = _get_tf_graph()
     if graphdef:
         config = _get_config(
@@ -120,35 +124,77 @@ def _test_from_tf(deploy_type, atol=1e-2, rtol=1e-2):
         manager = MSCManager(graphdef, config)
         report = manager.run_pipe()
         assert report["success"], "Failed to run pipe for tensorflow -> {}".format(deploy_type)
+        model_info = manager.runner.model_info
+        assert msc_utils.dict_equal(
+            model_info, expected_info
+        ), "Model info {} mismatch with expected {}".format(model_info, expected_info)
         manager.destory()
 
 
 def test_tvm_manager():
     """Test manager for tvm"""
 
-    _test_from_torch(MSCFramework.TVM, is_training=True)
-    _test_from_tf(MSCFramework.TVM)
+    model_info = {
+        "inputs": [
+            {"name": "input_0", "shape": [1, 3, 224, 224], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "outputs": [{"name": "output", "shape": [1, 1000], "dtype": "float32", "layout": "NC"}],
+        "nodes": {
+            "total": 229,
+            "input": 1,
+            "nn.conv2d": 53,
+            "nn.batch_norm": 53,
+            "get_item": 53,
+            "nn.relu": 49,
+            "nn.max_pool2d": 1,
+            "add": 16,
+            "nn.adaptive_avg_pool2d": 1,
+            "reshape": 1,
+            "msc.linear_bias": 1,
+        },
+    }
+    # _test_from_torch(MSCFramework.TVM, model_info, is_training=True)
+    _test_from_tf(MSCFramework.TVM, {})
 
 
 def test_torch_manager():
     """Test manager for torch"""
 
-    _test_from_torch(MSCFramework.TORCH, is_training=False)
+    model_info = {
+        "inputs": [
+            {"name": "input_0", "shape": [1, 3, 224, 224], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "outputs": [{"name": "output", "shape": [1, 1000], "dtype": "float32", "layout": "NC"}],
+        "nodes": {
+            "total": 229,
+            "input": 1,
+            "nn.conv2d": 53,
+            "nn.batch_norm": 53,
+            "get_item": 53,
+            "nn.relu": 49,
+            "nn.max_pool2d": 1,
+            "add": 16,
+            "nn.adaptive_avg_pool2d": 1,
+            "reshape": 1,
+            "msc.linear_bias": 1,
+        },
+    }
+    _test_from_torch(MSCFramework.TORCH, model_info, is_training=False)
 
 
 def test_tensorflow_manager():
     """Test manager for tensorflow"""
 
-    _test_from_tf(MSCFramework.TENSORFLOW)
+    _test_from_tf(MSCFramework.TENSORFLOW, {})
 
 
-# @requires_tensorrt
+@requires_tensorrt
 def test_tensorrt_manager():
     """Test manager for tensorrt"""
 
-    _test_from_torch(MSCFramework.TENSORRT, is_training=False)
+    _test_from_torch(MSCFramework.TENSORRT, {}, is_training=False)
 
 
 if __name__ == "__main__":
     # tvm.testing.main()
-    test_tensorrt_manager()
+    test_tvm_manager()

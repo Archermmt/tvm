@@ -32,9 +32,6 @@ void RelaxCodeGen::CodeGenHeader() {
 }
 
 void RelaxCodeGen::CodeGenGraph() {
-  for (const auto& e : graph()->GetExits()) {
-    ICHECK(e->outputs.size() == 1) << "Relax exit should only has 1 output, get " << e;
-  }
   stack_.func_def(graph()->name, "tvm.IRModule");
   Array<String> idx_inputs;
   for (const auto& i : graph()->GetInputs()) {
@@ -87,20 +84,31 @@ void RelaxCodeGen::CodeGenGraph() {
   }
   // mark outputs
   stack_.comment("Emit the outputs");
-  Array<String> idx_outputs;
-  for (const auto& o : graph()->GetOutputs()) {
-    const auto& pair = graph()->FindProducerAndIdx(o);
-    const String& idx_output =
-        IdxOutputBase(pair.first, pair.second) + (config()->use_tools ? "_exit" : "");
-    idx_outputs.push_back(idx_output);
-    stack_.func_call("block_builder.emit_output", idx_output).call_arg(idx_output);
+  Array<String> idx_exits;
+  for (const auto& e : graph()->GetExits()) {
+    const auto& idx_exit = IdxNodeBase(e) + (config()->use_tools ? "_exit" : "");
+    if (config()->use_tools) {
+      if (e->outputs.size() > 1) {
+        Array<String> tuple_outputs;
+        for (size_t o_idx = 0; o_idx < e->outputs.size(); o_idx++) {
+          const auto& t_output = IdxOutputBase(e, o_idx, true);
+          tuple_outputs.push_back(t_output);
+        }
+        stack_.func_call("relax.Tuple", idx_exit).call_arg(DocUtils::ToListDoc(tuple_outputs));
+        stack_.func_call("block_builder.emit", idx_exit).call_arg(idx_exit);
+        stack_.call_arg(DocUtils::ToStrDoc(e->name + "_exit"), "name_hint");
+      }
+    }
+    stack_.func_call("block_builder.emit_output", idx_exit).call_arg(idx_exit);
+    idx_exits.push_back(idx_exit);
   }
   stack_.scope_end().func_call("block_builder.emit_func_output");
-  if (idx_outputs.size() == 1) {
-    stack_.call_arg(idx_outputs[0]);
+  if (idx_exits.size() == 1) {
+    stack_.call_arg(idx_exits[0]);
   } else {
-    stack_.call_arg(DocUtils::ToListDoc(idx_outputs));
+    stack_.call_arg(DocUtils::ToListDoc(idx_exits));
   }
+
   stack_.scope_end().assign("mod", "block_builder.get()").func_end("mod");
 }
 

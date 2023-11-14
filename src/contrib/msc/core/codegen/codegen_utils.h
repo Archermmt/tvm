@@ -85,8 +85,9 @@ using namespace tvm::script::printer;
   const String IdxInputBase(const MSCJoint& node, int idx = 0, bool process = true) {             \
     return helper_.IdxInputBase(node, config()->prefix, idx, "", process && config()->use_tools); \
   }                                                                                               \
-  const String IdxOutputBase(const MSCJoint& node, int idx = 0) {                                 \
-    return helper_.IdxOutputBase(node, config()->prefix, idx, "");                                \
+  const String IdxOutputBase(const MSCJoint& node, int idx = 0, bool mark_exit = false) {         \
+    return helper_.IdxOutputBase(node, config()->prefix, idx, "",                                 \
+                                 mark_exit && config()->use_tools);                               \
   }                                                                                               \
   const String IdxWeightBase(const MSCJoint& node, const String& wtype, bool process = true) {    \
     return helper_.IdxWeightBase(node, wtype, "", process && config()->use_tools);                \
@@ -160,7 +161,13 @@ class BaseCodeGenHelper {
     return CodeGenUtils::IdxInput(node, prefix, idx, suffix + GetSuffix(node, process));
   }
   virtual const String IdxOutputBase(const MSCJoint& node, const String& prefix = "", int idx = 0,
-                                     const String& suffix = "") {
+                                     const String& suffix = "", bool mark_exit = false) {
+    if (mark_exit) {
+      if (node->outputs.size() > 1 || node->optype == "tuple") {
+        return CodeGenUtils::IdxNode(node, prefix, suffix) + "_" + std::to_string(idx) + "_exit";
+      }
+      return CodeGenUtils::IdxOutput(node, prefix, idx, suffix + "_exit");
+    }
     return CodeGenUtils::IdxOutput(node, prefix, idx, suffix);
   }
   virtual const String IdxWeightBase(const MSCJoint& node, const String& wtype,

@@ -87,8 +87,7 @@ void TorchCodeGen::CodeGenGraph() {
   Array<String> idx_outputs;
   for (const auto& o : graph()->GetOutputs()) {
     const auto& pair = graph()->FindProducerAndIdx(o);
-    const String& suffix = config()->use_tools ? "_exit" : "";
-    idx_outputs.push_back(IdxOutputBase(pair.first, pair.second) + suffix);
+    idx_outputs.push_back(IdxOutputBase(pair.first, pair.second, true));
   }
   if (idx_outputs.size() == 1) {
     stack_.assign("outputs", idx_outputs[0]);
