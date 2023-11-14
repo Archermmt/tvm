@@ -351,18 +351,18 @@ class BaseManager(object):
         """
 
         # run prune
-        if "prune" in stage_config:
-            self._tools_config["prune"] = stage_config["prune"]
-            plan_file = stage_config["prune"]["plan_file"]
+        if MSCToolType.PRUNE in stage_config:
+            self._tools_config[MSCToolType.PRUNE] = stage_config[MSCToolType.PRUNE]
+            plan_file = stage_config[MSCToolType.PRUNE]["plan_file"]
             if os.path.isfile(plan_file):
-                self._logger.info("Skip prune with plan_file " + str(plan_file))
+                self._logger.info("Skip {} with plan_file {}".format(MSCToolType.PRUNE, plan_file))
             else:
-                msc_utils.time_stamp("prune", True)
-                runner = self._create_tool_runner("prune", stage_config)
-                plan = runner.get_tool("prune").create_plan()
+                msc_utils.time_stamp(MSCToolType.PRUNE, True)
+                runner = self._create_tool_runner(MSCToolType.PRUNE, stage_config)
+                plan = runner.get_tool(MSCToolType.PRUNE).create_plan()
                 with open(plan_file, "w") as f:
                     f.write(json.dumps(plan, indent=2))
-                self._logger.info("Save prune plan -> " + str(plan_file))
+                self._logger.info("Save {} plan -> {}".format(MSCToolType.PRUNE, plan_file))
 
         # optimize and get the runner
         msc_utils.time_stamp("optimize", True)
@@ -566,15 +566,25 @@ class BaseManager(object):
 
         if "optimize" not in config:
             return config
-        for tool_type in ["prune", "quantize", "distill", "debug"]:
+        check_acc = True
+        for tool_type in MSCToolType.all_types():
             if tool_type not in config["optimize"]:
                 continue
+            if tool_type in (MSCToolType.PRUNE, MSCToolType.QUANTIZE):
+                check_acc = False
             tool_config = config["optimize"][tool_type]
             if "plan_file" not in tool_config:
                 tool_config["plan_file"] = "msc_{}.json".format(tool_type)
             tool_config["plan_file"] = msc_utils.to_abs_path(
                 tool_config["plan_file"], msc_utils.get_config_dir()
             )
+        # disable accuracy check
+        if not check_acc:
+            for stage in ["optimize", "compile"]:
+                check_config = config.get(stage, {}).get("profile", {}).get("check")
+                if check_config and "err_rate" not in check_config:
+                    self._logger.info("Disable accuracy check for {} by tools".format(stage))
+                    check_config["err_rate"] = -1
         return config
 
     def _profile_runner(self, runner: BaseRunner, stage_config: str) -> dict:
@@ -620,8 +630,8 @@ class BaseManager(object):
             required_err, err_rate = check_config.get("err_rate", 0), (1 - pass_rate)
             if err_rate > required_err >= 0:
                 raise Exception(
-                    "Failed to profile the runner, err_rate {} > required {}".format(
-                        err_rate, required_err
+                    "Failed to profile the runner({}), err_rate {} > required {}".format(
+                        stage, err_rate, required_err
                     )
                 )
 
