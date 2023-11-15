@@ -27,6 +27,7 @@
 #include <dmlc/json.h>
 #include <tvm/script/printer/doc.h>
 
+#include <set>
 #include <string>
 
 #include "../printer/cpp_printer.h"

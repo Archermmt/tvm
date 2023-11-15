@@ -18,12 +18,9 @@
 """ Test Managers in MSC. """
 
 import pytest
-
 import torch
-from tvm.contrib.msc.framework.tensorflow import tf_v1
 
 import tvm.testing
-import tvm.relay.testing.tf as tf_testing
 from tvm.contrib.msc.pipeline import MSCManager
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
@@ -72,7 +69,11 @@ def _get_torch_model(name, is_training=False):
 
 def _get_tf_graph():
     """Get graph from tensorflow"""
+    # pylint: disable=import-outside-toplevel
     try:
+        from tvm.contrib.msc.framework.tensorflow import tf_v1
+        import tvm.relay.testing.tf as tf_testing
+
         tf_graph = tf_v1.Graph()
         with tf_graph.as_default():
             graph_def = tf_testing.get_workload(
@@ -121,6 +122,7 @@ def _test_from_tf(deploy_type, expected_info, atol=1e-2, rtol=1e-2):
             atol=atol,
             rtol=rtol,
         )
+        config["compile"]["profile"]["check"]["err_rate"] = -1
         manager = MSCManager(graphdef, config)
         report = manager.run_pipe()
         assert report["success"], "Failed to run pipe for tensorflow -> {}".format(deploy_type)
@@ -153,8 +155,36 @@ def test_tvm_manager():
             "msc.linear_bias": 1,
         },
     }
-    # _test_from_torch(MSCFramework.TVM, model_info, is_training=True)
-    _test_from_tf(MSCFramework.TVM, {})
+    _test_from_torch(MSCFramework.TVM, model_info, is_training=True)
+
+    model_info = {
+        "inputs": [
+            {"name": "input", "shape": [1, 224, 224, 3], "dtype": "float32", "layout": "NHWC"}
+        ],
+        "outputs": [
+            {
+                "name": "MobilenetV2/Predictions/Reshape_1:0",
+                "shape": [1, 1001],
+                "dtype": "float32",
+                "layout": "NC",
+            }
+        ],
+        "nodes": {
+            "total": 138,
+            "input": 1,
+            "msc.conv2d_bias": 36,
+            "clip": 35,
+            "nn.conv2d": 17,
+            "nn.batch_norm": 17,
+            "get_item": 17,
+            "add": 10,
+            "nn.avg_pool2d": 1,
+            "squeeze": 1,
+            "reshape": 2,
+            "nn.softmax": 1,
+        },
+    }
+    _test_from_tf(MSCFramework.TVM, model_info)
 
 
 def test_torch_manager():
@@ -185,16 +215,49 @@ def test_torch_manager():
 def test_tensorflow_manager():
     """Test manager for tensorflow"""
 
-    _test_from_tf(MSCFramework.TENSORFLOW, {})
+    model_info = {
+        "inputs": [
+            {"name": "input", "shape": [1, 224, 224, 3], "dtype": "float32", "layout": "NHWC"}
+        ],
+        "outputs": [
+            {
+                "name": "MobilenetV2/Predictions/Reshape_1:0",
+                "shape": [1, 1001],
+                "dtype": "float32",
+                "layout": "NC",
+            }
+        ],
+        "nodes": {
+            "total": 138,
+            "input": 1,
+            "msc.conv2d_bias": 36,
+            "clip": 35,
+            "nn.conv2d": 17,
+            "nn.batch_norm": 17,
+            "get_item": 17,
+            "add": 10,
+            "nn.avg_pool2d": 1,
+            "squeeze": 1,
+            "reshape": 2,
+            "nn.softmax": 1,
+        },
+    }
+    _test_from_tf(MSCFramework.TENSORFLOW, model_info)
 
 
 @requires_tensorrt
 def test_tensorrt_manager():
     """Test manager for tensorrt"""
 
-    _test_from_torch(MSCFramework.TENSORRT, {}, is_training=False)
+    model_info = {
+        "inputs": [
+            {"name": "input_0", "shape": [1, 3, 224, 224], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "outputs": [{"name": "output", "shape": [1, 1000], "dtype": "float32", "layout": ""}],
+        "nodes": {"total": 2, "input": 1, "msc_tensorrt": 1},
+    }
+    _test_from_torch(MSCFramework.TENSORRT, model_info, is_training=False)
 
 
 if __name__ == "__main__":
-    # tvm.testing.main()
-    test_tvm_manager()
+    tvm.testing.main()

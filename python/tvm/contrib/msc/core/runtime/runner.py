@@ -27,7 +27,7 @@ import tvm
 from tvm.contrib.msc.core.ir import MSCGraph
 from tvm.contrib.msc.core.frontend import from_relax
 from tvm.contrib.msc.core.tools import MSCTool, create_tool, get_tool, get_tools
-from tvm.contrib.msc.core.utils.namespace import MSCFramework, MSCMap, MSCKey
+from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 from tvm.contrib.msc.core import _ffi_api
 
@@ -140,7 +140,7 @@ class BaseRunner(object):
         if build_graph or not self._graphs:
             self._graphs, self._weights = self._translate()
             for tool in get_tools():
-                self._graphs, self._weights = tool.reset(self._graphs, self._weights)
+                self._graphs, self._weights = tool.load_graphs(self._graphs, self._weights)
             self._logger.debug("Translate {} graphs from module".format(len(self._graphs)))
 
         if cache_info.get("model") and not build_graph:

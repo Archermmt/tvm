@@ -16,7 +16,7 @@
 # under the License.
 """tvm.contrib.msc.core.tools.prune.method"""
 
-from typing import List, Dict
+from typing import List
 import numpy as np
 
 from tvm.contrib.msc.core.tools.tool import MSCToolType, MSCTool

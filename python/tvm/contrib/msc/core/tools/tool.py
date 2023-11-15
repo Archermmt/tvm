@@ -14,6 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+# pylint: disable=unused-argument
 """tvm.contrib.msc.core.tools.base_tool"""
 
 import os
@@ -44,6 +45,8 @@ class MSCToolType(object):
 
 
 class MSCToolImpl(object):
+    """Tool Implement"""
+
     def setup(self, options: dict):
         """Setup the implement"""
 
@@ -193,10 +196,10 @@ class MSCTool(object):
         self._graph_id, self._forward_cnt = 0, 0
         self._tool_impl.setup(options)
 
-    def reset(
+    def load_graphs(
         self, graphs: List[MSCGraph], weights: List[Dict[str, tvm.nd.array]]
     ) -> Tuple[List[MSCGraph], List[Dict[str, tvm.nd.array]]]:
-        """Reset the tool
+        """Load the graphs and weights
 
         Parameters
         ----------
@@ -870,8 +873,8 @@ def execute_hook(datas: Dict[str, tvm.nd.array], graph_name: str, stage: str, ta
         The tag of the tool.
     """
 
-    print("[TMINFO] execute_hook with datas "+str(datas))
-    print("[TMINFO] graph_name {}, stage {}, tag {}".format(graph_name, stage,tag))
+    print("[TMINFO] execute_hook with datas " + str(datas))
+    print("[TMINFO] graph_name {}, stage {}, tag {}".format(graph_name, stage, tag))
     for tool in get_tools(tag):
         if stage == "before_build":
             tool.execute_before_build(datas, graph_name=graph_name)

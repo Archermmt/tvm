@@ -21,7 +21,6 @@ from typing import List, Dict, Iterable, Tuple
 import tvm
 from tvm.contrib.msc.core.ir import MSCGraph, WeightJoint, MSCTensor
 from tvm.contrib.msc.core.tools.tool import MSCToolType, MSCTool, MSCToolImpl
-from tvm.contrib.msc.core.utils.namespace import MSCMap, MSCKey
 from tvm.contrib.msc.core import _ffi_api
 from tvm.contrib.msc.core import utils as msc_utils
 from .method import prune_axis
@@ -49,8 +48,8 @@ class MSCPruner(MSCTool):
         self._prunable_types = {}
         self._weight_graphs = []
 
-    def reset(self, graphs: List[MSCGraph], weights: List[Dict[str, tvm.nd.array]]):
-        """Reset the tool
+    def load_graphs(self, graphs: List[MSCGraph], weights: List[Dict[str, tvm.nd.array]]):
+        """Load the graphs and weights
 
         Parameters
         ----------
@@ -94,11 +93,11 @@ class MSCPruner(MSCTool):
             _ffi_api.WeightGraph(graph, self._prunable_types, relation_types) for graph in graphs
         ]
         if not self._plan:
-            return super().reset(graphs, weights)
+            return super().load_graphs(graphs, weights)
 
         # Prune the weights
         graphs, weights = self.prune_graphs(graphs, weights)
-        return super().reset(graphs, weights)
+        return super().load_graphs(graphs, weights)
 
     def _check_tensor(self, name: str, consumer: str, phase: str) -> bool:
         """Check if the tensor should be processed
@@ -209,12 +208,13 @@ class MSCPruner(MSCTool):
             pruned_graph = _ffi_api.PruneWeights(graph, pruned_tensors)
             new_graphs.append(pruned_graph)
             new_weights.append(pruned_weights)
+
         # log compress rate
         def _flatten_size(weights):
             weight_size = 0
             for sub_weights in weights:
-                for w in sub_weights.values():
-                    weight_size += w.asnumpy().size
+                for w_data in sub_weights.values():
+                    weight_size += w_data.asnumpy().size
             return weight_size
 
         raw_size = _flatten_size(weights)

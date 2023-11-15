@@ -21,8 +21,8 @@ import os
 import json
 import time
 from typing import Dict, Any
-import numpy as np
 import traceback
+import numpy as np
 
 import tvm
 from tvm.contrib.msc.core.runtime import BaseRunner
@@ -155,8 +155,8 @@ class BaseManager(object):
             if "optimize" in self._config:
                 self._runner = self.optimize(self._config["optimize"], use_cache)
             self._runner = self.compile(self._config["compile"], use_cache)
-        except Exception as e:
-            err_msg = "Pipeline failed:{}\nTrace: {}".format(e, traceback.format_exc())
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            err_msg = "Pipeline failed:{}\nTrace: {}".format(exc, traceback.format_exc())
         report = self.summary(err_msg)
         self._logger.info(msc_utils.msg_block("SUMMARY", report, 0))
         return report
@@ -187,7 +187,7 @@ class BaseManager(object):
             loader, source_type = msc_utils.MSCDataLoader(golden_folder), "Cache"
             report["datas_info"] = loader.info
             sample_inputs = loader[0][0]
-            self._logger.debug("Load {} cached golden from {}".format(len(loader), golden_folder))
+            self._logger.debug("Load %d cached golden from %s", len(loader), golden_folder)
         else:
             # create loader
             loader = self._config["dataset"].get("loader")
@@ -243,17 +243,16 @@ class BaseManager(object):
                     report["datas_info"] = saver.info
             else:
                 raise Exception("golden or runner should given in prepare to save golden")
-            self._logger.debug("Saved {} golden to {}".format(golden_cnt, golden_folder))
+            self._logger.debug("Saved %d golden to %s", golden_cnt, golden_folder)
 
         def _to_abstract(info: dict) -> dict:
+            def _to_tensor_str(info):
+                return "{},{}".format(";".join([str(s) for s in info["shape"]]), info["dtype"])
+
             return {
                 "num_datas": info["num_datas"],
-                "inputs": {
-                    n: "{}({})".format(i["shape"], i["dtype"]) for n, i in info["inputs"].items()
-                },
-                "outputs": {
-                    n: "{}({})".format(i["shape"], i["dtype"]) for n, i in info["outputs"].items()
-                },
+                "inputs": {n: _to_tensor_str(i) for n, i in info["inputs"].items()},
+                "outputs": {n: _to_tensor_str(o) for n, o in info["outputs"].items()},
             }
 
         report["datas_info"] = _to_abstract(report["datas_info"])
@@ -264,7 +263,7 @@ class BaseManager(object):
         if "profile" in stage_config and run_func:
             benchmark = stage_config["profile"].get("benchmark", {})
             repeat = benchmark.get("repeat", 100)
-            self._logger.debug("Prepare profile with {}({})".format(run_func, benchmark))
+            self._logger.debug("Prepare profile with %s(%s)", run_func, benchmark)
             _, avg_time = run_func(
                 self._model, sample_inputs, input_names, self._config["outputs"], **benchmark
             )
@@ -293,7 +292,7 @@ class BaseManager(object):
         if cache_path and os.path.isfile(cache_path):
             with open(cache_path, "r") as f:
                 relax_mod = tvm.ir.load_json(f.read())
-            self._logger.info("Load parsed mod from {}".format(cache_path))
+            self._logger.info("Load parsed mod from %s", cache_path)
         else:
             parse_config = stage_config.get("parse_config", {})
             runner_cls = self._get_runner_cls(self._config["compile"]["run_type"])
@@ -312,7 +311,7 @@ class BaseManager(object):
             if cache_path:
                 with open(cache_path, "w") as f:
                     f.write(tvm.ir.save_json(relax_mod))
-                self._logger.debug("Save parsed mod to {}".format(cache_path))
+                self._logger.debug("Save parsed mod to %s", cache_path)
         return relax_mod
 
     def baseline(self, stage_config: dict, use_cache: bool = False) -> BaseRunner:
@@ -355,14 +354,14 @@ class BaseManager(object):
             self._tools_config[MSCToolType.PRUNE] = stage_config[MSCToolType.PRUNE]
             plan_file = stage_config[MSCToolType.PRUNE]["plan_file"]
             if os.path.isfile(plan_file):
-                self._logger.info("Skip {} with plan_file {}".format(MSCToolType.PRUNE, plan_file))
+                self._logger.info("Skip %s with plan_file %s", MSCToolType.PRUNE, plan_file)
             else:
                 msc_utils.time_stamp(MSCToolType.PRUNE, True)
                 runner = self._create_tool_runner(MSCToolType.PRUNE, stage_config)
                 plan = runner.get_tool(MSCToolType.PRUNE).create_plan()
                 with open(plan_file, "w") as f:
                     f.write(json.dumps(plan, indent=2))
-                self._logger.info("Save {} plan -> {}".format(MSCToolType.PRUNE, plan_file))
+                self._logger.info("Save %s plan -> %s", MSCToolType.PRUNE, plan_file)
 
         # optimize and get the runner
         msc_utils.time_stamp("optimize", True)
@@ -583,7 +582,7 @@ class BaseManager(object):
             for stage in ["optimize", "compile"]:
                 check_config = config.get(stage, {}).get("profile", {}).get("check")
                 if check_config and "err_rate" not in check_config:
-                    self._logger.info("Disable accuracy check for {} by tools".format(stage))
+                    self._logger.info("Disable accuracy check for %s by tools", stage)
                     check_config["err_rate"] = -1
         return config
 
@@ -620,13 +619,11 @@ class BaseManager(object):
                 total += iter_report["total"]
                 passed += iter_report["passed"]
                 acc_report["iter_" + str(idx)] = iter_report["info"]
-            title = "Check({}) pass {}/{}".format(stage, passed, total)
             pass_rate = float(passed) / total
             report["accuracy"] = "{}/{}({:.2f}%)".format(passed, total, pass_rate * 100)
-            self._logger.info(
-                "Accuracy({}) {} iters -> {}".format(stage, len(loader), report["accuracy"])
-            )
+            title = "Check({}) pass {}".format(stage, report["accuracy"])
             self._logger.debug(msc_utils.msg_block(title, acc_report))
+            self._logger.info("Accuracy(%s) %d iters -> %s", stage, len(loader), report["accuracy"])
             required_err, err_rate = check_config.get("err_rate", 0), (1 - pass_rate)
             if err_rate > required_err >= 0:
                 raise Exception(
@@ -721,9 +718,7 @@ class BaseManager(object):
                 "build_folder": msc_utils.get_build_dir().create_dir(stage, cleanup=not on_debug),
             }
         )
-        self._logger.debug(
-            "Create runner({}) by {}({})".format(stage, runner_cls.__name__, run_config)
-        )
+        self._logger.debug("Create runner(%s) by %s(%s)", stage, runner_cls.__name__, run_config)
         runner = runner_cls(
             self._relax_mod, tools_config=tools_config, logger=self._logger, **run_config
         )

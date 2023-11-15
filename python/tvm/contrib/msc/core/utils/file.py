@@ -245,14 +245,14 @@ def msc_dir(path: str = None, keep_history: bool = True, cleanup: bool = False) 
     return MSCDirectory(path, keep_history, cleanup)
 
 
-def to_abs_path(path: str, msc_dir: MSCDirectory, keep_history: bool = True) -> str:
+def to_abs_path(path: str, root_dir: MSCDirectory, keep_history: bool = True) -> str:
     """Change path to abs path
 
     Parameters
     ----------
     path: str
         The path of the file.
-    msc_dir: MSCDirectory
+    root_dir: MSCDirectory
         Root dir to save the file.
     keep_history: bool
         Whether to remove files before start.
@@ -265,7 +265,7 @@ def to_abs_path(path: str, msc_dir: MSCDirectory, keep_history: bool = True) -> 
 
     if os.path.abspath(path) == path:
         return path
-    return msc_dir.relpath(path, keep_history)
+    return root_dir.relpath(path, keep_history)
 
 
 def set_workspace(

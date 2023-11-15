@@ -14,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-# pylint: disable=not-context-manager
+# pylint: disable=not-context-manager,unused-import
 """tvm.contrib.msc.framework.tensorflow.runtime.runner"""
 
 import time

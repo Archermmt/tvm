@@ -69,7 +69,9 @@ def _get_torch_model(name, is_training=False):
         return None
 
 
-def _test_from_torch(deploy_type, tools_config, is_training=False, atol=1e-2, rtol=1e-2):
+def _test_from_torch(
+    deploy_type, tools_config, expected_info, is_training=False, atol=1e-2, rtol=1e-2
+):
     torch_model = _get_torch_model("resnet50", is_training)
     if torch_model:
         if torch.cuda.is_available():
@@ -90,6 +92,10 @@ def _test_from_torch(deploy_type, tools_config, is_training=False, atol=1e-2, rt
             assert os.path.isfile(
                 msc_utils.get_config_dir().relpath(config["plan_file"])
             ), "Failed to find plan of " + str(t_type)
+        model_info = manager.runner.model_info
+        assert msc_utils.dict_equal(
+            model_info, expected_info
+        ), "Model info {} mismatch with expected {}".format(model_info, expected_info)
         manager.destory()
 
 
@@ -102,8 +108,36 @@ def test_pruner():
             "strategy": [{"method": "per_channel", "density": 0.8}],
         }
     }
-    _test_from_torch(MSCFramework.TVM, tools_config, is_training=False)
-    # _test_from_torch(MSCFramework.TENSORRT, tools_config, is_training=False)
+    model_info = {
+        "inputs": [
+            {"name": "input_0", "shape": [1, 3, 224, 224], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "outputs": [{"name": "output", "shape": [1, 1000], "dtype": "float32", "layout": "NC"}],
+        "nodes": {
+            "total": 229,
+            "input": 1,
+            "nn.conv2d": 53,
+            "nn.batch_norm": 53,
+            "get_item": 53,
+            "nn.relu": 49,
+            "nn.max_pool2d": 1,
+            "add": 16,
+            "nn.adaptive_avg_pool2d": 1,
+            "reshape": 1,
+            "msc.linear_bias": 1,
+        },
+    }
+    _test_from_torch(MSCFramework.TVM, tools_config, model_info, is_training=False)
+
+    if tvm.get_global_func("relax.ext.tensorrt", True):
+        model_info = {
+            "inputs": [
+                {"name": "input_0", "shape": [1, 3, 224, 224], "dtype": "float32", "layout": "NCHW"}
+            ],
+            "outputs": [{"name": "output", "shape": [1, 1000], "dtype": "float32", "layout": ""}],
+            "nodes": {"total": 2, "input": 1, "msc_tensorrt": 1},
+        }
+        _test_from_torch(MSCFramework.TENSORRT, tools_config, model_info, is_training=False)
 
 
 if __name__ == "__main__":
