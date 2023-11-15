@@ -99,9 +99,9 @@ class CppCodeGen : public BaseCodeGen<ConfigType, HelperType> {
   virtual void CodeGenNode(const MSCJoint& node, bool use_tools) {
     this->stack_.comment(this->Comment(node));
     // process inputs and weights by tools
-    const auto* pf = runtime::Registry::Get("msc_tool.process_tensor_codegen");
-    ICHECK(pf != nullptr) << "Cannot find process_tensor_codegen func.";
     if (use_tools) {
+      const auto* pf = runtime::Registry::Get("msc_tool.process_tensor_codegen");
+      ICHECK(pf != nullptr) << "Cannot find process_tensor_codegen func.";
       for (size_t i = 0; i < node->inputs.size(); i++) {
         const auto& input = node->InputAt(i);
         const Array<String>& lines = (*pf)(GetTensorCtx(input), input->name, node->name,
@@ -123,6 +123,8 @@ class CppCodeGen : public BaseCodeGen<ConfigType, HelperType> {
     }
     // process graph outputs by tools
     if (use_tools) {
+      const auto* pf = runtime::Registry::Get("msc_tool.process_tensor_codegen");
+      ICHECK(pf != nullptr) << "Cannot find process_tensor_codegen func.";
       for (size_t i = 0; i < node->outputs.size(); i++) {
         int index = static_cast<int>(i);
         if (graph_outputs_.count(node->OutputAt(index))) {

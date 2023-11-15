@@ -106,7 +106,10 @@ class MSCTensorRTRuntime : public JSONRuntimeBase {
       if (nodes_[i].HasAttr("msc_global_options_num")) {
         engine_file_ = nodes_[i].GetAttr<std::vector<std::string>>("msc_global_engine")[0];
         graph_name_ = nodes_[i].GetAttr<std::vector<std::string>>("msc_global_graph_name")[0];
-        std::string stage = nodes_[i].GetAttr<std::vector<std::string>>("msc_global_stage")[0];
+        std::string stage = "compile";
+        if (nodes_[i].HasAttr("msc_global_stage")) {
+          stage = nodes_[i].GetAttr<std::vector<std::string>>("msc_global_stage")[0];
+        }
         if (stage == "compile") {
           tool_tag_ = "";
         } else {
