@@ -115,6 +115,40 @@ class MSCToolImpl(object):
 
         return output
 
+    def process_tensor(
+        self,
+        tensor: Any,
+        name: str,
+        consumer: str,
+        phase: str,
+        method: callable,
+        method_config: dict,
+    ) -> Any:
+        """Process tensor
+
+        Parameters
+        -------
+        tensor: Any
+            Tensor in framework
+        name: str
+            The name of the tensor.
+        consumer: str
+            The name of the consumer.
+        phase: str
+            The phase mark teacher| student| null
+        method: callable
+            The method to process tensor
+        method_config: dict
+            The config to call the method
+
+        Returns
+        -------
+        tensor: Any
+            The processed tensor.
+        """
+
+        return tensor
+
     @classmethod
     def tool_type(cls):
         return MSCToolType.BASE
@@ -160,7 +194,7 @@ class MSCTool(object):
             self._plan = msc_utils.load_dict(plan_file)
         else:
             self._plan = {}
-        self._methods, self._method_configs = self._parse_strategy(msc_utils.copy_dict(strategy))
+        self._methods = self._parse_strategy(msc_utils.copy_dict(strategy))
         self._workspace = workspace
         self._verbose_step = verbose_step
         self._logger = logger or msc_utils.get_global_logger()
@@ -169,7 +203,6 @@ class MSCTool(object):
         init_info = {
             "style": self.tool_style(),
             "methods": self._methods,
-            "method_configs": self._method_configs,
             "options": self._options,
             "verbose_step": self._verbose_step,
             "planed_num": len(self._plan),
@@ -219,6 +252,9 @@ class MSCTool(object):
         self._forward_cnt = 0
         self._graphs = graphs
         self._weights = weights
+        self._weight_names = set()
+        for sub_weights in self._weights:
+            self._weight_names |= set(sub_weights.keys())
         return self._graphs, self._weights
 
     def execute_before_build(self, *args, **kwargs):
@@ -340,7 +376,8 @@ class MSCTool(object):
             )
         if not self._tensor_status[edge_id]["process"]:
             return tensor
-        return self._tool_impl.process_tensor(tensor, name, consumer, phase)
+        method, method_config = self._get_method(name, consumer)
+        return self._tool_impl.process_tensor(tensor, name, consumer, phase, method, method_config)
 
     def visualize(self, visual_dir: msc_utils.MSCDirectory):
         """Visualize MSCGraphs
@@ -434,7 +471,7 @@ class MSCTool(object):
         return "{}-c-{}".format(name, consumer)
 
     def from_edge_id(self, edge_id: str) -> Tuple[str]:
-        """Concat name to unique id
+        """Split name from unique id
 
         Parameters
         ----------
@@ -450,6 +487,22 @@ class MSCTool(object):
         """
 
         return edge_id.split("-c-")
+
+    def is_weight(self, name: str) -> bool:
+        """Check if the tensor is weight
+
+        Parameters
+        ----------
+        name: str
+           The name of tensor.
+
+        Returns
+        -------
+        is_weight: bool
+            Whether the name is weight.
+        """
+
+        return name in self._weight_names
 
     def should_log(self) -> bool:
         """Check if should log
@@ -595,50 +648,57 @@ class MSCTool(object):
 
         Returns
         -------
-        method_configs: dict
-            The parsed method configs.
-        methods: dict
-            The parsed methods.
+        methods: dict<str, tuple<callable, dict>>
+            The parsed methods and configs.
         """
 
-        methods, method_configs = {}, {}
+        methods = {}
         assert isinstance(strategy, list) and all(
             isinstance(s, dict) for s in strategy
         ), "Strategy should be given as list of dict"
-        for s in strategy:
-            method_cls_name = s.pop("method_cls") if "method_cls" in s else "default"
+        for stra in strategy:
+            method_cls_name = stra.pop("method_cls") if "method_cls" in stra else "default"
             method_cls = msc_utils.get_registered_tool_method(
                 self._tool_impl.framework(), self.tool_type(), method_cls_name
             )
             default_cls = msc_utils.get_registered_tool_method(
                 MSCFramework.MSC, self.tool_type(), method_cls_name
             )
-            method = s.pop("method") if "method" in s else "default"
+            method = stra.pop("method") if "method" in stra else "default"
             method = (
                 getattr(method_cls, method)
                 if hasattr(method_cls, method)
                 else getattr(default_cls, method)
             )
-            if "types" in s:
-                types = s.pop("types")
-                methods.update({s_type: method for s_type in types})
-                method_configs.update({s_type: copy.deepcopy(s) for s_type in types})
-            elif "names" in s:
-                names = s.pop("names")
-                methods.update({s_name: method for s_name in names})
-                method_configs.update({s_name: copy.deepcopy(s) for s_name in names})
+            if "types" in stra:
+                types = stra.pop("types")
+                tensor_types = (
+                    stra.pop("tensor_types") if "tensor_types" in stra else ["input", "weight"]
+                )
+                for s_type in types:
+                    marks = [s_type + "." + t_type for t_type in tensor_types]
+                    methods.update({m: (method, copy.deepcopy(stra)) for m in marks})
+            elif "names" in stra:
+                names = stra.pop("names")
+                tensor_types = (
+                    stra.pop("tensor_types") if "tensor_types" in stra else ["input", "weight"]
+                )
+                for s_name in names:
+                    marks = [s_name + "." + t_type for t_type in tensor_types]
+                    methods.update({m: (method, copy.deepcopy(stra)) for m in marks})
             else:
-                methods["default"] = method
-                method_configs["default"] = s
-        return methods, method_configs
+                methods["default"] = (method, copy.deepcopy(stra))
+        return methods
 
-    def _get_method(self, name: str) -> dict:
+    def _get_method(self, name: str, consumer: str) -> dict:
         """Get the method by name
 
         Parameters
         -------
         name: str
-            The hint name
+            The tensor name.
+        consumer: str
+            The name of the consumer.
 
         Returns
         -------
@@ -646,23 +706,13 @@ class MSCTool(object):
             The method.
         """
 
-        return self._methods.get(name) or self._methods["default"]
-
-    def _get_method_config(self, name: str) -> dict:
-        """Get the config for method by name
-
-        Parameters
-        -------
-        name: str
-            The hint name
-
-        Returns
-        -------
-        method_config: dict
-            The method config.
-        """
-
-        return self._method_configs.get(name) or self._method_configs["default"]
+        consumer = self.find_producer(consumer)
+        suffix = "weight" if self.is_weight(name) else "input"
+        name_refs = [consumer.name + "." + suffix, consumer.optype + "." + suffix]
+        for n in name_refs:
+            if n in self._methods:
+                return self._methods[n]
+        return self._methods["default"]
 
     @property
     def graph(self):

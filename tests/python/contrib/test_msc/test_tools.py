@@ -27,6 +27,11 @@ from tvm.contrib.msc.pipeline import MSCManager
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 
+requires_tensorrt = pytest.mark.skipif(
+    tvm.get_global_func("relax.ext.tensorrt", True) is None,
+    reason="TENSORRT is not enabled",
+)
+
 
 def _get_config(model_type, deploy_type, tools_config, inputs, outputs, atol=1e-2, rtol=1e-2):
     """Get msc config"""
@@ -50,6 +55,40 @@ def _get_config(model_type, deploy_type, tools_config, inputs, outputs, atol=1e-
             "profile": {"check": {"atol": atol, "rtol": rtol}, "benchmark": {"repeat": 10}},
         },
     }
+
+
+def get_tool_config(tool_type):
+    config = {}
+    if tool_type == "prune":
+        config = {
+            "prune": {
+                "plan_file": "msc_prune.json",
+                "strategy": [{"method": "per_channel", "density": 0.8}],
+            }
+        }
+    if tool_type == "debug":
+        config = {
+            "debug": {
+                "plan_file": "msc_debug.json",
+                "strategy": [
+                    {
+                        "method": "save_compared",
+                        "compare_to": {
+                            "optimize": ["baseline"],
+                            "compile": ["optimize", "baseline"],
+                        },
+                    }
+                ],
+            }
+        }
+    if tool_type == "quantize":
+        config = {
+            "quantize": {
+                "plan_file": "msc_quantize.json",
+                "strategy": [{}],
+            }
+        }
+    return config
 
 
 def _get_torch_model(name, is_training=False):
@@ -99,15 +138,9 @@ def _test_from_torch(
         manager.destory()
 
 
-def test_pruner():
-    """Test pruner for torch"""
+def test_tvm_tools():
+    """Test tools for tvm"""
 
-    tools_config = {
-        "prune": {
-            "plan_file": "msc_prune.json",
-            "strategy": [{"method": "per_channel", "density": 0.8}],
-        }
-    }
     model_info = {
         "inputs": [
             {"name": "input_0", "shape": [1, 3, 224, 224], "dtype": "float32", "layout": "NCHW"}
@@ -127,17 +160,25 @@ def test_pruner():
             "msc.linear_bias": 1,
         },
     }
-    _test_from_torch(MSCFramework.TVM, tools_config, model_info, is_training=False)
+    for t_type in ["prune", "debug"]:
+        tool_config = get_tool_config(t_type)
+        _test_from_torch(MSCFramework.TVM, tool_config, model_info, is_training=False)
 
-    if tvm.get_global_func("relax.ext.tensorrt", True):
-        model_info = {
-            "inputs": [
-                {"name": "input_0", "shape": [1, 3, 224, 224], "dtype": "float32", "layout": "NCHW"}
-            ],
-            "outputs": [{"name": "output", "shape": [1, 1000], "dtype": "float32", "layout": ""}],
-            "nodes": {"total": 2, "input": 1, "msc_tensorrt": 1},
-        }
-        _test_from_torch(MSCFramework.TENSORRT, tools_config, model_info, is_training=False)
+
+@requires_tensorrt
+def test_tensorrt_tools():
+    """Test tools for tensorrt"""
+
+    model_info = {
+        "inputs": [
+            {"name": "input_0", "shape": [1, 3, 224, 224], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "outputs": [{"name": "output", "shape": [1, 1000], "dtype": "float32", "layout": ""}],
+        "nodes": {"total": 2, "input": 1, "msc_tensorrt": 1},
+    }
+    for t_type in ["prune", "debug"]:
+        tool_config = get_tool_config(t_type)
+        _test_from_torch(MSCFramework.TENSORRT, tool_config, model_info, is_training=False)
 
 
 if __name__ == "__main__":
