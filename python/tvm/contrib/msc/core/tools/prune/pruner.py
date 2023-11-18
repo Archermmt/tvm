@@ -16,35 +16,31 @@
 # under the License.
 """tvm.contrib.msc.core.tools.prune.pruner"""
 
-from typing import List, Dict, Iterable, Tuple
+from typing import List, Dict, Iterable, Tuple, Any
 
 import tvm
 from tvm.contrib.msc.core.ir import MSCGraph, WeightJoint, MSCTensor
-from tvm.contrib.msc.core.tools.tool import MSCToolType, MSCTool, MSCToolImpl
+from tvm.contrib.msc.core.tools.tool import ToolType, BaseTool, Strategy
 from tvm.contrib.msc.core import _ffi_api
 from tvm.contrib.msc.core import utils as msc_utils
 from .method import prune_axis
 
 
-class MSCPrunerImpl(MSCToolImpl):
-    @classmethod
-    def tool_type(cls):
-        return MSCToolType.PRUNE
-
-
-class MSCPruner(MSCTool):
+class BasePruner(BaseTool):
     """Base pruner for all"""
 
-    def setup(self, options: dict):
+    def setup(self, options: dict, stage: str = "default"):
         """Setup the tool
 
         Parameters
         ----------
         options: dict
             The options for setup the tool
+        stage: str
+            The init stage.
         """
 
-        super().setup(options)
+        super().setup(options, stage)
         self._prunable_types = {}
         self._weight_graphs = []
 
@@ -98,27 +94,6 @@ class MSCPruner(MSCTool):
         # Prune the weights
         graphs, weights = self.prune_graphs(graphs, weights)
         return super().load_graphs(graphs, weights)
-
-    def _check_tensor(self, name: str, consumer: str, phase: str) -> bool:
-        """Check if the tensor should be processed
-
-        Parameters
-        -------
-        name: str
-            The name of the tensor.
-        consumer: str
-            The name of the consumer.
-        phase: str
-            The phase mark teacher| student| null
-
-        Returns
-        -------
-        vaild: bool
-            Whether to process the tensor.
-        """
-
-        # no tensor should be processed
-        return False
 
     def prune_graphs(
         self, graphs: List[MSCGraph], weights: List[Dict[str, tvm.nd.array]]
@@ -226,19 +201,46 @@ class MSCPruner(MSCTool):
         )
         return new_graphs, new_weights
 
-    def create_plan(self) -> dict:
-        """Create the plan
+    def _check_tensor(self, name: str, consumer: str, phase: str, strategy: Strategy) -> bool:
+        """Check if the tensor should be processed
+
+        Parameters
+        -------
+        name: str
+            The name of the tensor.
+        consumer: str
+            The name of the consumer.
+        phase: str
+            The phase mark teacher| student| null
+        strategy: Strategy
+            The strategy for the tensor
 
         Returns
         -------
-        plan: dict
-            THe plan of the tool.
+        vaild: bool
+            Whether to process the tensor.
         """
+
+        # only process w_node once
+        if not self.has_w_node(name):
+            return False
+        if strategy.get_config("density", 1.0) == 1.0:
+            return False
+        return True
+
+    def get_plan(self) -> dict:
+        """Get the plan"""
+
+        self._plan = {n: c for n, c in self._plan.items() if c["in_indices"] or c["out_indices"]}
+        self._logger.info("{} weights configed by pruner".format(len(self._plan)))
+        return self._plan
+
+    """
+    def create_plan(self) -> dict:
 
         plan = {}
 
         def _get_in_indices(w_node: WeightJoint) -> List[int]:
-            """Get input indices for weight node"""
             if not w_node.parents:
                 return []
             if w_node.name in plan and "in_indices" in plan[w_node.name]:
@@ -253,7 +255,6 @@ class MSCPruner(MSCTool):
             raise Exception("Unexpected w_node " + str(w_node))
 
         def _prunable(w_node: WeightJoint) -> bool:
-            """Check if weight node is prunable"""
             if w_node.get_attr("prune_strategy") != "prune":
                 return False
             if not w_node.children:
@@ -298,6 +299,7 @@ class MSCPruner(MSCTool):
         self._logger.info("{} weights configed by pruner".format(len(plan)))
         self._plan = plan
         return self._plan
+    """
 
     def visualize(self, visual_dir: msc_utils.MSCDirectory):
         """Visualize MSCGraphs
@@ -323,6 +325,25 @@ class MSCPruner(MSCTool):
         for g in self._weight_graphs:
             for n in g.get_nodes():
                 yield n
+
+    def has_w_node(self, name: str) -> bool:
+        """Check if name in weight_graphs.
+
+        Parameters
+        ----------
+        name: string
+            The name of the node.
+
+        Returns
+        -------
+        has_node: bool
+            Whether node in weight_graphs.
+        """
+
+        for g in self._weight_graphs:
+            if g.has_node(name):
+                return True
+        return False
 
     def find_w_node(self, name: str) -> WeightJoint:
         """Find weight node by name.
@@ -367,10 +388,95 @@ class MSCPruner(MSCTool):
 
     @classmethod
     def tool_type(cls):
-        return MSCToolType.PRUNE
+        return ToolType.PRUNE
 
 
-class DefaultPruner(MSCPruner):
+class DefaultPruner(BasePruner):
+    def _process_tensor(
+        self, tensor: Any, name: str, consumer: str, phase: str, strategy: Strategy
+    ) -> Any:
+        """Process tensor
+
+        Parameters
+        -------
+        tensor: Any
+            Tensor in framework
+        name: str
+            The name of the tensor.
+        consumer: str
+            The name of the consumer.
+        phase: str
+            The phase mark teacher| student| null
+        strategy: Strategy
+            The strategy for the tensor
+
+        Returns
+        -------
+        tensor: Any
+            The processed tensor.
+        """
+
+        if name in self._plan:
+            return tensor
+
+        def _get_in_indices(w_node: WeightJoint) -> List[int]:
+            """Get input indices for weight node"""
+            if not w_node.parents:
+                return []
+            if w_node.name in self._plan and "in_indices" in self._plan[w_node.name]:
+                return self._plan[w_node.name]["in_indices"]
+            assert all(
+                p.name in self._plan for p in w_node.parents
+            ), "Missing some parents in runtime config " + str(w_node)
+            if len(w_node.parents) == 1:
+                return self._plan[w_node.parents[0].name]["out_indices"]
+            if w_node.parents[0].friends:
+                return self._plan[w_node.parents[0].friends[0].name]["out_indices"]
+            raise Exception("Unexpected w_node " + str(w_node))
+
+        def _prunable(w_node: WeightJoint) -> bool:
+            """Check if weight node is prunable"""
+            if w_node.get_attr("prune_strategy") != "prune":
+                return False
+            if not w_node.children:
+                return False
+            childrens = list(w_node.children)
+            while childrens:
+                current = childrens.pop(0)
+                prune_strategy = current.get_attr("prune_strategy")
+                if prune_strategy == "prune":
+                    return True
+                childrens.extend(list(current.children))
+            return False
+
+        w_node = self.find_w_node(name)
+        in_axis, out_axis = self._get_io_axes(w_node)
+        if w_node.weight.dim_at(in_axis) == 1:
+            in_indices = []
+        else:
+            in_indices = _get_in_indices(w_node)
+        self._plan[w_node.name] = {"in_indices": in_indices}
+        if w_node.friends and w_node != w_node.friends[0]:
+            self._plan[w_node.name]["out_indices"] = self._plan[w_node.friends[0].name][
+                "out_indices"
+            ]
+        elif _prunable(w_node):
+            self._plan[w_node.name] = strategy(
+                self,
+                name=w_node.name,
+                data=self.get_data(w_node.name),
+                in_axis=in_axis,
+                out_axis=out_axis,
+                in_indices=in_indices,
+            )
+        elif w_node.get_attr("prune_strategy") == "follow":
+            self._plan[w_node.name]["out_indices"] = []
+        elif w_node.get_attr("prune_strategy") == "passby":
+            self._plan[w_node.name]["out_indices"] = in_indices
+        else:
+            self._plan[w_node.name]["out_indices"] = []
+        return tensor
+
     @classmethod
     def tool_style(cls):
         return "default"

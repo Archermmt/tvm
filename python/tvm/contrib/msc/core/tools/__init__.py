@@ -17,4 +17,5 @@
 """tvm.contrib.msc.core.tools"""
 
 from .tool import *
+from .execute import *
 from .prune import *

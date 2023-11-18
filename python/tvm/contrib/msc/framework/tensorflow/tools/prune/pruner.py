@@ -16,15 +16,15 @@
 # under the License.
 """tvm.contrib.msc.framework.tensorflow.tools.prune.pruner"""
 
-from tvm.contrib.msc.core.tools.prune import MSCPrunerImpl
+from tvm.contrib.msc.core.tools.prune import DefaultPruner
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 
 
-class TensorflowPrunerImpl(MSCPrunerImpl):
+class TensorflowDefaultPruner(DefaultPruner):
     @classmethod
     def framework(cls):
         return MSCFramework.TENSORFLOW
 
 
-msc_utils.register_tool_impl(TensorflowPrunerImpl)
+msc_utils.register_tool_cls(TensorflowDefaultPruner)

@@ -16,15 +16,15 @@
 # under the License.
 """tvm.contrib.msc.framework.tensorrt.tools.prune.pruner"""
 
-from tvm.contrib.msc.core.tools.prune import MSCPrunerImpl
+from tvm.contrib.msc.core.tools.prune import DefaultPruner
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 
 
-class TensorRTPrunerImpl(MSCPrunerImpl):
+class TensorRTDefaultPruner(DefaultPruner):
     @classmethod
     def framework(cls):
         return MSCFramework.TENSORRT
 
 
-msc_utils.register_tool_impl(TensorRTPrunerImpl)
+msc_utils.register_tool_cls(TensorRTDefaultPruner)

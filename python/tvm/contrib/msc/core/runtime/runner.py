@@ -26,7 +26,7 @@ import numpy as np
 import tvm
 from tvm.contrib.msc.core.ir import MSCGraph
 from tvm.contrib.msc.core.frontend import from_relax
-from tvm.contrib.msc.core.tools import MSCTool, create_tool, get_tool, get_tools
+from tvm.contrib.msc.core.tools import BaseTool, create_tool, get_tool, get_tools
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 from tvm.contrib.msc.core import _ffi_api
@@ -263,7 +263,7 @@ class BaseRunner(object):
         for tool in self._tools.values():
             tool.visualize(visual_dir)
 
-    def get_tool(self, tool_type: str) -> MSCTool:
+    def get_tool(self, tool_type: str) -> BaseTool:
         """Get tool by type
 
         Parameters
@@ -273,7 +273,7 @@ class BaseRunner(object):
 
         Returns
         -------
-        tool: MSCTool
+        tool: BaseTool
             The saved tool.
         """
 

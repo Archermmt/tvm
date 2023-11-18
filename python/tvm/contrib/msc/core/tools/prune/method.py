@@ -19,7 +19,7 @@
 from typing import List
 import numpy as np
 
-from tvm.contrib.msc.core.tools.tool import MSCToolType, MSCTool
+from tvm.contrib.msc.core.tools.tool import ToolType, BaseTool
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 
@@ -54,7 +54,7 @@ class PruneMethod(object):
     @classmethod
     def per_channel(
         cls,
-        pruner: MSCTool,
+        pruner: BaseTool,
         name: str,
         data: np.ndarray,
         in_axis: int,
@@ -67,7 +67,7 @@ class PruneMethod(object):
 
         Parameters
         ----------
-        pruner: MSCPruner
+        pruner: BasePruner
         name: str
             The name of the weight.
         data: np.ndarray
@@ -107,7 +107,7 @@ class PruneMethod(object):
 
     @classmethod
     def tool_type(cls):
-        return MSCToolType.PRUNE
+        return ToolType.PRUNE
 
 
 msc_utils.register_tool_method(PruneMethod)

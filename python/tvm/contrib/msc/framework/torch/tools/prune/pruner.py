@@ -16,15 +16,15 @@
 # under the License.
 """tvm.contrib.msc.framework.torch.tools.prune.pruner"""
 
-from tvm.contrib.msc.core.tools.prune import MSCPrunerImpl
+from tvm.contrib.msc.core.tools.prune import DefaultPruner
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 
 
-class TorchPrunerImpl(MSCPrunerImpl):
+class TorchDefaultPruner(DefaultPruner):
     @classmethod
     def framework(cls):
         return MSCFramework.TORCH
 
 
-msc_utils.register_tool_impl(TorchPrunerImpl)
+msc_utils.register_tool_cls(TorchDefaultPruner)

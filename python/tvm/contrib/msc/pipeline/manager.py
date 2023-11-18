@@ -26,7 +26,7 @@ import numpy as np
 
 import tvm
 from tvm.contrib.msc.core.runtime import BaseRunner
-from tvm.contrib.msc.core.tools import MSCToolType
+from tvm.contrib.msc.core.tools import ToolType
 from tvm.contrib.msc.core.utils.namespace import MSCFramework, MSCMap, MSCKey
 from tvm.contrib.msc.core import utils as msc_utils
 
@@ -107,7 +107,7 @@ class BaseManager(object):
                 debug_config.update(
                     {
                         t_type: True
-                        for t_type in MSCToolType.all_types()
+                        for t_type in ToolType.all_types()
                         if t_type in config["optimize"]
                     }
                 )
@@ -118,7 +118,7 @@ class BaseManager(object):
                 if config[stage].get("debug", False):
                     debug_config[stage] = True
             if "optimize" in config:
-                for t_type in MSCToolType.all_types():
+                for t_type in ToolType.all_types():
                     if t_type not in config["optimize"]:
                         continue
                     t_config = config["optimize"][t_type]
@@ -350,18 +350,22 @@ class BaseManager(object):
         """
 
         # run prune
-        if MSCToolType.PRUNE in stage_config:
-            self._tools_config[MSCToolType.PRUNE] = stage_config[MSCToolType.PRUNE]
-            plan_file = stage_config[MSCToolType.PRUNE]["plan_file"]
+        if ToolType.PRUNE in stage_config:
+            self._tools_config[ToolType.PRUNE] = stage_config[ToolType.PRUNE]
+            plan_file = stage_config[ToolType.PRUNE]["plan_file"]
             if os.path.isfile(plan_file):
-                self._logger.info("Skip %s with plan_file %s", MSCToolType.PRUNE, plan_file)
+                self._logger.info("Skip %s with plan_file %s", ToolType.PRUNE, plan_file)
             else:
-                msc_utils.time_stamp(MSCToolType.PRUNE, True)
-                runner = self._create_tool_runner(MSCToolType.PRUNE, stage_config)
-                plan = runner.get_tool(MSCToolType.PRUNE).create_plan()
+                msc_utils.time_stamp(ToolType.PRUNE, True)
+                runner = self._create_tool_runner(ToolType.PRUNE, stage_config)
+                pruner = runner.get_tool(ToolType.PRUNE)
+                if not pruner.get_plan():
+                    runner.run(self._sample_inputs)
+                plan = pruner.get_plan()
+                assert plan, "Failed to create plan for {}".format(ToolType.PRUNE)
                 with open(plan_file, "w") as f:
                     f.write(json.dumps(plan, indent=2))
-                self._logger.info("Save %s plan -> %s", MSCToolType.PRUNE, plan_file)
+                self._logger.info("Save %s plan -> %s", ToolType.PRUNE, plan_file)
 
         # optimize and get the runner
         msc_utils.time_stamp("optimize", True)
@@ -566,10 +570,10 @@ class BaseManager(object):
         if "optimize" not in config:
             return config
         check_acc = True
-        for tool_type in MSCToolType.all_types():
+        for tool_type in ToolType.all_types():
             if tool_type not in config["optimize"]:
                 continue
-            if tool_type in (MSCToolType.PRUNE, MSCToolType.QUANTIZE):
+            if tool_type in (ToolType.PRUNE, ToolType.QUANTIZE):
                 check_acc = False
             tool_config = config["optimize"][tool_type]
             if "plan_file" not in tool_config:

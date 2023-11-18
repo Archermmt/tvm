@@ -56,7 +56,6 @@ class MSCKey:
     GLOBALE_LOGGER = "global_logger"
     REGISTERED_FUNCS = "registered_funcs"
     REGISTERED_TOOLS_CLS = "registered_tools_cls"
-    REGISTERED_TOOLS_IMPL = "registered_tools_impl"
     REGISTERED_TOOLS_METHOD = "registered_tools_method"
 
     MSC_STAGE = "msc_stage"

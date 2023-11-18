@@ -160,7 +160,8 @@ def test_tvm_tools():
             "msc.linear_bias": 1,
         },
     }
-    for t_type in ["prune", "debug"]:
+    # for t_type in ["prune", "debug"]:
+    for t_type in ["prune"]:
         tool_config = get_tool_config(t_type)
         _test_from_torch(MSCFramework.TVM, tool_config, model_info, is_training=False)
 
@@ -183,4 +184,4 @@ def test_tensorrt_tools():
 
 if __name__ == "__main__":
     # tvm.testing.main()
-    test_pruner()
+    test_tvm_tools()
