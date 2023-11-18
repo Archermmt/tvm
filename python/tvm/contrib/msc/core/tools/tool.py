@@ -414,7 +414,7 @@ class BaseTool(object):
 
         return output
 
-    def process_tensor(self, tensor: Any, name: str, consumer: str, phase: str) -> Any:
+    def process_tensor(self, tensor: Any, name: str, consumer: str, scope: str) -> Any:
         """Process tensor
 
         Parameters
@@ -425,8 +425,8 @@ class BaseTool(object):
             The name of the tensor.
         consumer: str
             The name of the consumer.
-        phase: str
-            The phase mark teacher| student| null
+        scope: str
+            The scope mark teacher| student| null
 
         Returns
         -------
@@ -440,16 +440,16 @@ class BaseTool(object):
             self._tensor_status[edge_id] = {}
         if "process" not in self._tensor_status[edge_id]:
             self._tensor_status[edge_id]["process"] = strategy and self._check_tensor(
-                name, consumer, phase, strategy
+                name, consumer, scope, strategy
             )
             self._logger.debug(
                 "Update tensor status(process) {}: {}".format(edge_id, self._tensor_status[edge_id])
             )
         if not self._tensor_status[edge_id]["process"]:
             return tensor
-        return self._process_tensor(tensor, name, consumer, phase, strategy)
+        return self._process_tensor(tensor, name, consumer, scope, strategy)
 
-    def _check_tensor(self, name: str, consumer: str, phase: str, strategy: Strategy) -> bool:
+    def _check_tensor(self, name: str, consumer: str, scope: str, strategy: Strategy) -> bool:
         """Check if the tensor should be processed
 
         Parameters
@@ -458,8 +458,8 @@ class BaseTool(object):
             The name of the tensor.
         consumer: str
             The name of the consumer.
-        phase: str
-            The phase mark teacher| student| null
+        scope: str
+            The scope mark teacher| student| null
         strategy: Strategy
             The strategy for the tensor
 
@@ -472,7 +472,7 @@ class BaseTool(object):
         return True
 
     def _process_tensor(
-        self, tensor: Any, name: str, consumer: str, phase: str, strategy: Strategy
+        self, tensor: Any, name: str, consumer: str, scope: str, strategy: Strategy
     ) -> Any:
         """Process tensor
 
@@ -484,8 +484,8 @@ class BaseTool(object):
             The name of the tensor.
         consumer: str
             The name of the consumer.
-        phase: str
-            The phase mark teacher| student| null
+        scope: str
+            The scope mark teacher| student| null
         strategy: Strategy
             The strategy for the tensor
 

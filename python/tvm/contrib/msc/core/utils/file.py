@@ -211,6 +211,8 @@ class MSCDirectory(object):
             The content of directory
         """
 
+        if not os.path.isdir(self._path):
+            return []
         return os.listdir(self._path)
 
     def destory(self):

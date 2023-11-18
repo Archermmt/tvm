@@ -714,7 +714,7 @@ class BaseManager(object):
         cache_dir = msc_utils.get_cache_dir().create_dir(stage) if use_cache else None
         msc_utils.time_stamp(stage + ".build", False)
         runner_cls = self._get_runner_cls(stage_config["run_type"])
-        run_config = msc_utils.copy_dict(stage_config.get("run_config", {}))
+        run_config = msc_utils.copy_dict(stage_config.get("run_config"))
         if "generate_config" not in run_config:
             run_config["generate_config"] = {}
         run_config["generate_config"].update(

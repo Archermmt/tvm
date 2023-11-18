@@ -43,7 +43,7 @@ using namespace tvm::script::printer;
   bool is_train{false};                    \
   bool use_tools{false};                   \
   bool need_test{true};                    \
-  std::string tools_phase{""};             \
+  std::string tools_scope{""};             \
   std::string tools_tag{"main"};           \
   std::string test_device{"cpu"};          \
   std::string prefix{"res_"};              \
@@ -57,8 +57,8 @@ using namespace tvm::script::printer;
     reader->Read(&use_tools);                   \
   } else if (key == "need_test") {              \
     reader->Read(&need_test);                   \
-  } else if (key == "tools_phase") {            \
-    reader->Read(&tools_phase);                 \
+  } else if (key == "tools_scope") {            \
+    reader->Read(&tools_scope);                 \
   } else if (key == "tools_tag") {              \
     reader->Read(&tools_tag);                   \
   } else if (key == "test_device") {            \

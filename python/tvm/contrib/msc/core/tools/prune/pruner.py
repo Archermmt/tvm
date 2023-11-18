@@ -201,7 +201,7 @@ class BasePruner(BaseTool):
         )
         return new_graphs, new_weights
 
-    def _check_tensor(self, name: str, consumer: str, phase: str, strategy: Strategy) -> bool:
+    def _check_tensor(self, name: str, consumer: str, scope: str, strategy: Strategy) -> bool:
         """Check if the tensor should be processed
 
         Parameters
@@ -210,8 +210,8 @@ class BasePruner(BaseTool):
             The name of the tensor.
         consumer: str
             The name of the consumer.
-        phase: str
-            The phase mark teacher| student| null
+        scope: str
+            The scope mark teacher| student| null
         strategy: Strategy
             The strategy for the tensor
 
@@ -234,72 +234,6 @@ class BasePruner(BaseTool):
         self._plan = {n: c for n, c in self._plan.items() if c["in_indices"] or c["out_indices"]}
         self._logger.info("{} weights configed by pruner".format(len(self._plan)))
         return self._plan
-
-    """
-    def create_plan(self) -> dict:
-
-        plan = {}
-
-        def _get_in_indices(w_node: WeightJoint) -> List[int]:
-            if not w_node.parents:
-                return []
-            if w_node.name in plan and "in_indices" in plan[w_node.name]:
-                return plan[w_node.name]["in_indices"]
-            assert all(
-                p.name in plan for p in w_node.parents
-            ), "Missing some parents in runtime config " + str(w_node)
-            if len(w_node.parents) == 1:
-                return plan[w_node.parents[0].name]["out_indices"]
-            if w_node.parents[0].friends:
-                return plan[w_node.parents[0].friends[0].name]["out_indices"]
-            raise Exception("Unexpected w_node " + str(w_node))
-
-        def _prunable(w_node: WeightJoint) -> bool:
-            if w_node.get_attr("prune_strategy") != "prune":
-                return False
-            if not w_node.children:
-                return False
-            childrens = list(w_node.children)
-            while childrens:
-                current = childrens.pop(0)
-                prune_strategy = current.get_attr("prune_strategy")
-                if prune_strategy == "prune":
-                    return True
-                childrens.extend(list(current.children))
-            return False
-
-        for w_node in self.get_w_nodes():
-            in_axis, out_axis = self._get_io_axes(w_node)
-            if w_node.weight.dim_at(in_axis) == 1:
-                in_indices = []
-            else:
-                in_indices = _get_in_indices(w_node)
-            plan[w_node.name] = {"in_indices": in_indices}
-            if w_node.friends and w_node != w_node.friends[0]:
-                plan[w_node.name]["out_indices"] = plan[w_node.friends[0].name]["out_indices"]
-            elif _prunable(w_node):
-                method_config = self._get_method_config(w_node.name)
-                method = self._get_method(w_node.name)
-                plan[w_node.name] = method(
-                    self,
-                    name=w_node.name,
-                    data=self.get_data(w_node.name),
-                    in_axis=in_axis,
-                    out_axis=out_axis,
-                    in_indices=in_indices,
-                    **method_config,
-                )
-            elif w_node.get_attr("prune_strategy") == "follow":
-                plan[w_node.name]["out_indices"] = []
-            elif w_node.get_attr("prune_strategy") == "passby":
-                plan[w_node.name]["out_indices"] = in_indices
-            else:
-                plan[w_node.name]["out_indices"] = []
-        plan = {n: c for n, c in plan.items() if c["in_indices"] or c["out_indices"]}
-        self._logger.info("{} weights configed by pruner".format(len(plan)))
-        self._plan = plan
-        return self._plan
-    """
 
     def visualize(self, visual_dir: msc_utils.MSCDirectory):
         """Visualize MSCGraphs
@@ -393,7 +327,7 @@ class BasePruner(BaseTool):
 
 class DefaultPruner(BasePruner):
     def _process_tensor(
-        self, tensor: Any, name: str, consumer: str, phase: str, strategy: Strategy
+        self, tensor: Any, name: str, consumer: str, scope: str, strategy: Strategy
     ) -> Any:
         """Process tensor
 
@@ -405,8 +339,8 @@ class DefaultPruner(BasePruner):
             The name of the tensor.
         consumer: str
             The name of the consumer.
-        phase: str
-            The phase mark teacher| student| null
+        scope: str
+            The scope mark teacher| student| null
         strategy: Strategy
             The strategy for the tensor
 

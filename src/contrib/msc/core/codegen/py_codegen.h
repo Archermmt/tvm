@@ -157,7 +157,7 @@ class PyCodeGen : public BaseCodeGen<ConfigType, HelperType> {
             .call_arg(this->IdxInputBase(node, i, false))
             .call_arg(DocUtils::ToStrDoc(input->name))
             .call_arg(DocUtils::ToStrDoc(node->name))
-            .call_arg(DocUtils::ToStrDoc(this->config()->tools_phase))
+            .call_arg(DocUtils::ToStrDoc(this->config()->tools_scope))
             .call_arg(DocUtils::ToStrDoc(this->config()->tools_tag));
       }
       for (const auto& pair : node->weights) {
@@ -166,7 +166,7 @@ class PyCodeGen : public BaseCodeGen<ConfigType, HelperType> {
             .call_arg(this->IdxWeightBase(node, pair.first, false))
             .call_arg(DocUtils::ToStrDoc(pair.second->name))
             .call_arg(DocUtils::ToStrDoc(node->name))
-            .call_arg(DocUtils::ToStrDoc(this->config()->tools_phase))
+            .call_arg(DocUtils::ToStrDoc(this->config()->tools_scope))
             .call_arg(DocUtils::ToStrDoc(this->config()->tools_tag));
       }
     }
@@ -182,7 +182,7 @@ class PyCodeGen : public BaseCodeGen<ConfigType, HelperType> {
               .call_arg(this->IdxOutputBase(node, index, false))
               .call_arg(DocUtils::ToStrDoc(node->OutputAt(index)->name))
               .call_arg(DocUtils::ToStrDoc("exit"))
-              .call_arg(DocUtils::ToStrDoc(this->config()->tools_phase))
+              .call_arg(DocUtils::ToStrDoc(this->config()->tools_scope))
               .call_arg(DocUtils::ToStrDoc(this->config()->tools_tag));
         }
       }

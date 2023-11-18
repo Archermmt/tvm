@@ -124,8 +124,8 @@ class MSCTensorRTRuntime : public JSONRuntimeBase {
     SetInputOutputBinds();
     auto tvm_stream = CUDAThreadEntry::ThreadLocal()->stream;
     if (tool_tag_.size() > 0) {
-      const auto* pf = runtime::Registry::Get("msc_tool.execute_hook");
-      ICHECK(pf != nullptr) << "Cannot find msc_tool.execute_hook func.";
+      const auto* pf = runtime::Registry::Get("msc_tool.execute_stage");
+      ICHECK(pf != nullptr) << "Cannot find msc_tool.execute_stage func.";
       Map<String, runtime::NDArray> input_datas;
       for (const auto& pair : input_bindings_) {
         const auto& tensor_name = engine_->getBindingName(pair.first);
@@ -134,7 +134,9 @@ class MSCTensorRTRuntime : public JSONRuntimeBase {
         }
         input_datas.Set(tensor_name, device_buffers_[pair.first]);
       }
-      (*pf)(input_datas, graph_name_, "before_forward", tool_tag_);
+      Map<String, Map<String, runtime::NDArray>> context;
+      context.Set("datas", input_datas);
+      (*pf)(context, "before_forward", graph_name_, tool_tag_);
     }
 #if TRT_VERSION_GE(6, 0, 1)
     ICHECK(context_->enqueueV2(bindings_.data(), tvm_stream, nullptr))
@@ -155,8 +157,8 @@ class MSCTensorRTRuntime : public JSONRuntimeBase {
       }
     }
     if (tool_tag_.size() > 0) {
-      const auto* pf = runtime::Registry::Get("msc_tool.execute_hook");
-      ICHECK(pf != nullptr) << "Cannot find msc_tool.execute_hook func.";
+      const auto* pf = runtime::Registry::Get("msc_tool.execute_stage");
+      ICHECK(pf != nullptr) << "Cannot find msc_tool.execute_stage func.";
       Map<String, runtime::NDArray> output_datas;
       for (int bid = 0; bid < engine_->getNbBindings(); bid++) {
         if (input_bindings_.count(bid)) {
@@ -171,7 +173,9 @@ class MSCTensorRTRuntime : public JSONRuntimeBase {
         }
         output_datas.Set(tensor_name, device_buffers_[bid]);
       }
-      (*pf)(output_datas, graph_name_, "after_forward", tool_tag_);
+      Map<String, Map<String, runtime::NDArray>> context;
+      context.Set("datas", output_datas);
+      (*pf)(context, "after_forward", graph_name_, tool_tag_);
     }
   }
 

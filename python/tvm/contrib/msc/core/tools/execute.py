@@ -132,7 +132,63 @@ def get_tools(tag: str = "main") -> Iterable[BaseTool]:
             yield tool
 
 
-def execute_tool(stage: str, tag: str = "main") -> callable:
+def process_tensor(tensor: Any, name: str, consumer: str, scope: str, tag: str = "main") -> Any:
+    """Process tensor with tools
+
+    Parameters
+    -------
+    tensor: Any
+        Tensor in framework
+    name: str
+        The name of the tensor.
+    consumer: str
+        The name of the consumer.
+    scope: str
+        The scope mark teacher| student| null
+    tag: str
+        The tag of the tool.
+
+    Returns
+    -------
+    tensor: Any
+        The processed tensor.
+    """
+
+    for tool in get_tools(tag):
+        tensor = tool.process_tensor(tensor, name, consumer, scope)
+    return tensor
+
+
+@tvm.register_func("msc_tool.codegen_tensor")
+def codegen_tensor(
+    tensor_ctx: Dict[str, str], name: str, consumer: str, scope: str, tag: str = "main"
+) -> List[str]:
+    """Codegen processed tensor describe with tools
+
+    Parameters
+    -------
+    tensor_ctx: dict<str, str>
+        Tensor describe items.
+    name: str
+        The name of the tensor.
+    consumer: str
+        The name of the consumer.
+    scope: str
+        The scope mark teacher| student| null
+    tag: str
+        The tag of the tool.
+
+    Returns
+    -------
+    processed: list<str>
+        The tensor describe for processed tensor.
+    """
+
+    tensor = process_tensor(tensor_ctx, name, consumer, scope, tag)
+    return tensor.get("processed", [])
+
+
+def wrap_stage(stage: str, tag: str = "main") -> callable:
     """Wrapper for tool execution
 
     Parameters
@@ -173,86 +229,30 @@ def execute_tool(stage: str, tag: str = "main") -> callable:
     return decorate
 
 
-def process_tensor(tensor: Any, name: str, consumer: str, phase: str, tag: str = "main") -> Any:
-    """Process tensor with tools
+@tvm.register_func("msc_tool.execute_stage")
+def execute_stage(context: Dict[str, Any], stage: str, graph_name: str = "main", tag: str = "main"):
+    """Execute tools for a stage
 
     Parameters
     -------
-    tensor: Any
-        Tensor in framework
-    name: str
-        The name of the tensor.
-    consumer: str
-        The name of the consumer.
-    phase: str
-        The phase mark teacher| student| null
-    tag: str
-        The tag of the tool.
-
-    Returns
-    -------
-    tensor: Any
-        The processed tensor.
-    """
-
-    for tool in get_tools(tag):
-        tensor = tool.process_tensor(tensor, name, consumer, phase)
-    return tensor
-
-
-@tvm.register_func("msc_tool.execute_hook")
-def execute_hook(datas: Dict[str, tvm.nd.array], graph_name: str, stage: str, tag: str = "main"):
-    """Hook for tool execution
-
-    Parameters
-    -------
-    datas: dict<str, tvm.nd.array>
-        The datas to be processed
-    graph_name: str
-        The graph name.
+    context: dict<str, tvm.nd.array>
+        The context to be processed
     stage: str
         The stage for tool execution build| forward
+    graph_name: str
+        The graph name.
     tag: str
         The tag of the tool.
     """
 
     for tool in get_tools(tag):
         if stage == "before_build":
-            tool.execute_before_build(datas, graph_name=graph_name)
+            tool.execute_before_build(context, graph_name=graph_name)
         elif stage == "after_build":
-            tool.execute_after_build(datas, graph_name=graph_name)
+            tool.execute_after_build(context, graph_name=graph_name)
         elif stage == "before_forward":
-            tool.execute_before_forward(datas, graph_name=graph_name)
+            tool.execute_before_forward(context, graph_name=graph_name)
         elif stage == "after_forward":
-            tool.execute_after_forward(datas, graph_name=graph_name)
+            tool.execute_after_forward(context, graph_name=graph_name)
         else:
             raise TypeError("Unexpected stage " + str(stage))
-
-
-@tvm.register_func("msc_tool.process_tensor_codegen")
-def process_tensor_codegen(
-    tensor_ctx: Dict[str, str], name: str, consumer: str, phase: str, tag: str = "main"
-) -> List[str]:
-    """Codegen processed tensor describe with tools
-
-    Parameters
-    -------
-    tensor_ctx: dict<str, str>
-        Tensor describe items.
-    name: str
-        The name of the tensor.
-    consumer: str
-        The name of the consumer.
-    phase: str
-        The phase mark teacher| student| null
-    tag: str
-        The tag of the tool.
-
-    Returns
-    -------
-    processed: list<str>
-        The tensor describe for processed tensor.
-    """
-
-    tensor = process_tensor(tensor_ctx, name, consumer, phase, tag)
-    return tensor.get("processed", [])
