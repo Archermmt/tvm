@@ -79,7 +79,8 @@ class BaseRunner(object):
         if "build_folder" not in self._generate_config:
             self._generate_config["build_folder"] = msc_utils.get_build_dir()
         for t_config in self._tools_config.values():
-            t_config["workspace"] = self._generate_config["build_folder"]
+            if "workspace" not in t_config:
+                t_config["workspace"] = self._generate_config["build_folder"]
         self._name = name
         self._device = device if self._device_enabled(device) else "cpu"
         self._is_training = is_training

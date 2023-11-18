@@ -20,14 +20,13 @@
 import os
 import copy
 import logging
-from functools import wraps
 from itertools import product
 from typing import List, Iterable, Any, Tuple, Dict
 import numpy as np
 
 import tvm
 from tvm.contrib.msc.core.ir import MSCGraph, MSCJoint, MSCTensor
-from tvm.contrib.msc.core.utils.namespace import MSCMap, MSCKey, MSCFramework
+from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 
 
@@ -440,7 +439,7 @@ class BaseTool(object):
         if edge_id not in self._tensor_status:
             self._tensor_status[edge_id] = {}
         if "process" not in self._tensor_status[edge_id]:
-            self._tensor_status[edge_id]["process"] = self._check_tensor(
+            self._tensor_status[edge_id]["process"] = strategy and self._check_tensor(
                 name, consumer, phase, strategy
             )
             self._logger.debug(
@@ -818,7 +817,7 @@ class BaseTool(object):
         for n in name_refs:
             if n in self._strategys:
                 return self._strategys[n]
-        return self._strategys["default"]
+        return self._strategys.get("default")
 
     @classmethod
     def tool_type(cls):

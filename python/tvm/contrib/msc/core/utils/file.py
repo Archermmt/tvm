@@ -245,29 +245,6 @@ def msc_dir(path: str = None, keep_history: bool = True, cleanup: bool = False) 
     return MSCDirectory(path, keep_history, cleanup)
 
 
-def to_abs_path(path: str, root_dir: MSCDirectory, keep_history: bool = True) -> str:
-    """Change path to abs path
-
-    Parameters
-    ----------
-    path: str
-        The path of the file.
-    root_dir: MSCDirectory
-        Root dir to save the file.
-    keep_history: bool
-        Whether to remove files before start.
-
-    Returns
-    -------
-    abs_path: str
-        The abspath.
-    """
-
-    if os.path.abspath(path) == path:
-        return path
-    return root_dir.relpath(path, keep_history)
-
-
 def set_workspace(
     path: str = None, keep_history: bool = True, cleanup: bool = False
 ) -> MSCDirectory:
@@ -329,6 +306,30 @@ def get_workspace_subdir(
     """
 
     return get_workspace().create_dir(name, keep_history, cleanup)
+
+
+def to_abs_path(path: str, root_dir: MSCDirectory = None, keep_history: bool = True) -> str:
+    """Change path to abs path
+
+    Parameters
+    ----------
+    path: str
+        The path of the file.
+    root_dir: MSCDirectory
+        Root dir to save the file.
+    keep_history: bool
+        Whether to remove files before start.
+
+    Returns
+    -------
+    abs_path: str
+        The abspath.
+    """
+
+    root_dir = root_dir or get_workspace()
+    if os.path.abspath(path) == path:
+        return path
+    return root_dir.relpath(path, keep_history)
 
 
 get_build_dir = partial(get_workspace_subdir, name="Build")
