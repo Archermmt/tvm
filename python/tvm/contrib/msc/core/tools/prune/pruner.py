@@ -42,7 +42,9 @@ class BasePruner(BaseTool):
         self._prunable_types = {}
         self._weight_graphs = []
 
-    def load_graphs(self, graphs: List[MSCGraph], weights: List[Dict[str, tvm.nd.array]]):
+    def _load_graphs(
+        self, graphs: List[MSCGraph], weights: List[Dict[str, tvm.nd.array]]
+    ) -> Tuple[List[MSCGraph], List[Dict[str, tvm.nd.array]]]:
         """Load the graphs and weights
 
         Parameters
@@ -51,6 +53,9 @@ class BasePruner(BaseTool):
             The msc graphs.
         weights: list<dic<str, tvm.nd.array>>
             The weights
+        as_cache: bool
+            Whether the graphs and weights are loaded from cache
+
 
         Returns
         -------
@@ -87,11 +92,9 @@ class BasePruner(BaseTool):
             _ffi_api.WeightGraph(graph, self._prunable_types, relation_types) for graph in graphs
         ]
         if not self._plan:
-            return super().load_graphs(graphs, weights)
-
+            return graphs, weights
         # Prune the weights
-        graphs, weights = self.prune_graphs(graphs, weights)
-        return super().load_graphs(graphs, weights)
+        return self.prune_graphs(graphs, weights)
 
     def prune_graphs(
         self, graphs: List[MSCGraph], weights: List[Dict[str, tvm.nd.array]]
@@ -199,33 +202,6 @@ class BasePruner(BaseTool):
         )
         return new_graphs, new_weights
 
-    def _check_tensor(self, name: str, consumer: str, scope: str, strategy: Strategy) -> bool:
-        """Check if the tensor should be processed
-
-        Parameters
-        -------
-        name: str
-            The name of the tensor.
-        consumer: str
-            The name of the consumer.
-        scope: str
-            The scope mark teacher| student| null
-        strategy: Strategy
-            The strategy for the tensor
-
-        Returns
-        -------
-        vaild: bool
-            Whether to process the tensor.
-        """
-
-        # only process w_node once
-        if not self.has_w_node(name):
-            return False
-        if strategy.get_config("density", 1.0) == 1.0:
-            return False
-        return True
-
     def get_plan(self) -> dict:
         """Get the plan"""
 
@@ -324,6 +300,33 @@ class BasePruner(BaseTool):
 
 
 class DefaultPruner(BasePruner):
+    def _check_tensor(self, name: str, consumer: str, scope: str, strategy: Strategy) -> bool:
+        """Check if the tensor should be processed
+
+        Parameters
+        -------
+        name: str
+            The name of the tensor.
+        consumer: str
+            The name of the consumer.
+        scope: str
+            The scope mark teacher| student| null
+        strategy: Strategy
+            The strategy for the tensor
+
+        Returns
+        -------
+        vaild: bool
+            Whether to process the tensor.
+        """
+
+        # only process w_node once
+        if not self.has_w_node(name):
+            return False
+        if strategy.get_config("density", 1.0) == 1.0:
+            return False
+        return True
+
     def _process_tensor(
         self, tensor: Any, name: str, consumer: str, scope: str, strategy: Strategy
     ) -> Any:

@@ -24,30 +24,6 @@ from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 
 
-def prune_axis(data: np.ndarray, axis: int, indices: List[int]) -> np.ndarray:
-    """Delete indices on axis
-
-    Parameters
-    ----------
-    data: np.ndarray
-        The source data.
-    axis: int
-        The axis to prune
-    indices: list<int>
-        The indices to be pruned
-
-    Returns
-    -------
-    data: np.ndarray
-        The pruned data.
-    """
-
-    left_datas = [
-        d for idx, d in enumerate(np.split(data, data.shape[axis], axis)) if idx in indices
-    ]
-    return np.concatenate(left_datas, axis=axis)
-
-
 class DebugMethod(object):
     """Default debug method"""
 
@@ -82,7 +58,26 @@ class DebugMethod(object):
             The plan of the tensor.
         """
 
-        config = {}
+        config = {"info": msc_utils.inspect_array(data)}
+        # save the data
+        debugger._saver.save_datas({name: data}, debugger._forward_cnt)
+        debugger._logger.debug("Save(%s) %s: %s", debugger._stage, name, msc_utils.MSCArray(data))
+        # compare datas
+        if debugger._stage in compare_to:
+            diffs = {}
+            for stage in compare_to[debugger._stage]:
+                if stage in debugger._loaders:
+                    golden = debugger._loaders[stage].load_data(name, debugger._forward_cnt)
+                    report = msc_utils.compare_arrays({name: golden}, {name: data})
+                    if report["passed"] == 0:
+                        debugger._logger.info(
+                            "Diff(%s2%s) %s: %s", stage, debugger._stage, name, report["info"][name]
+                        )
+                    diffs[stage] = {
+                        "pass": report["passed"] == 1,
+                        **msc_utils.inspect_array(np.abs(golden - data)),
+                    }
+            config["diffs"] = diffs
         return config
 
     @classmethod

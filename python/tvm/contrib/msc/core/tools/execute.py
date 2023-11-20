@@ -190,13 +190,13 @@ def codegen_tensor(
     return tensor.get("processed", [])
 
 
-def wrap_stage(stage: str, tag: str = "main") -> callable:
+def wrap_step(step: str, tag: str = "main") -> callable:
     """Wrapper for tool execution
 
     Parameters
     -------
-    stage: str
-        The stage for tool execution build| forward
+    step: str
+        The step for tool execution build| forward
     tag: str
         The tag of the tool.
 
@@ -210,20 +210,20 @@ def wrap_stage(stage: str, tag: str = "main") -> callable:
         @wraps(func)
         def wrapper(*args, **kwargs):
             for tool in get_tools(tag):
-                if stage == "build":
+                if step == "build":
                     tool.execute_before_build(*args, **kwargs)
-                elif stage == "forward":
+                elif step == "forward":
                     tool.execute_before_forward(*args, **kwargs)
                 else:
-                    raise TypeError("Unexpected stage " + str(stage))
+                    raise TypeError("Unexpected step " + str(step))
             output = func(*args, **kwargs)
             for tool in get_tools(tag):
-                if stage == "build":
+                if step == "build":
                     output = tool.execute_after_build(output)
-                elif stage == "forward":
+                elif step == "forward":
                     output = tool.execute_after_forward(output)
                 else:
-                    raise TypeError("Unexpected stage " + str(stage))
+                    raise TypeError("Unexpected step " + str(step))
             return output
 
         return wrapper
@@ -231,16 +231,51 @@ def wrap_stage(stage: str, tag: str = "main") -> callable:
     return decorate
 
 
-@tvm.register_func("msc_tool.execute_stage")
-def execute_stage(context: Dict[str, Any], stage: str, graph_name: str = "main", tag: str = "main"):
-    """Execute tools for a stage
+def execute_step(step: str, *args, **kwargs):
+    """Execute tools for a step
+
+    Parameters
+    -------
+    step: str
+        The step for tool execution build| forward
+    args: list<Any>
+        The arguments for model build.
+    kwargs: dict<Any>
+        The key word arguments for model build.
+    """
+
+    if step in ("before_build", "before_forward"):
+        output = None
+    else:
+        assert (
+            len(args) == 1 and not kwargs
+        ), "after step only accept 1 argument, get args {}, kwargs {}".format(args, kwargs)
+        output = args[0]
+    tag = kwargs.pop("tag") if "tag" in kwargs else "main"
+    for tool in get_tools(tag):
+        if step == "before_build":
+            tool.execute_before_build(*args, **kwargs)
+        elif step == "before_forward":
+            tool.execute_before_forward(*args, **kwargs)
+        elif step == "after_build":
+            output = tool.execute_after_build(output)
+        elif step == "after_forward":
+            output = tool.execute_after_forward(output)
+        else:
+            raise TypeError("Unexpected step " + str(step))
+    return output
+
+
+@tvm.register_func("msc_tool.callback_step")
+def callback_step(context: Dict[str, Any], step: str, graph_name: str = "main", tag: str = "main"):
+    """Execute tools for a step
 
     Parameters
     -------
     context: dict<str, tvm.nd.array>
         The context to be processed
-    stage: str
-        The stage for tool execution build| forward
+    step: str
+        The step for tool execution build| forward
     graph_name: str
         The graph name.
     tag: str
@@ -248,13 +283,13 @@ def execute_stage(context: Dict[str, Any], stage: str, graph_name: str = "main",
     """
 
     for tool in get_tools(tag):
-        if stage == "before_build":
+        if step == "before_build":
             tool.execute_before_build(context, graph_name=graph_name)
-        elif stage == "after_build":
+        elif step == "after_build":
             tool.execute_after_build(context, graph_name=graph_name)
-        elif stage == "before_forward":
+        elif step == "before_forward":
             tool.execute_before_forward(context, graph_name=graph_name)
-        elif stage == "after_forward":
+        elif step == "after_forward":
             tool.execute_after_forward(context, graph_name=graph_name)
         else:
-            raise TypeError("Unexpected stage " + str(stage))
+            raise TypeError("Unexpected step " + str(step))

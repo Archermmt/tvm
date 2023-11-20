@@ -60,6 +60,11 @@ void RelaxCodeGen::CodeGenGraph() {
   stack_.comment("Define the module");
   stack_.assign("block_builder", "relax.BlockBuilder()")
       .scope_start("block_builder.function(name=\"" + graph()->name + "\", params=inputs.copy())");
+  if (config()->use_tools) {
+    stack_.func_call("msc_tools.execute_step")
+        .call_arg(DocUtils::ToStrDoc("before_build"))
+        .call_arg("block_builder");
+  }
   for (const auto& n : graph()->node_names) {
     const auto& node = graph()->FindNode(n);
     if (node->optype == "input") {
@@ -102,8 +107,20 @@ void RelaxCodeGen::CodeGenGraph() {
     stack_.func_call("block_builder.emit_output", idx_exit).call_arg(idx_exit);
     idx_exits.push_back(idx_exit);
   }
-  stack_.scope_end().func_call("block_builder.emit_func_output");
-  if (idx_exits.size() == 1) {
+  stack_.scope_end();
+  if (config()->use_tools) {
+    stack_.func_call("msc_tools.execute_step", "output")
+        .call_arg(DocUtils::ToStrDoc("after_build"));
+    if (idx_exits.size() == 1) {
+      stack_.call_arg(idx_exits[0]);
+    } else {
+      stack_.call_arg(DocUtils::ToListDoc(idx_exits));
+    }
+  }
+  stack_.func_call("block_builder.emit_func_output");
+  if (config()->use_tools) {
+    stack_.call_arg("output");
+  } else if (idx_exits.size() == 1) {
     stack_.call_arg(idx_exits[0]);
   } else {
     stack_.call_arg(DocUtils::ToListDoc(idx_exits));

@@ -41,7 +41,7 @@ void TorchCodeGen::CodeGenGraph() {
   is_init_ = true;
   stack_.func_def("__init__", "torch.nn.Module");
   if (config()->use_tools) {
-    stack_.func_decorator("msc_tools.wrap_stage(\"build\",\"" + config()->tools_tag + "\")");
+    stack_.func_decorator("msc_tools.wrap_step(\"build\",\"" + config()->tools_tag + "\")");
   }
   stack_.func_arg("self", "torch.nn.Module");
   stack_.func_start();
@@ -59,7 +59,7 @@ void TorchCodeGen::CodeGenGraph() {
   is_init_ = false;
   stack_.func_def("forward", "List[torch.Tensor]");
   if (config()->use_tools) {
-    stack_.func_decorator("msc_tools.wrap_stage(\"forward\",\"" + config()->tools_tag + "\")");
+    stack_.func_decorator("msc_tools.wrap_step(\"forward\",\"" + config()->tools_tag + "\")");
   }
   stack_.func_arg("self", "torch.nn.Module");
   for (const auto& i : graph()->GetInputs()) {

@@ -216,10 +216,6 @@ class BaseTool(object):
             "planed_num": len(self._plan),
         }
         self._logger.info(msc_utils.msg_block(init_title, init_info, width=0))
-        if self._plan:
-            self._logger.debug(
-                msc_utils.msg_block("{}.PLAN".format(self.tool_type().upper()), self._plan)
-            )
 
     def setup(self, options: dict):
         """Setup the tool
@@ -245,6 +241,39 @@ class BaseTool(object):
             strategy.change_stage(stage)
 
     def load_graphs(
+        self, graphs: List[MSCGraph], weights: List[Dict[str, tvm.nd.array]], as_cache: bool = False
+    ) -> Tuple[List[MSCGraph], List[Dict[str, tvm.nd.array]]]:
+        """Load the graphs and weights
+
+        Parameters
+        ----------
+        graphs: list<MSCgraph>
+            The msc graphs.
+        weights: list<dic<str, tvm.nd.array>>
+            The weights
+        as_cache: bool
+            Whether the graphs and weights are loaded from cache
+
+        Returns
+        -------
+        graphs: list<MSCgraph>
+            The msc graphs.
+        weights: list<dic<str, tvm.nd.array>>
+            The weights
+        """
+
+        self._forward_cnt = 0
+        self._tensor_status = {}
+        if as_cache:
+            self._graphs, self._weights = graphs, weights
+        else:
+            self._graphs, self._weights = self._load_graphs(graphs, weights)
+        self._weight_names = set()
+        for sub_weights in self._weights:
+            self._weight_names |= set(sub_weights.keys())
+        return self._graphs, self._weights
+
+    def _load_graphs(
         self, graphs: List[MSCGraph], weights: List[Dict[str, tvm.nd.array]]
     ) -> Tuple[List[MSCGraph], List[Dict[str, tvm.nd.array]]]:
         """Load the graphs and weights
@@ -264,14 +293,7 @@ class BaseTool(object):
             The weights
         """
 
-        self._forward_cnt = 0
-        self._tensor_status = {}
-        self._graphs = graphs
-        self._weights = weights
-        self._weight_names = set()
-        for sub_weights in self._weights:
-            self._weight_names |= set(sub_weights.keys())
-        return self._graphs, self._weights
+        return graphs, weights
 
     def destory(self):
         """Destory tool"""
@@ -292,9 +314,11 @@ class BaseTool(object):
         if self._enabled:
             self._graph_id = self._infer_graph_id(kwargs)
             self._logger.debug(
-                "<{}> before build graph[{}]({})".format(
-                    self.tool_type(), self._graph_id, "train" if self._is_training else "eval"
-                )
+                "<%s>(%s) before build graph[%d](%s)",
+                self.tool_type().upper(),
+                self._stage,
+                self._graph_id,
+                "train" if self._is_training else "eval",
             )
             self._execute_before_build(*args, **kwargs)
 
@@ -328,9 +352,11 @@ class BaseTool(object):
         if self._enabled:
             output = self._execute_after_build(output)
             self._logger.debug(
-                "<{}> after build graph[{}]({})".format(
-                    self.tool_type(), self._graph_id, "train" if self._is_training else "eval"
-                )
+                "<%s>(%s) after build graph[%d](%s)",
+                self.tool_type().upper(),
+                self._stage,
+                self._graph_id,
+                "train" if self._is_training else "eval",
             )
         return output
 
@@ -365,9 +391,11 @@ class BaseTool(object):
             self._graph_id = self._infer_graph_id(kwargs)
             if self.should_log():
                 self._logger.debug(
-                    "<{}> start graph[{}] forward[{}]".format(
-                        self.tool_type(), self._graph_id, self._forward_cnt
-                    )
+                    "<%s>(%s) before forward[%d] for graph[%d]",
+                    self.tool_type().upper(),
+                    self._stage,
+                    self._forward_cnt,
+                    self._graph_id,
                 )
             self._execute_before_forward(*args, **kwargs)
 
@@ -402,9 +430,11 @@ class BaseTool(object):
             output = self._execute_after_forward(output)
             if self.should_log():
                 self._logger.debug(
-                    "<{}> end graph[{}] forward[{}]".format(
-                        self.tool_type(), self._graph_id, self._forward_cnt
-                    )
+                    "<%s>(%s) after forward[%d] for graph[%d]",
+                    self.tool_type().upper(),
+                    self._stage,
+                    self._forward_cnt,
+                    self._graph_id,
                 )
             self._forward_cnt += 1
         return output
@@ -452,9 +482,6 @@ class BaseTool(object):
         if "process" not in self._tensor_status[edge_id]:
             self._tensor_status[edge_id]["process"] = strategy and self._check_tensor(
                 name, consumer, scope, strategy
-            )
-            self._logger.debug(
-                "Update tensor status(process) {}: {}".format(edge_id, self._tensor_status[edge_id])
             )
         if not self._tensor_status[edge_id]["process"]:
             return tensor

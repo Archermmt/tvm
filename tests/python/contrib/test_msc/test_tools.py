@@ -166,7 +166,7 @@ def test_tvm_tools():
     # for t_type in ["prune", "debug"]:
     for t_type in ["debug"]:
         tool_config = get_tool_config(t_type)
-        _test_from_torch(MSCFramework.TVM, tool_config, model_info, is_training=False)
+        _test_from_torch(MSCFramework.TVM, tool_config, model_info, is_training=True)
 
 
 @requires_tensorrt

@@ -120,8 +120,8 @@ class MSCTensorRTRuntime : public JSONRuntimeBase {
     SetInputOutputBinds();
     auto tvm_stream = CUDAThreadEntry::ThreadLocal()->stream;
     if (tool_tag_.size() > 0) {
-      const auto* pf = runtime::Registry::Get("msc_tool.execute_stage");
-      ICHECK(pf != nullptr) << "Cannot find msc_tool.execute_stage func.";
+      const auto* pf = runtime::Registry::Get("msc_tool.callback_step");
+      ICHECK(pf != nullptr) << "Cannot find msc_tool.callback_step func.";
       Map<String, runtime::NDArray> input_datas;
       for (const auto& pair : input_bindings_) {
         const auto& tensor_name = engine_->getBindingName(pair.first);
@@ -153,8 +153,8 @@ class MSCTensorRTRuntime : public JSONRuntimeBase {
       }
     }
     if (tool_tag_.size() > 0) {
-      const auto* pf = runtime::Registry::Get("msc_tool.execute_stage");
-      ICHECK(pf != nullptr) << "Cannot find msc_tool.execute_stage func.";
+      const auto* pf = runtime::Registry::Get("msc_tool.callback_step");
+      ICHECK(pf != nullptr) << "Cannot find msc_tool.callback_step func.";
       Map<String, runtime::NDArray> output_datas;
       for (int bid = 0; bid < engine_->getNbBindings(); bid++) {
         if (input_bindings_.count(bid)) {

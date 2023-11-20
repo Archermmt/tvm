@@ -27,6 +27,29 @@ import tvm
 from .namespace import MSCFramework
 
 
+def inspect_array(data: np.ndarray) -> Dict[str, Any]:
+    """Inspect the array
+
+    Parameters
+    ----------
+    data: np.ndarray
+        The data to inspect
+
+    Returns
+    -------
+    info: dict
+        The data info.
+    """
+
+    return {
+        "shape": list(data.shape),
+        "dtype": data.dtype.name,
+        "max": float(data.max()),
+        "min": float(data.min()),
+        "avg": float(data.sum() / data.size),
+    }
+
+
 class MSCArray(object):
     """MSC wrapper for array like object
 

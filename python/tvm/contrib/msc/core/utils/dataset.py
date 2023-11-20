@@ -49,6 +49,9 @@ class BaseDataLoader(object):
         else:
             self._end = min(end, self._info["num_datas"])
 
+    def __str__(self):
+        return "<{}> @ {}".format(self._class__.__name__, self._folder)
+
     def __getitem__(self, idx):
         if idx + self._start >= self._end:
             raise StopIteration("Reach End")
@@ -280,31 +283,31 @@ class BaseDataSaver(object):
     def reset(self):
         self._current = 0
 
-    def save(self, *args, **kwargs) -> int:
-        """Save a batch datas"""
-
-        self._save_batch(*args, **kwargs)
-        self._current += 1
-        return self._current
-
-    def _save_data(self, name: str, data: np.ndarray, collect: str):
+    def _save_data(self, index: int, name: str, data: np.ndarray, collect: str) -> str:
         """Save data to file.
 
         Parameters
         -------
+        index: int
+            The index
         name: str
             The name of the data.
         data: np.ndarray
            The data to be saved.
         collect: str
             The collect of data.
+
+        Returns
+        -------
+        data_path: str
+           The folder that data saved to.
         """
 
-        save_name = name.replace("/", "_")
+        save_name = name.replace("/", "_").replace(":", "_")
         sub_folder = f_path = os.path.join(self._folder, save_name)
         if not os.path.isdir(sub_folder):
             os.mkdir(sub_folder)
-        f_path = os.path.join(sub_folder, "batch_{}.bin".format(self._start + self._current))
+        f_path = os.path.join(sub_folder, "batch_{}.bin".format(self._start + index))
         ref_info = self._info[collect]
         # TODO(mengtong): support dynamic datas shape
         if name in ref_info:
@@ -322,6 +325,7 @@ class BaseDataSaver(object):
                 "save_name": save_name,
             }
         data.tofile(f_path)
+        return sub_folder
 
     def _save_batch(self, *args, **kwargs) -> dict:
         """Save a batch data"""
@@ -336,17 +340,31 @@ class BaseDataSaver(object):
 class SimpleDataSaver(BaseDataSaver):
     """Dataset Saver for simple datas"""
 
-    def _save_batch(self, datas: Dict[str, np.ndarray]):
+    def save_datas(self, datas: Dict[str, np.ndarray], index: int = -1) -> Dict[str, str]:
         """Save 1 simple datas.
 
         Parameters
         -------
         datas: dict<str, np.ndarray>
             The datas to be saved.
+        indec: int
+            The current index
+
+        Returns
+        -------
+        datas_path: dict<str, str>
+           The data paths.
         """
 
+        datas_path = {}
+        current = self._current if index < 0 else index
         for name, data in datas.items():
-            self._save_data(name, data, "datas")
+            datas_path[name] = self._save_data(current, name, data, "datas")
+        if index > 0:
+            self._current = index
+        else:
+            self._current += 1
+        return datas_path
 
     def setup(self, options: dict):
         return {"datas": {}, "num_datas": 0}
@@ -361,11 +379,11 @@ class IODataSaver(BaseDataSaver):
         self._output_names = options.get("output_names", [])
         return {"inputs": {}, "outputs": {}, "num_datas": 0}
 
-    def _save_batch(
+    def save_batch(
         self,
         inputs: Union[Dict[str, np.ndarray], List[np.ndarray]],
         outputs: Union[Dict[str, np.ndarray], List[np.ndarray]] = None,
-    ):
+    ) -> int:
         """Save 1 batch inputs and outputs.
 
         Parameters
@@ -374,6 +392,11 @@ class IODataSaver(BaseDataSaver):
             The inputs datas.
         outputs: list<np.ndarray>/dict<str, np.ndarray>
             The outputs datas.
+
+        Returns
+        -------
+        current: int
+           The current batch cnt.
         """
 
         if isinstance(inputs, dict):
@@ -386,7 +409,7 @@ class IODataSaver(BaseDataSaver):
             ), "Inputs size {} mismatch with input_names {}".format(len(inputs), self._input_names)
             inputs = dict(zip(self._input_names, inputs))
         for name, data in inputs.items():
-            self._save_data(name, data, "inputs")
+            self._save_data(self._current, name, data, "inputs")
         if outputs:
             if isinstance(outputs, dict):
                 assert set(outputs.keys()) == set(
@@ -400,7 +423,9 @@ class IODataSaver(BaseDataSaver):
                 )
                 outputs = dict(zip(self._output_names, outputs))
             for name, data in outputs.items():
-                self._save_data(name, data, "outputs")
+                self._save_data(self._current, name, data, "outputs")
+        self._current += 1
+        return self._current
 
 
 def is_io_dataset(folder: str) -> bool:

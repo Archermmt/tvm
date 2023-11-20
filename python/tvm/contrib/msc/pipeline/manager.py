@@ -228,7 +228,7 @@ class BaseManager(object):
                         outputs, _ = run_func(
                             self._model, inputs, input_names, self._config["outputs"]
                         )
-                        golden_cnt = saver.save(inputs, outputs)
+                        golden_cnt = saver.save_batch(inputs, outputs)
                     report["datas_info"] = saver.info
             elif msc_utils.is_io_dataset(loader):
                 with msc_utils.IODataSaver(golden_folder, saver_options) as saver:
@@ -237,7 +237,7 @@ class BaseManager(object):
                             break
                         if not sample_inputs:
                             sample_inputs = inputs
-                        golden_cnt = saver.save(inputs, outputs)
+                        golden_cnt = saver.save_batch(inputs, outputs)
                     report["datas_info"] = saver.info
             else:
                 raise Exception("golden or runner should given in prepare to save golden")
@@ -431,6 +431,175 @@ class BaseManager(object):
         if not keep_workspace:
             self._workspace.destory()
 
+    def _create_runner(
+        self,
+        stage: str,
+        stage_config: dict,
+        tools_config: dict = None,
+        visualize: bool = True,
+        profile: bool = True,
+        use_cache: bool = True,
+    ) -> BaseRunner:
+        """Create runner.
+
+        Parameters
+        ----------
+        stage: str
+            The stage name
+        stage_config: dict
+            The config of this stage.
+        tools_config: dict
+            The config of the tools
+        visualize: bool
+            Whether to visualize the runner
+        profile: bool
+            Whether to profile the runner.
+        use_cache: bool
+            Whether to use cache.
+
+        Returns
+        -------
+        runner: BaseRunner
+            The runner.
+        """
+
+        if self._runner:
+            self._runner.destory()
+        on_debug = self._debug_config.get(stage, False)
+        cache_dir = msc_utils.get_cache_dir().create_dir(stage) if use_cache else None
+        tools_config = tools_config or {}
+        msc_utils.time_stamp(stage + ".build", False)
+        runner_cls = self._get_runner_cls(stage_config["run_type"])
+        run_config = msc_utils.copy_dict(stage_config.get("run_config"))
+        if "generate_config" not in run_config:
+            run_config["generate_config"] = {}
+        run_config["generate_config"].update(
+            {
+                "build_folder": msc_utils.get_build_dir().create_dir(stage, cleanup=not on_debug),
+            }
+        )
+        self._logger.debug("Create runner(%s) by %s(%s)", stage, runner_cls.__name__, run_config)
+        # save baseline data for debug
+        if on_debug and ToolType.DEBUG in self._config.get("optimize", {}):
+            tools_config = {
+                **tools_config,
+                ToolType.DEBUG: self._config["optimize"][ToolType.DEBUG],
+            }
+        runner = runner_cls(
+            self._relax_mod,
+            tools_config=tools_config,
+            stage=stage,
+            logger=self._logger,
+            **run_config,
+        )
+        runner.build(cache_dir=cache_dir)
+        self._report["info"][stage + "_by"] = "{}({})".format(runner.framework, runner.device)
+        if visualize:
+            runner.visualize(msc_utils.get_visual_dir().create_dir(stage))
+        if profile and "profile" in stage_config:
+            self._report["profile"][stage] = self._profile_runner(runner, stage_config)
+        if use_cache:
+            runner.save_cache(cache_dir)
+        # save debug plan
+        if ToolType.DEBUG in tools_config:
+            plan_file = tools_config[ToolType.DEBUG]["plan_file"]
+            with open(plan_file, "w") as f:
+                f.write(json.dumps(runner.get_tool(ToolType.DEBUG).get_plan(), indent=2))
+            self._logger.info("Save %s(%s) plan -> %s", ToolType.DEBUG, stage, plan_file)
+        return runner
+
+    def _create_tool_runner(self, tool_type: str, stage_config: dict) -> BaseRunner:
+        """Create runner with tool.
+
+        Parameters
+        ----------
+        tool_type: str
+            The tool type.
+        stage_config: dict
+            The config of this stage.
+
+        Returns
+        -------
+        runner: BaseRunner
+            The runner.
+        """
+
+        t_stage_config = {
+            "run_type": stage_config["run_type"],
+            "run_config": stage_config["run_config"],
+        }
+        return self._create_runner(
+            tool_type,
+            t_stage_config,
+            tools_config=self._tools_config,
+            profile=False,
+            use_cache=False,
+        )
+
+    def _profile_runner(self, runner: BaseRunner, stage_config: str) -> dict:
+        """Profile the runner.
+
+        Parameters
+        ----------
+        runner: BaseRunner
+            The runner to be profiled
+        stage_config: dict
+            The config of this stage.
+
+        Returns
+        -------
+        report: dict
+            The profile report.
+        """
+
+        stage = runner.stage
+        msc_utils.time_stamp(stage + ".profile", False)
+        profile_config = stage_config["profile"]
+        report = {}
+
+        # check result
+        check_config = profile_config.get("check", {})
+        if check_config:
+            loader = msc_utils.IODataLoader(msc_utils.get_dataset_dir().relpath("Golden"))
+            total, passed = 0, 0
+            acc_report = {}
+            for idx, (inputs, outputs) in enumerate(loader):
+                results = runner.run(inputs)
+                iter_report = msc_utils.compare_arrays(outputs, results)
+                total += iter_report["total"]
+                passed += iter_report["passed"]
+                acc_report["iter_" + str(idx)] = iter_report["info"]
+            pass_rate = float(passed) / total
+            report["accuracy"] = "{}/{}({:.2f}%)".format(passed, total, pass_rate * 100)
+            title = "Check({}) pass {}".format(stage, report["accuracy"])
+            self._logger.debug(msc_utils.msg_block(title, acc_report))
+            self._logger.info("Accuracy(%s) %d iters -> %s", stage, len(loader), report["accuracy"])
+            required_err, err_rate = check_config.get("err_rate", 0), (1 - pass_rate)
+            if err_rate > required_err >= 0:
+                raise Exception(
+                    "Failed to profile the runner({}), err_rate {} > required {}".format(
+                        stage, err_rate, required_err
+                    )
+                )
+
+        # benchmark model
+        benchmark_config = profile_config.get("benchmark", {})
+        if benchmark_config and not runner.get_tool(ToolType.DEBUG):
+            for _ in range(benchmark_config.get("warm_up", 10)):
+                runner.run(self._sample_inputs)
+            start = time.time()
+            repeat = benchmark_config.get("repeat", 100)
+            for _ in range(repeat):
+                runner.run(self._sample_inputs)
+            avg_time = (time.time() - start) * 1000 / repeat
+            self._logger.info(
+                "Profile({}) {} times on {} -> {:.2f} ms".format(
+                    stage, repeat, runner.device, avg_time
+                )
+            )
+            report["latency"] = "{:.2f} ms".format(avg_time)
+        return report
+
     def _update_prepare_config(self, config: dict) -> dict:
         """Update prepare in stage config.
 
@@ -588,70 +757,6 @@ class BaseManager(object):
                     check_config["err_rate"] = -1
         return config
 
-    def _profile_runner(self, runner: BaseRunner, stage_config: str) -> dict:
-        """Profile the runner.
-
-        Parameters
-        ----------
-        runner: BaseRunner
-            The runner to be profiled
-        stage_config: dict
-            The config of this stage.
-
-        Returns
-        -------
-        report: dict
-            The profile report.
-        """
-
-        stage = runner.stage
-        msc_utils.time_stamp(stage + ".profile", False)
-        profile_config = stage_config["profile"]
-        report = {}
-
-        # check result
-        check_config = profile_config.get("check", {})
-        if check_config:
-            loader = msc_utils.IODataLoader(msc_utils.get_dataset_dir().relpath("Golden"))
-            total, passed = 0, 0
-            acc_report = {}
-            for idx, (inputs, outputs) in enumerate(loader):
-                results = runner.run(inputs)
-                iter_report = msc_utils.compare_arrays(outputs, results)
-                total += iter_report["total"]
-                passed += iter_report["passed"]
-                acc_report["iter_" + str(idx)] = iter_report["info"]
-            pass_rate = float(passed) / total
-            report["accuracy"] = "{}/{}({:.2f}%)".format(passed, total, pass_rate * 100)
-            title = "Check({}) pass {}".format(stage, report["accuracy"])
-            self._logger.debug(msc_utils.msg_block(title, acc_report))
-            self._logger.info("Accuracy(%s) %d iters -> %s", stage, len(loader), report["accuracy"])
-            required_err, err_rate = check_config.get("err_rate", 0), (1 - pass_rate)
-            if err_rate > required_err >= 0:
-                raise Exception(
-                    "Failed to profile the runner({}), err_rate {} > required {}".format(
-                        stage, err_rate, required_err
-                    )
-                )
-
-        # benchmark model
-        benchmark_config = profile_config.get("benchmark", {})
-        if benchmark_config:
-            for _ in range(benchmark_config.get("warm_up", 10)):
-                runner.run(self._sample_inputs)
-            start = time.time()
-            repeat = benchmark_config.get("repeat", 100)
-            for _ in range(repeat):
-                runner.run(self._sample_inputs)
-            avg_time = (time.time() - start) * 1000 / repeat
-            self._logger.info(
-                "Profile({}) {} times on {} -> {:.2f} ms".format(
-                    stage, repeat, runner.device, avg_time
-                )
-            )
-            report["latency"] = "{:.2f} ms".format(avg_time)
-        return report
-
     def get_runnable(self, ret_type: str = "runner") -> Any:
         """Return object by type.
 
@@ -673,105 +778,6 @@ class BaseManager(object):
         elif ret_type == "model":
             return self._runner.model
         raise Exception("Unexpect return type " + str(ret_type))
-
-    def _create_runner(
-        self,
-        stage: str,
-        stage_config: dict,
-        tools_config: dict = None,
-        visualize: bool = True,
-        profile: bool = True,
-        use_cache: bool = True,
-    ) -> BaseRunner:
-        """Create runner.
-
-        Parameters
-        ----------
-        stage: str
-            The stage name
-        stage_config: dict
-            The config of this stage.
-        tools_config: dict
-            The config of the tools
-        visualize: bool
-            Whether to visualize the runner
-        profile: bool
-            Whether to profile the runner.
-        use_cache: bool
-            Whether to use cache.
-
-        Returns
-        -------
-        runner: BaseRunner
-            The runner.
-        """
-
-        if self._runner:
-            self._runner.destory()
-        on_debug = self._debug_config.get(stage, False)
-        cache_dir = msc_utils.get_cache_dir().create_dir(stage) if use_cache else None
-        msc_utils.time_stamp(stage + ".build", False)
-        runner_cls = self._get_runner_cls(stage_config["run_type"])
-        run_config = msc_utils.copy_dict(stage_config.get("run_config"))
-        if "generate_config" not in run_config:
-            run_config["generate_config"] = {}
-        run_config["generate_config"].update(
-            {
-                "build_folder": msc_utils.get_build_dir().create_dir(stage, cleanup=not on_debug),
-            }
-        )
-        self._logger.debug("Create runner(%s) by %s(%s)", stage, runner_cls.__name__, run_config)
-        # save baseline data for debug
-        if on_debug and ToolType.DEBUG in self._config.get("optimize", {}):
-            tools_config = tools_config or {}
-            tools_config = {
-                **tools_config,
-                ToolType.DEBUG: self._config["optimize"][ToolType.DEBUG],
-            }
-        runner = runner_cls(
-            self._relax_mod,
-            tools_config=tools_config,
-            stage=stage,
-            logger=self._logger,
-            **run_config,
-        )
-        runner.build(cache_dir=cache_dir)
-        self._report["info"][stage + "_by"] = "{}({})".format(runner.framework, runner.device)
-        if visualize:
-            runner.visualize(msc_utils.get_visual_dir().create_dir(stage))
-        if profile and "profile" in stage_config:
-            self._report["profile"][stage] = self._profile_runner(runner, stage_config)
-        if use_cache:
-            runner.save_cache(cache_dir)
-        return runner
-
-    def _create_tool_runner(self, tool_type: str, stage_config: dict) -> BaseRunner:
-        """Create runner with tool.
-
-        Parameters
-        ----------
-        tool_type: str
-            The tool type.
-        stage_config: dict
-            The config of this stage.
-
-        Returns
-        -------
-        runner: BaseRunner
-            The runner.
-        """
-
-        t_stage_config = {
-            "run_type": stage_config["run_type"],
-            "run_config": stage_config["run_config"],
-        }
-        return self._create_runner(
-            tool_type,
-            t_stage_config,
-            tools_config=self._tools_config,
-            profile=False,
-            use_cache=False,
-        )
 
     def _get_runner_cls(self, run_type: str) -> BaseRunner:
         """Get the runner cls by type

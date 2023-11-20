@@ -149,6 +149,7 @@ class BaseRunner(object):
 
         # Load graphs from cache
         if cache_info.get("graphs"):
+            as_cache = True
             self._graphs, self._weights = self._load_graphs(cache_dir, cache_info["graphs"])
             self._logger.debug(
                 "Load {} graphs from cache @ {}".format(len(self._graphs), cache_dir)
@@ -156,10 +157,15 @@ class BaseRunner(object):
 
         # Get or rebuild graphs
         if build_graph or not self._graphs:
+            as_cache = False
             self._graphs, self._weights = self._translate()
-            for tool in get_tools():
-                self._graphs, self._weights = tool.load_graphs(self._graphs, self._weights)
             self._logger.debug("Translate {} graphs from module".format(len(self._graphs)))
+
+        # load graph by tool
+        for tool in get_tools():
+            self._graphs, self._weights = tool.load_graphs(
+                self._graphs, self._weights, as_cache=as_cache
+            )
 
         if cache_info.get("model") and not build_graph:
             # Load model from cache
@@ -328,7 +334,6 @@ class BaseRunner(object):
             self._runnable = None
         for tool in self._tools.values():
             tool.destory()
-        
 
     def _translate(self) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:
         """Translate IRModule to MSCgraphs
