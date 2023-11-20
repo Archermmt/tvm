@@ -18,23 +18,41 @@
 
 import datetime
 import logging
+from typing import List
 
 from .info import dump_dict
 from .log import get_global_logger
 from .namespace import MSCMap, MSCKey
 
 
-def time_stamp(
-    stage: str, mark_stage: bool = False, log_stage: bool = True, logger: logging.Logger = None
-):
+class MSCStage(object):
+    """Enum all msc stage names"""
+
+    INIT = "init"
+    PREPARE = "prepare"
+    PARSE = "parse"
+    BASELINE = "baseline"
+    PRUNE = "prune"
+    QUANTIZE = "quantize"
+    DISTILL = "distill"
+    OPTIMIZE = "optimize"
+    COMPILE = "compile"
+    SUMMARY = "summary"
+    ALL = [INIT, PREPARE, PARSE, BASELINE, PRUNE, QUANTIZE, DISTILL, OPTIMIZE, COMPILE, SUMMARY]
+
+    @classmethod
+    def all_stages(cls) -> List[str]:
+        """Get all stage names"""
+        return cls.ALL
+
+
+def time_stamp(stage: str, log_stage: bool = True, logger: logging.Logger = None):
     """Mark the stamp and record time.
 
     Parameters
     ----------
     stage: str
         The stage name.
-    mark_stage: bool
-        Whether to mark the stage.
     log_stage: bool
         Whether to log the stage
     logger: logging.Logger
@@ -45,17 +63,17 @@ def time_stamp(
     time_stamps = MSCMap.get(MSCKey.TIME_STAMPS, [])
     time_stamps.append((stage, datetime.datetime.now()))
     MSCMap.set(MSCKey.TIME_STAMPS, time_stamps)
-    if log_stage:
-        if mark_stage:
+    if stage in MSCStage.all_stages():
+        if log_stage:
             last_stage = MSCMap.get(MSCKey.MSC_STAGE)
             if last_stage:
                 end_msg = "[MSC] End {}".format(last_stage)
                 logger.info("\n{0} {1} {0}\n".format("#" * 20, end_msg.center(40)))
             start_msg = "[MSC] Start {}".format(stage)
             logger.info("\n{0} {1} {0}".format("#" * 20, start_msg.center(40)))
-            MSCMap.set(MSCKey.MSC_STAGE, stage)
-        else:
-            logger.debug("Start {}".format(stage))
+        MSCMap.set(MSCKey.MSC_STAGE, stage)
+    elif log_stage:
+        logger.debug("Start {}".format(stage))
 
 
 def get_duration() -> dict:

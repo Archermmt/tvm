@@ -28,6 +28,7 @@ import tvm
 from tvm.contrib.msc.core.runtime import BaseRunner
 from tvm.contrib.msc.core.tools import ToolType
 from tvm.contrib.msc.core.utils.namespace import MSCFramework, MSCMap, MSCKey
+from tvm.contrib.msc.core.utils.message import MSCStage
 from tvm.contrib.msc.core import utils as msc_utils
 
 
@@ -53,7 +54,7 @@ class BaseManager(object):
         else:
             verbose = config.get("verbose", "info")
         self._logger = msc_utils.set_global_logger(verbose, log_path)
-        msc_utils.time_stamp("init", True)
+        msc_utils.time_stamp(MSCStage.INIT)
         config_info = {"workspace": self._workspace.path, "config": config}
         self._logger.info(msc_utils.msg_block("CONFIG", config_info))
         self._model = model
@@ -177,14 +178,14 @@ class BaseManager(object):
             The sample inputs.
         """
 
-        msc_utils.time_stamp("prepare", True)
+        msc_utils.time_stamp(MSCStage.PREPARE)
         golden_folder = msc_utils.get_dataset_dir().relpath("Golden", use_cache)
         input_names, sample_inputs = [i[0] for i in self._config["inputs"]], None
         report, source_type = {"golden_folder": golden_folder}, "Unknown"
         runner_cls = self._get_runner_cls(self._config["model_type"])
         run_func = runner_cls.run_native if hasattr(runner_cls, "run_native") else None
-        if use_cache and msc_utils.is_dataset(golden_folder):
-            loader, source_type = msc_utils.MSCDataLoader(golden_folder), "Cache"
+        if use_cache and msc_utils.is_io_dataset(golden_folder):
+            loader, source_type = msc_utils.IODataLoader(golden_folder), "Cache"
             report["datas_info"] = loader.info
             sample_inputs = loader[0][0]
             self._logger.debug("Load %d cached golden from %s", len(loader), golden_folder)
@@ -201,7 +202,7 @@ class BaseManager(object):
                         }
 
                 data_loader, source_type = get_inputs, "Random"
-            elif msc_utils.is_dataset(loader):
+            elif msc_utils.is_io_dataset(loader):
 
                 def get_inputs(max_num=-1):
                     for _ in range(max_num):
@@ -216,10 +217,9 @@ class BaseManager(object):
 
             # save golden
             golden_cnt, max_num = 0, self._config["dataset"].get("max_num", 5)
+            saver_options = {"input_names": input_names, "output_names": self._config["outputs"]}
             if run_func:
-                with msc_utils.MSCDataSaver(
-                    golden_folder, input_names, self._config["outputs"]
-                ) as saver:
+                with msc_utils.IODataSaver(golden_folder, saver_options) as saver:
                     for inputs in data_loader():
                         if golden_cnt >= max_num:
                             break
@@ -230,11 +230,9 @@ class BaseManager(object):
                         )
                         golden_cnt = saver.save(inputs, outputs)
                     report["datas_info"] = saver.info
-            elif msc_utils.is_dataset(loader):
-                with msc_utils.MSCDataSaver(
-                    golden_folder, input_names, self._config["outputs"]
-                ) as saver:
-                    for inputs, outputs in msc_utils.MSCDataLoader(loader):
+            elif msc_utils.is_io_dataset(loader):
+                with msc_utils.IODataSaver(golden_folder, saver_options) as saver:
+                    for inputs, outputs in msc_utils.IODataLoader(loader):
                         if golden_cnt >= max_num:
                             break
                         if not sample_inputs:
@@ -287,7 +285,7 @@ class BaseManager(object):
             The parsed module.
         """
 
-        msc_utils.time_stamp("parse", True)
+        msc_utils.time_stamp(MSCStage.PARSE)
         cache_path = msc_utils.get_cache_dir().relpath("parsed_relax.json") if use_cache else None
         if cache_path and os.path.isfile(cache_path):
             with open(cache_path, "r") as f:
@@ -330,8 +328,8 @@ class BaseManager(object):
             The runner.
         """
 
-        msc_utils.time_stamp("baseline", True)
-        return self._create_runner("baseline", stage_config, use_cache=use_cache)
+        msc_utils.time_stamp(MSCStage.BASELINE)
+        return self._create_runner(MSCStage.BASELINE, stage_config, use_cache=use_cache)
 
     def optimize(self, stage_config: dict, use_cache: bool = False) -> BaseRunner:
         """Run the optimize and return object.
@@ -356,8 +354,8 @@ class BaseManager(object):
             if os.path.isfile(plan_file):
                 self._logger.info("Skip %s with plan_file %s", ToolType.PRUNE, plan_file)
             else:
-                msc_utils.time_stamp(ToolType.PRUNE, True)
-                runner = self._create_tool_runner(ToolType.PRUNE, stage_config)
+                msc_utils.time_stamp(MSCStage.PRUNE)
+                runner = self._create_tool_runner(MSCStage.PRUNE, stage_config)
                 pruner = runner.get_tool(ToolType.PRUNE)
                 if not pruner.get_plan():
                     runner.run(self._sample_inputs)
@@ -368,9 +366,9 @@ class BaseManager(object):
                 self._logger.info("Save %s plan -> %s", ToolType.PRUNE, plan_file)
 
         # optimize and get the runner
-        msc_utils.time_stamp("optimize", True)
+        msc_utils.time_stamp(MSCStage.OPTIMIZE)
         return self._create_runner(
-            "optimize", stage_config, tools_config=self._tools_config, use_cache=use_cache
+            MSCStage.OPTIMIZE, stage_config, tools_config=self._tools_config, use_cache=use_cache
         )
 
     def compile(self, stage_config: dict, use_cache: bool = False) -> BaseRunner:
@@ -391,9 +389,9 @@ class BaseManager(object):
             The runner.
         """
 
-        msc_utils.time_stamp("compile", True)
+        msc_utils.time_stamp(MSCStage.COMPILE)
         return self._create_runner(
-            "compile", stage_config, tools_config=self._tools_config, use_cache=use_cache
+            MSCStage.COMPILE, stage_config, tools_config=self._tools_config, use_cache=use_cache
         )
 
     def summary(self, err_msg=None):
@@ -410,7 +408,7 @@ class BaseManager(object):
             The report of the pipeline.
         """
 
-        msc_utils.time_stamp("summary", True, False)
+        msc_utils.time_stamp(MSCStage.SUMMARY, False)
         if err_msg:
             self._report.update({"success": False, "err_msg": err_msg})
         else:
@@ -606,7 +604,7 @@ class BaseManager(object):
             The profile report.
         """
 
-        stage = msc_utils.current_stage()
+        stage = runner.stage
         msc_utils.time_stamp(stage + ".profile", False)
         profile_config = stage_config["profile"]
         report = {}
@@ -614,7 +612,7 @@ class BaseManager(object):
         # check result
         check_config = profile_config.get("check", {})
         if check_config:
-            loader = msc_utils.MSCDataLoader(msc_utils.get_dataset_dir().relpath("Golden"))
+            loader = msc_utils.IODataLoader(msc_utils.get_dataset_dir().relpath("Golden"))
             total, passed = 0, 0
             acc_report = {}
             for idx, (inputs, outputs) in enumerate(loader):
@@ -723,8 +721,19 @@ class BaseManager(object):
             }
         )
         self._logger.debug("Create runner(%s) by %s(%s)", stage, runner_cls.__name__, run_config)
+        # save baseline data for debug
+        if on_debug and ToolType.DEBUG in self._config.get("optimize", {}):
+            tools_config = tools_config or {}
+            tools_config = {
+                **tools_config,
+                ToolType.DEBUG: self._config["optimize"][ToolType.DEBUG],
+            }
         runner = runner_cls(
-            self._relax_mod, tools_config=tools_config, logger=self._logger, **run_config
+            self._relax_mod,
+            tools_config=tools_config,
+            stage=stage,
+            logger=self._logger,
+            **run_config,
         )
         runner.build(cache_dir=cache_dir)
         self._report["info"][stage + "_by"] = "{}({})".format(runner.framework, runner.device)

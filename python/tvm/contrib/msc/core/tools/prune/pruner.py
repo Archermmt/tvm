@@ -29,18 +29,16 @@ from .method import prune_axis
 class BasePruner(BaseTool):
     """Base pruner for all"""
 
-    def setup(self, options: dict, stage: str = "default"):
+    def setup(self, options: dict):
         """Setup the tool
 
         Parameters
         ----------
         options: dict
             The options for setup the tool
-        stage: str
-            The init stage.
         """
 
-        super().setup(options, stage)
+        super().setup(options)
         self._prunable_types = {}
         self._weight_graphs = []
 

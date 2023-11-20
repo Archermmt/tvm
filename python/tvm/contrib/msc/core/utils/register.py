@@ -103,6 +103,8 @@ def get_registered_tool_cls(framework: str, tool_type: str, tool_style: str) -> 
     """
 
     tools_cls = MSCMap.get(MSCKey.REGISTERED_TOOLS_CLS, {})
+    if tool_style == "all":
+        return tools_cls.get(framework, {}).get(tool_type, {})
     return tools_cls.get(framework, {}).get(tool_type, {}).get(tool_style)
 
 

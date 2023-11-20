@@ -39,6 +39,7 @@ def _get_config(model_type, deploy_type, tools_config, inputs, outputs, atol=1e-
         "model_type": model_type,
         "inputs": inputs,
         "outputs": outputs,
+        "debug": "debug" in tools_config,
         "dataset": {"loader": "from_random", "max_iter": 5},
         "prepare": {"profile": {"benchmark": {"repeat": 10}}},
         "baseline": {
@@ -77,6 +78,8 @@ def get_tool_config(tool_type):
                             "optimize": ["baseline"],
                             "compile": ["optimize", "baseline"],
                         },
+                        "op_types": ["nn.relu"],
+                        "tensor_types": ["output"],
                     }
                 ],
             }
@@ -161,7 +164,7 @@ def test_tvm_tools():
         },
     }
     # for t_type in ["prune", "debug"]:
-    for t_type in ["prune"]:
+    for t_type in ["debug"]:
         tool_config = get_tool_config(t_type)
         _test_from_torch(MSCFramework.TVM, tool_config, model_info, is_training=False)
 

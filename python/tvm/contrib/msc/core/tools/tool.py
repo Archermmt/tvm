@@ -31,17 +31,18 @@ from tvm.contrib.msc.core import utils as msc_utils
 
 
 class ToolType(object):
-    """Enum all msc tool typs"""
+    """Enum all msc tool types"""
 
     BASE = "base"
     PRUNE = "prune"
     QUANTIZE = "quantize"
     DISTILL = "distill"
     DEBUG = "debug"
+    ALL = [PRUNE, QUANTIZE, DISTILL, DEBUG]
 
     @classmethod
     def all_types(cls) -> List[str]:
-        return [cls.PRUNE, cls.QUANTIZE, cls.DISTILL, cls.DEBUG]
+        return cls.ALL
 
 
 class Strategy(object):
@@ -61,7 +62,9 @@ class Strategy(object):
         self._executors = {}
 
     def __str__(self):
-        return "{}({}): {}".format(self._name, self._stage, self._executors)
+        return "; ".join(
+            ["E[{}]:{} -> {}".format(k, v[1], v[0]) for k, v in self._executors.items()]
+        )
 
     def __call__(self, *args, **kwargs) -> Any:
         return self.execute(*args, **kwargs)
@@ -108,11 +111,6 @@ class Strategy(object):
 
         self._stage = stage
 
-    def get_config(self, key: str, default: Any) -> Any:
-        """Get the value in config"""
-
-        return self._executors[self._stage][1].get(key, default)
-
     def get_executor(self) -> Tuple[callable, dict]:
         """Get executor of current stage
 
@@ -122,7 +120,14 @@ class Strategy(object):
            The method and config to execute strategy
         """
 
-        return self._executors[self._stage]
+        if self._stage in self._executors:
+            return self._executors[self._stage]
+        return self._executors["default"]
+
+    def get_config(self, key: str, default: Any) -> Any:
+        """Get the value in config"""
+
+        return self.get_executor()[1].get(key, default)
 
     def copy(
         self,
@@ -166,6 +171,8 @@ class BaseTool(object):
 
     Parameters
     ----------
+    stage: str
+        The stage of tool
     plan_file: str
         The plan file path.
     strategy: dict
@@ -182,6 +189,7 @@ class BaseTool(object):
 
     def __init__(
         self,
+        stage: str,
         plan_file: str,
         strategy: dict,
         workspace: msc_utils.MSCDirectory,
@@ -189,7 +197,7 @@ class BaseTool(object):
         verbose_step: int = 50,
         logger: logging.Logger = None,
     ):
-        self.setup(options)
+        self._stage = stage
         if os.path.isfile(plan_file):
             self._plan = msc_utils.load_dict(plan_file)
         else:
@@ -198,29 +206,28 @@ class BaseTool(object):
         self._workspace = workspace
         self._verbose_step = verbose_step
         self._logger = logger or msc_utils.get_global_logger()
+        self.setup(options)
         init_title = "{}.INIT ({})".format(self.tool_type().upper(), self.framework())
         init_info = {
             "style": self.tool_style(),
-            "strategys": "; ".join(["{}({})".format(k, v) for k, v in self._strategys.items()]),
+            "strategys": self._strategys,
             "options": self._options,
             "verbose_step": self._verbose_step,
             "planed_num": len(self._plan),
         }
-        self._logger.info(msc_utils.msg_block(init_title, init_info))
+        self._logger.info(msc_utils.msg_block(init_title, init_info, width=0))
         if self._plan:
             self._logger.debug(
                 msc_utils.msg_block("{}.PLAN".format(self.tool_type().upper()), self._plan)
             )
 
-    def setup(self, options: dict, stage: str = "default"):
+    def setup(self, options: dict):
         """Setup the tool
 
         Parameters
         ----------
         options: dict
             The options for setup the tool
-        stage: str
-            The init stage.
         """
 
         self._options = options or {}
@@ -229,7 +236,6 @@ class BaseTool(object):
         self._graphs, self._weights = [], []
         self._weight_names = set()
         self._graph_id, self._forward_cnt = 0, 0
-        self._stage = stage
 
     def change_stage(self, stage: str):
         """Change the stage of tools and strategy"""
@@ -266,6 +272,11 @@ class BaseTool(object):
         for sub_weights in self._weights:
             self._weight_names |= set(sub_weights.keys())
         return self._graphs, self._weights
+
+    def destory(self):
+        """Destory tool"""
+
+        self._graphs, self._weights = [], []
 
     def execute_before_build(self, *args, **kwargs):
         """Execute before model build
@@ -788,7 +799,7 @@ class BaseTool(object):
             else:
                 if "default" not in strategys:
                     strategys["default"] = Strategy("default", self._stage)
-                strategys["default"].add_executor("default", method, copy.deepcopy(stra))
+                strategys["default"].add_executor(stage, method, copy.deepcopy(stra))
         return strategys
 
     def _get_strategy(self, name: str, consumer: str) -> dict:
@@ -807,13 +818,21 @@ class BaseTool(object):
             The method.
         """
 
-        if consumer == "exit":
+        if self.is_weight(name):
+            consumer = self.find_node(consumer)
+            name_refs = [consumer.name + ".weight", consumer.optype + ".weight"]
+        elif consumer == "exit":
             producer = self.find_producer(name)
             name_refs = [producer.name + ".output", producer.optype + ".output"]
         else:
-            suffix = "weight" if self.is_weight(name) else "input"
             consumer = self.find_node(consumer)
-            name_refs = [consumer.name + "." + suffix, consumer.optype + "." + suffix]
+            producer = self.find_producer(name)
+            name_refs = [
+                consumer.name + ".input",
+                consumer.optype + ".input",
+                producer.name + ".output",
+                producer.optype + ".output",
+            ]
         for n in name_refs:
             if n in self._strategys:
                 return self._strategys[n]

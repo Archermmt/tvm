@@ -14,29 +14,29 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""tvm.contrib.msc.framework.torch.tools.prune.pruner"""
+"""tvm.contrib.msc.framework.torch.tools.debug.debugger"""
 
 from tvm.contrib.msc.core.tools.tool import ToolType
-from tvm.contrib.msc.core.tools.prune import BasePruner
+from tvm.contrib.msc.core.tools.debug import BaseDebugger
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 
 
-class TorchPrunerFactory(object):
-    """Pruner factory for torch"""
+class TorchDebuggerFactory(object):
+    """Debugger factory for torch"""
 
-    def create(self, base_cls: BasePruner):
-        class pruner(base_cls):
-            """Adaptive pruner for torch"""
+    def create(self, base_cls: BaseDebugger):
+        class debugger(base_cls):
+            """Adaptive debugger for torch"""
 
             @classmethod
             def framework(cls):
                 return MSCFramework.TORCH
 
-        return pruner
+        return debugger
 
 
-factory = TorchPrunerFactory()
-tools = msc_utils.get_registered_tool_cls(MSCFramework.MSC, ToolType.PRUNE, tool_style="all")
+factory = TorchDebuggerFactory()
+tools = msc_utils.get_registered_tool_cls(MSCFramework.MSC, ToolType.DEBUG, tool_style="all")
 for tool in tools.values():
     msc_utils.register_tool_cls(factory.create(tool))

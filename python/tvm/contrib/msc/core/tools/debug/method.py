@@ -14,9 +14,9 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""tvm.contrib.msc.core.tools.prune.method"""
+"""tvm.contrib.msc.core.tools.debug.method"""
 
-from typing import List
+from typing import List, Dict
 import numpy as np
 
 from tvm.contrib.msc.core.tools.tool import ToolType, BaseTool
@@ -48,41 +48,33 @@ def prune_axis(data: np.ndarray, axis: int, indices: List[int]) -> np.ndarray:
     return np.concatenate(left_datas, axis=axis)
 
 
-class PruneMethod(object):
-    """Default prune method"""
+class DebugMethod(object):
+    """Default debug method"""
 
     @classmethod
-    def per_channel(
+    def save_compared(
         cls,
-        pruner: BaseTool,
+        debugger: BaseTool,
         name: str,
         data: np.ndarray,
-        in_axis: int,
-        out_axis: int,
-        in_indices: List[int],
-        density: float,
-        stride: int = 8,
+        compare_to: Dict[str, List[str]],
     ) -> np.ndarray:
-        """Prune the data
+        """compare and save the data
 
         Parameters
         ----------
-        pruner: BasePruner
-            The pruner
+        debugger: BaseDebugger
+            The debugger
         name: str
             The name of the weight.
         data: np.ndarray
             The source data.
-        in_axis: int
-            The input axis
-        out_axis: int
-            The output axis
-        in_indices: list<int>
-            The input indices to be pruned
-        density: float
-            The density to prune
-        stride: int
-            The prune stride
+        stage: str
+            The current stage of tool.
+        compare_to: dict
+            The compare config
+        dataset: MSCDirectory
+            The root dir
 
         Returns
         -------
@@ -90,16 +82,7 @@ class PruneMethod(object):
             The plan of the tensor.
         """
 
-        config = {"in_indices": in_indices, "out_indices": []}
-        if density == 1:
-            return config
-        if len(in_indices) > 0:
-            data = prune_axis(data, in_axis, in_indices)
-        weight = pruner.find_tensor(name)
-        left_num = int(((density * weight.dim_at(out_axis) + stride) // stride) * stride)
-        axis_sum = [np.abs(d).sum() for d in np.split(data, data.shape[out_axis], out_axis)]
-        rank = np.argsort(np.array(axis_sum))
-        config["out_indices"] = rank[-left_num:].tolist()
+        config = {}
         return config
 
     @classmethod
@@ -108,7 +91,7 @@ class PruneMethod(object):
 
     @classmethod
     def tool_type(cls):
-        return ToolType.PRUNE
+        return ToolType.DEBUG
 
 
-msc_utils.register_tool_method(PruneMethod)
+msc_utils.register_tool_method(DebugMethod)

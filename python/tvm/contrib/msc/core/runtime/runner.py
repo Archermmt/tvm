@@ -26,8 +26,9 @@ import numpy as np
 import tvm
 from tvm.contrib.msc.core.ir import MSCGraph
 from tvm.contrib.msc.core.frontend import from_relax
-from tvm.contrib.msc.core.tools import BaseTool, create_tool, get_tool, get_tools
+from tvm.contrib.msc.core.tools import BaseTool, ToolType, create_tool, get_tool, get_tools
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
+from tvm.contrib.msc.core.utils.message import MSCStage
 from tvm.contrib.msc.core import utils as msc_utils
 from tvm.contrib.msc.core import _ffi_api
 
@@ -47,6 +48,8 @@ class BaseRunner(object):
         The config for translate IRModule to MSCGraph.
     codegen_config: dict
         The config for build MSCGraph to runnable model.
+    stage: str
+        The stage of runner.
     name: str
         The name of the runner
     device: str
@@ -63,6 +66,7 @@ class BaseRunner(object):
         tools_config: Optional[Dict[str, Any]] = None,
         translate_config: Optional[Dict[str, str]] = None,
         generate_config: Optional[Dict[str, str]] = None,
+        stage: str = "default",
         name: str = "main",
         device: str = "cpu",
         is_training: bool = False,
@@ -72,18 +76,21 @@ class BaseRunner(object):
         self._tools_config = tools_config or {}
         self._translate_config = translate_config or {}
         self._generate_config = generate_config or {}
-        if self._tools_config:
-            if "codegen" not in self._generate_config:
-                self._generate_config["codegen"] = {}
-            self._generate_config["codegen"].update({"use_tools": True, "tools_tag": name})
-        if "build_folder" not in self._generate_config:
-            self._generate_config["build_folder"] = msc_utils.get_build_dir()
-        for t_config in self._tools_config.values():
-            t_config["workspace"] = self._generate_config["build_folder"]
+        self._stage = stage
         self._name = name
         self._device = device if self._device_enabled(device) else "cpu"
         self._is_training = is_training
         self._logger = logger or msc_utils.get_global_logger()
+        if "build_folder" not in self._generate_config:
+            self._generate_config["build_folder"] = msc_utils.get_build_dir()
+        if self._tools_config:
+            if "codegen" not in self._generate_config:
+                self._generate_config["codegen"] = {}
+            self._generate_config["codegen"].update({"use_tools": True, "tools_tag": name})
+            for t_config in self._tools_config.values():
+                t_config.update(
+                    {"stage": self._stage, "workspace": self._generate_config["build_folder"]}
+                )
         self.setup()
         config = {
             "tools_config": self._tools_config,
@@ -93,7 +100,11 @@ class BaseRunner(object):
             "device": self._device,
             "is_training": self._is_training,
         }
-        self._logger.info(msc_utils.msg_block("RUNNER_CONFIG({})".format(self.framework), config))
+        self._logger.info(
+            msc_utils.msg_block(
+                "RUNNER_CONFIG({} @ {})".format(self.framework, self._stage), config
+            )
+        )
 
     def setup(self):
         """Setup the runner"""
@@ -102,6 +113,13 @@ class BaseRunner(object):
         self._model, self._model_info = None, {}
         self._runnable = None
         self._tools = {}
+
+    def change_stage(self, stage: str):
+        """Change the stage of tools and strategy"""
+
+        self._stage = stage
+        for tool in self._tools.values():
+            tool.change_stage(stage)
 
     def build(self, cache_dir: msc_utils.MSCDirectory = None, build_graph: bool = False) -> Any:
         """Build the runnable object
@@ -306,6 +324,11 @@ class BaseRunner(object):
 
         if self._model:
             self._model = None
+        if self._runnable:
+            self._runnable = None
+        for tool in self._tools.values():
+            tool.destory()
+        
 
     def _translate(self) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:
         """Translate IRModule to MSCgraphs
@@ -511,6 +534,10 @@ class BaseRunner(object):
         """
 
         return True
+
+    @property
+    def stage(self):
+        return self._stage
 
     @property
     def model(self):
@@ -787,7 +814,10 @@ class BYOCRunner(BaseRunner):
 
         graph_infos = list(zip(graphs or self._graphs, weights or self._weights))
         extra_option = self._generate_config.get("extra_option", {})
-        extra_option["tool_tag"] = self._name
+        if self._stage == MSCStage.COMPILE and not self.get_tool(ToolType.DEBUG):
+            extra_option["tool_tag"] = ""
+        else:
+            extra_option["tool_tag"] = self._name
         return self.codegen_func(
             self._byoc_mod,
             graph_infos,

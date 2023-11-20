@@ -16,15 +16,27 @@
 # under the License.
 """tvm.contrib.msc.framework.tensorflow.tools.prune.pruner"""
 
-from tvm.contrib.msc.core.tools.prune import DefaultPruner
+from tvm.contrib.msc.core.tools.tool import ToolType
+from tvm.contrib.msc.core.tools.prune import BasePruner
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 
 
-class TensorflowDefaultPruner(DefaultPruner):
-    @classmethod
-    def framework(cls):
-        return MSCFramework.TENSORFLOW
+class TensorflowPrunerFactory(object):
+    """Pruner factory for tensorflow"""
+
+    def create(self, base_cls: BasePruner):
+        class pruner(base_cls):
+            """Adaptive pruner for tensorflow"""
+
+            @classmethod
+            def framework(cls):
+                return MSCFramework.TENSORFLOW
+
+        return pruner
 
 
-msc_utils.register_tool_cls(TensorflowDefaultPruner)
+factory = TensorflowPrunerFactory()
+tools = msc_utils.get_registered_tool_cls(MSCFramework.MSC, ToolType.PRUNE, tool_style="all")
+for tool in tools.values():
+    msc_utils.register_tool_cls(factory.create(tool))

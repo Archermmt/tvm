@@ -16,15 +16,27 @@
 # under the License.
 """tvm.contrib.msc.framework.tvm.tools.prune.pruner"""
 
-from tvm.contrib.msc.core.tools.prune import DefaultPruner
+from tvm.contrib.msc.core.tools.tool import ToolType
+from tvm.contrib.msc.core.tools.prune import BasePruner
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 
 
-class TVMDefaultPruner(DefaultPruner):
-    @classmethod
-    def framework(cls):
-        return MSCFramework.TVM
+class TVMPrunerFactory(object):
+    """Pruner factory for tvm"""
+
+    def create(self, base_cls: BasePruner):
+        class pruner(base_cls):
+            """Adaptive pruner for tvm"""
+
+            @classmethod
+            def framework(cls):
+                return MSCFramework.TVM
+
+        return pruner
 
 
-msc_utils.register_tool_cls(TVMDefaultPruner)
+factory = TVMPrunerFactory()
+tools = msc_utils.get_registered_tool_cls(MSCFramework.MSC, ToolType.PRUNE, tool_style="all")
+for tool in tools.values():
+    msc_utils.register_tool_cls(factory.create(tool))

@@ -19,14 +19,14 @@
 import os
 import shutil
 import json
-from typing import List, Union, Dict
+from typing import List, Union, Dict, Any
 import numpy as np
 
 from .info import load_dict
 
 
-class MSCDataLoader(object):
-    """Dataset Loader for MSC
+class BaseDataLoader(object):
+    """Basic dataset loader for MSC
 
     Parameters
     ----------
@@ -43,7 +43,7 @@ class MSCDataLoader(object):
         self._start = start
         self._current = 0
         assert os.path.isdir(folder), "Dataset {} is not folder".format(folder)
-        self._info = load_dict(os.path.join(folder, "msc_info.json"))
+        self._info = load_dict(os.path.join(folder, "datas_info.json"))
         if end == -1:
             self._end = self._info["num_datas"]
         else:
@@ -52,28 +52,38 @@ class MSCDataLoader(object):
     def __getitem__(self, idx):
         if idx + self._start >= self._end:
             raise StopIteration("Reach End")
-        if "inputs" in self._info:
-            inputs = {n: self._load_data(n, idx, i) for n, i in self._info["inputs"].items()}
-        else:
-            inputs = {}
-        if "outputs" in self._info:
-            outputs = {n: self._load_data(n, idx, i) for n, i in self._info["outputs"].items()}
-        else:
-            outputs = {}
-        return inputs, outputs
+        return self._load_batch(idx)
 
     def __next__(self):
         if self._current + self._start >= self._end:
             raise StopIteration("Reach End")
-        inputs, outputs = self.__getitem__(self._current)
+        batch = self._load_batch(self._current)
         self._current += 1
-        return inputs, outputs
+        return batch
 
     def __len__(self):
         return self._end - self._start
 
     def reset(self):
         self._current = 0
+
+    def load_data(self, name: str, index: int) -> np.ndarray:
+        """Load data by name.
+
+        Parameters
+        -------
+        name: str
+            The name of the data.
+        index: int
+            The index of the data.
+
+        Returns
+        -------
+        data: np.ndarray
+           The loaded data.
+        """
+
+        return self._load_data(name, index, self._data_info(name))
 
     def _load_data(self, name: str, index: int, info: dict) -> np.ndarray:
         """Load data from file.
@@ -98,22 +108,138 @@ class MSCDataLoader(object):
         assert os.path.isfile(f_path), "Can not find data file " + str(f_path)
         return np.fromfile(f_path, dtype=info["dtype"]).reshape(info["shape"])
 
+    def _load_batch(self, index: int) -> Any:
+        """Get batch data
+
+        Parameters
+        -------
+        index: int
+            The index for the batch.
+
+        Returns
+        -------
+        batch: Any
+           The batch data.
+        """
+
+        raise NotImplementedError("_load_batch is not implemented for BaseDataLoader")
+
+    def _data_info(self, name: str) -> dict:
+        """Get info of data
+
+        Parameters
+        -------
+        name: str
+            The name of data.
+
+        Returns
+        -------
+        info: dict
+           The info of data.
+        """
+
+        raise NotImplementedError("_data_info is not implemented for BaseDataLoader")
+
     @property
     def info(self):
         return self._info
 
 
-class MSCDataSaver(object):
+class SimpleDataLoader(BaseDataLoader):
+    """Dataset Loader for simple datas"""
+
+    def _load_batch(self, index: int) -> Any:
+        """Get batch data
+
+        Parameters
+        -------
+        index: int
+            The index for the batch.
+
+        Returns
+        -------
+        batch: Any
+           The batch data.
+        """
+
+        assert "datas" in self._info, "datas shoule be given to load batch"
+        return {n: self._load_data(n, index, i) for n, i in self._info["datas"].items()}
+
+    def _data_info(self, name: str) -> dict:
+        """Get info of data
+
+        Parameters
+        -------
+        name: str
+            The name of data.
+
+        Returns
+        -------
+        info: dict
+           The info of data.
+        """
+
+        assert name in self._info["datas"], "Can not find info for " + name
+        return self._info["datas"][name]
+
+
+class IODataLoader(BaseDataLoader):
+    """Dataset Loader for Input/Output datas"""
+
+    def _load_batch(self, index: int) -> Any:
+        """Get batch data
+
+        Parameters
+        -------
+        index: int
+            The index for the batch.
+
+        Returns
+        -------
+        batch: Any
+           The batch data.
+        """
+
+        if "inputs" in self._info:
+            inputs = {n: self._load_data(n, index, i) for n, i in self._info["inputs"].items()}
+        else:
+            inputs = {}
+        if "outputs" in self._info:
+            outputs = {n: self._load_data(n, index, i) for n, i in self._info["outputs"].items()}
+        else:
+            outputs = {}
+        return inputs, outputs
+
+    def _data_info(self, name: str) -> dict:
+        """Get info of data
+
+        Parameters
+        -------
+        name: str
+            The name of data.
+
+        Returns
+        -------
+        info: dict
+           The info of data.
+        """
+
+        if name in self._info["inputs"]:
+            return self._info["inputs"][name]
+        if name in self._info["outputs"]:
+            return self._info["outputs"][name]
+        raise Exception("Can not find {} in inputs or outputs".format(name))
+
+
+class BaseDataSaver(object):
     """Dataset Saver for MSC
 
     Parameters
     ----------
     folder: string
         The dataset folder path.
-    input_names: list<string>
-        The input names.
-    output_names: list<string>
-        The output names.
+    options: dict
+        The extra options for the data saver
     start: int
         The start position.
     max_size: int
@@ -123,8 +249,7 @@ class MSCDataSaver(object):
     def __init__(
         self,
         folder: str,
-        input_names: List[str],
-        output_names: List[str],
+        options: dict = None,
         start: int = 0,
         max_size: int = -1,
     ):
@@ -132,26 +257,111 @@ class MSCDataSaver(object):
             shutil.rmtree(folder)
         os.mkdir(folder)
         self._folder = folder
-        self._input_names = input_names
-        self._output_names = output_names
         self._start = start
         self._max_size = max_size
         self._current = 0
         assert os.path.isdir(folder), "Dataset {} is not folder".format(folder)
-        self._info = {"inputs": {}, "outputs": {}, "num_datas": 0}
+        self._info = self.setup(options)
+
+    def setup(self, options: dict):
+        return {"num_datas": 0}
 
     def __enter__(self):
         return self
 
     def __exit__(self, exception_type, exception_value, traceback):
         self._info["num_datas"] = self._current
-        with open(os.path.join(self._folder, "msc_info.json"), "w") as f:
+        self.finalize()
+
+    def finalize(self):
+        with open(os.path.join(self._folder, "datas_info.json"), "w") as f:
             f.write(json.dumps(self._info, indent=2))
 
     def reset(self):
         self._current = 0
 
-    def save(
+    def save(self, *args, **kwargs) -> int:
+        """Save a batch datas"""
+
+        self._save_batch(*args, **kwargs)
+        self._current += 1
+        return self._current
+
+    def _save_data(self, name: str, data: np.ndarray, collect: str):
+        """Save data to file.
+
+        Parameters
+        -------
+        name: str
+            The name of the data.
+        data: np.ndarray
+           The data to be saved.
+        collect: str
+            The collect of data.
+        """
+
+        save_name = name.replace("/", "_")
+        sub_folder = f_path = os.path.join(self._folder, save_name)
+        if not os.path.isdir(sub_folder):
+            os.mkdir(sub_folder)
+        f_path = os.path.join(sub_folder, "batch_{}.bin".format(self._start + self._current))
+        ref_info = self._info[collect]
+        # TODO(mengtong): support dynamic datas shape
+        if name in ref_info:
+            assert (
+                ref_info[name]["dtype"] == data.dtype.name
+            ), "dtype {} mismatch with saved {}".format(data.dtype.name, ref_info[name]["dtype"])
+            assert ref_info[name]["shape"] == list(
+                data.shape
+            ), "shape {} mismatch with saved {}".format(data.shape, ref_info[name]["shape"])
+        else:
+            ref_info[name] = {
+                "shape": list(data.shape),
+                "dtype": data.dtype.name,
+                "bytes": data.size * data.itemsize,
+                "save_name": save_name,
+            }
+        data.tofile(f_path)
+
+    def _save_batch(self, *args, **kwargs) -> dict:
+        """Save a batch data"""
+
+        raise NotImplementedError("_save_batch is not implemented for BaseDataSaver")
+
+    @property
+    def info(self):
+        return self._info
+
+
+class SimpleDataSaver(BaseDataSaver):
+    """Dataset Saver for simple datas"""
+
+    def _save_batch(self, datas: Dict[str, np.ndarray]):
+        """Save 1 simple datas.
+
+        Parameters
+        -------
+        datas: dict<str, np.ndarray>
+            The datas to be saved.
+        """
+
+        for name, data in datas.items():
+            self._save_data(name, data, "datas")
+
+    def setup(self, options: dict):
+        return {"datas": {}, "num_datas": 0}
+
+
+class IODataSaver(BaseDataSaver):
+    """Dataset Saver for inputs/outputs"""
+
+    def setup(self, options: dict):
+        assert "input_names" in options, "input_names should be given to setup IODataSaver"
+        self._input_names = options["input_names"]
+        self._output_names = options.get("output_names", [])
+        return {"inputs": {}, "outputs": {}, "num_datas": 0}
+
+    def _save_batch(
         self,
         inputs: Union[Dict[str, np.ndarray], List[np.ndarray]],
         outputs: Union[Dict[str, np.ndarray], List[np.ndarray]] = None,
@@ -176,7 +386,7 @@ class MSCDataSaver(object):
             ), "Inputs size {} mismatch with input_names {}".format(len(inputs), self._input_names)
             inputs = dict(zip(self._input_names, inputs))
         for name, data in inputs.items():
-            self._save_data(name, data, True)
+            self._save_data(name, data, "inputs")
         if outputs:
             if isinstance(outputs, dict):
                 assert set(outputs.keys()) == set(
@@ -190,52 +400,22 @@ class MSCDataSaver(object):
                 )
                 outputs = dict(zip(self._output_names, outputs))
             for name, data in outputs.items():
-                self._save_data(name, data, False)
-        self._current += 1
-        return self._current
-
-    def _save_data(self, name: str, data: np.ndarray, is_input: bool):
-        """Save data to file.
-
-        Parameters
-        -------
-        name: str
-            The name of the data.
-        data: np.ndarray
-           The data to be saved.
-        is_input: bool
-            Whether the data is input.
-        """
-
-        save_name = name.replace("/", "_")
-        sub_folder = f_path = os.path.join(self._folder, save_name)
-        if not os.path.isdir(sub_folder):
-            os.mkdir(sub_folder)
-        f_path = os.path.join(sub_folder, "batch_{}.bin".format(self._start + self._current))
-        ref_info = self._info["inputs"] if is_input else self._info["outputs"]
-        # TODO(mengtong): support dynamic datas shape
-        if name in ref_info:
-            assert (
-                ref_info[name]["dtype"] == data.dtype.name
-            ), "dtype {} mismatch with saved {}".format(data.dtype.name, ref_info[name]["dtype"])
-            assert ref_info[name]["shape"] == list(
-                data.shape
-            ), "shape {} mismatch with saved {}".format(data.shape, ref_info[name]["shape"])
-        else:
-            ref_info[name] = {
-                "shape": list(data.shape),
-                "dtype": data.dtype.name,
-                "bytes": data.size * data.itemsize,
-                "save_name": save_name,
-            }
-        data.tofile(f_path)
-
-    @property
-    def info(self):
-        return self._info
+                self._save_data(name, data, "outputs")
 
 
-def is_dataset(folder: str) -> bool:
-    """Check if a folder is MSC dataset"""
+def is_io_dataset(folder: str) -> bool:
+    """Check if a folder is IO dataset"""
 
-    return os.path.isfile(os.path.join(folder, "msc_info.json"))
+    if not os.path.isfile(os.path.join(folder, "datas_info.json")):
+        return False
+    data_info = load_dict(os.path.join(folder, "datas_info.json"))
+    return "inputs" in data_info and "outputs" in data_info
+
+
+def is_simple_dataset(folder: str) -> bool:
+    """Check if a folder is simple dataset"""
+
+    if not os.path.isfile(os.path.join(folder, "datas_info.json")):
+        return False
+    data_info = load_dict(os.path.join(folder, "datas_info.json"))
+    return "datas" in data_info
