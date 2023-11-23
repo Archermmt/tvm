@@ -24,39 +24,40 @@ from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 
 
-def prune_axis(data: np.ndarray, axis: int, indices: List[int]) -> np.ndarray:
-    """Delete indices on axis
-
-    Parameters
-    ----------
-    data: np.ndarray
-        The source data.
-    axis: int
-        The axis to prune
-    indices: list<int>
-        The indices to be pruned
-
-    Returns
-    -------
-    data: np.ndarray
-        The pruned data.
-    """
-
-    left_datas = [
-        d for idx, d in enumerate(np.split(data, data.shape[axis], axis)) if idx in indices
-    ]
-    return np.concatenate(left_datas, axis=axis)
-
-
 class PruneMethod(object):
     """Default prune method"""
+
+    @classmethod
+    def prune_axis(cls, data: np.ndarray, axis: int, indices: List[int]) -> np.ndarray:
+        """Delete indices on axis
+
+        Parameters
+        ----------
+        data: np.ndarray
+            The source data.
+        axis: int
+            The axis to prune
+        indices: list<int>
+            The indices to be pruned
+
+        Returns
+        -------
+        data: np.ndarray
+            The pruned data.
+        """
+
+        left_datas = [
+            d for idx, d in enumerate(np.split(data, data.shape[axis], axis)) if idx in indices
+        ]
+        return np.concatenate(left_datas, axis=axis)
 
     @classmethod
     def per_channel(
         cls,
         pruner: BaseTool,
-        name: str,
         data: np.ndarray,
+        name: str,
+        consumer: str,
         in_axis: int,
         out_axis: int,
         in_indices: List[int],
@@ -69,10 +70,12 @@ class PruneMethod(object):
         ----------
         pruner: BasePruner
             The pruner
-        name: str
-            The name of the weight.
         data: np.ndarray
             The source data.
+        name: str
+            The name of the weight.
+        consumer: str
+            The name of the consumer.
         in_axis: int
             The input axis
         out_axis: int
@@ -94,7 +97,7 @@ class PruneMethod(object):
         if density == 1:
             return config
         if len(in_indices) > 0:
-            data = prune_axis(data, in_axis, in_indices)
+            data = cls.prune_axis(data, in_axis, in_indices)
         weight = pruner.find_tensor(name)
         left_num = int(((density * weight.dim_at(out_axis) + stride) // stride) * stride)
         axis_sum = [np.abs(d).sum() for d in np.split(data, data.shape[out_axis], out_axis)]

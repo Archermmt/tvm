@@ -14,29 +14,29 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""tvm.contrib.msc.framework.tensorrt.tools.debug.debugger"""
+"""tvm.contrib.msc.framework.torch.tools.quantize.quantizer"""
 
 from tvm.contrib.msc.core.tools.tool import ToolType
-from tvm.contrib.msc.core.tools.debug import BaseDebugger
+from tvm.contrib.msc.core.tools.quantize import BaseQuantizer
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 
 
-class TensorRTDebuggerFactory(object):
-    """Debugger factory for tensorrt"""
+class TorchQuantizerFactory(object):
+    """Quantizer factory for torch"""
 
-    def create(self, base_cls: BaseDebugger):
-        class debugger(base_cls):
-            """Adaptive debugger for tensorrt"""
+    def create(self, base_cls: BaseQuantizer):
+        class quantizer(base_cls):
+            """Adaptive quantizer for torch"""
 
             @classmethod
             def framework(cls):
-                return MSCFramework.TENSORRT
+                return MSCFramework.TORCH
 
-        return debugger
+        return quantizer
 
 
-factory = TensorRTDebuggerFactory()
-tools = msc_utils.get_registered_tool_cls(MSCFramework.MSC, ToolType.DEBUG, tool_style="all")
+factory = TorchQuantizerFactory()
+tools = msc_utils.get_registered_tool_cls(MSCFramework.MSC, ToolType.QUANTIZE, tool_style="all")
 for tool in tools.values():
     msc_utils.register_tool_cls(factory.create(tool))

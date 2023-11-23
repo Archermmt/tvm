@@ -70,6 +70,29 @@ class BaseDataLoader(object):
     def reset(self):
         self._current = 0
 
+    def has_data(self, name: str, index: int) -> bool:
+        """Check if data exist.
+
+        Parameters
+        -------
+        name: str
+            The name of the data.
+        index: int
+            The index of the data.
+
+        Returns
+        -------
+        has_data: bool
+           Whether the data can be load.
+        """
+
+        info = self._data_info(name)
+        if not info:
+            return False
+        save_name = info.get("save_name", name)
+        f_path = os.path.join(self._folder, save_name, "batch_{}.bin".format(self._start + index))
+        return os.path.isfile(f_path)
+
     def load_data(self, name: str, index: int) -> np.ndarray:
         """Load data by name.
 
@@ -182,8 +205,7 @@ class SimpleDataLoader(BaseDataLoader):
            The info of data.
         """
 
-        assert name in self._info["datas"], "Can not find info for " + name
-        return self._info["datas"][name]
+        return self._info["datas"].get(name)
 
 
 class IODataLoader(BaseDataLoader):
@@ -229,9 +251,7 @@ class IODataLoader(BaseDataLoader):
 
         if name in self._info["inputs"]:
             return self._info["inputs"][name]
-        if name in self._info["outputs"]:
-            return self._info["outputs"][name]
-        raise Exception("Can not find {} in inputs or outputs".format(name))
+        return self._info["outputs"].get(name)
 
 
 class BaseDataSaver(object):

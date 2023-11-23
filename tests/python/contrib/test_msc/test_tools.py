@@ -39,7 +39,7 @@ def _get_config(model_type, deploy_type, tools_config, inputs, outputs, atol=1e-
         "model_type": model_type,
         "inputs": inputs,
         "outputs": outputs,
-        "debug": "debug" in tools_config,
+        "debug": False,
         "dataset": {"loader": "from_random", "max_iter": 5},
         "prepare": {"profile": {"benchmark": {"repeat": 10}}},
         "baseline": {
@@ -64,14 +64,45 @@ def get_tool_config(tool_type):
         config = {
             "prune": {
                 "plan_file": "msc_prune.json",
-                "strategy": [{"method": "per_channel", "density": 0.8}],
+                "strategys": [{"method": "per_channel", "density": 0.8}],
             }
         }
-    if tool_type == "debug":
+    elif tool_type == "quantize":
         config = {
-            "debug": {
-                "plan_file": "msc_debug.json",
-                "strategy": [
+            "quantize": {
+                "plan_file": "msc_quantize.json",
+                "strategys": [
+                    {
+                        "method": "gather_maxmin",
+                        "op_types": ["nn.conv2d", "msc.linear"],
+                        "tensor_types": ["input"],
+                        "stage": "gather",
+                    },
+                    {
+                        "method": "gather_max_per_channel",
+                        "op_types": ["nn.conv2d", "msc.linear"],
+                        "tensor_types": ["weight"],
+                        "stage": "gather",
+                    },
+                    {
+                        "method": "calibrate_maxmin",
+                        "op_types": ["nn.conv2d", "msc.linear"],
+                        "tensor_types": ["input"],
+                        "stage": "calibrate",
+                    },
+                    {
+                        "method": "quantize_normal",
+                        "op_types": ["nn.conv2d", "msc.linear"],
+                        "tensor_types": ["input", "weight"],
+                    },
+                ],
+            }
+        }
+    elif tool_type == "track":
+        config = {
+            "track": {
+                "plan_file": "msc_track.json",
+                "strategys": [
                     {
                         "method": "save_compared",
                         "compare_to": {
@@ -82,13 +113,6 @@ def get_tool_config(tool_type):
                         "tensor_types": ["output"],
                     }
                 ],
-            }
-        }
-    if tool_type == "quantize":
-        config = {
-            "quantize": {
-                "plan_file": "msc_quantize.json",
-                "strategy": [{}],
             }
         }
     return config
@@ -141,7 +165,8 @@ def _test_from_torch(
         manager.destory()
 
 
-def test_tvm_tools():
+@pytest.mark.parametrize("tool_type", ["prune", "track"])
+def test_tvm_tools(tool_type):
     """Test tools for tvm"""
 
     model_info = {
@@ -163,14 +188,13 @@ def test_tvm_tools():
             "msc.linear_bias": 1,
         },
     }
-    # for t_type in ["prune", "debug"]:
-    for t_type in ["debug"]:
-        tool_config = get_tool_config(t_type)
-        _test_from_torch(MSCFramework.TVM, tool_config, model_info, is_training=True)
+    tool_config = get_tool_config(tool_type)
+    _test_from_torch(MSCFramework.TVM, tool_config, model_info, is_training=True)
 
 
 @requires_tensorrt
-def test_tensorrt_tools():
+@pytest.mark.parametrize("tool_type", ["prune", "track"])
+def test_tensorrt_tools(tool_type):
     """Test tools for tensorrt"""
 
     model_info = {
@@ -180,11 +204,10 @@ def test_tensorrt_tools():
         "outputs": [{"name": "output", "shape": [1, 1000], "dtype": "float32", "layout": ""}],
         "nodes": {"total": 2, "input": 1, "msc_tensorrt": 1},
     }
-    for t_type in ["prune", "debug"]:
-        tool_config = get_tool_config(t_type)
-        _test_from_torch(MSCFramework.TENSORRT, tool_config, model_info, is_training=False)
+    tool_config = get_tool_config(tool_type)
+    _test_from_torch(MSCFramework.TENSORRT, tool_config, model_info, is_training=False)
 
 
 if __name__ == "__main__":
     # tvm.testing.main()
-    test_tvm_tools()
+    test_tvm_tools("quantize")

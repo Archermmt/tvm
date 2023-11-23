@@ -37,8 +37,8 @@ class ToolType(object):
     PRUNE = "prune"
     QUANTIZE = "quantize"
     DISTILL = "distill"
-    DEBUG = "debug"
-    ALL = [PRUNE, QUANTIZE, DISTILL, DEBUG]
+    TRACK = "track"
+    ALL = [PRUNE, QUANTIZE, DISTILL, TRACK]
 
     @classmethod
     def all_types(cls) -> List[str]:
@@ -62,15 +62,29 @@ class Strategy(object):
         self._executors = {}
 
     def __str__(self):
-        return "; ".join(
+        return "{}({}) ".format(self._name, self._stage) + "; ".join(
             ["E[{}]:{} -> {}".format(k, v[1], v[0]) for k, v in self._executors.items()]
         )
 
-    def __call__(self, *args, **kwargs) -> Any:
-        return self.execute(*args, **kwargs)
+    def inspect(self) -> dict:
+        """Get inspect of strategy
 
-    def execute(self, *args, **kwargs) -> Any:
-        """Execute the strategy
+        Returns
+        -------
+        inspect: dict
+           The inspect of the strategy.
+        """
+
+        return {
+            stage: "{}({})".format(method, config)
+            for stage, (method, config) in self._executors.items()
+        }
+
+    def __call__(self, *args, **kwargs) -> Any:
+        return self.apply(*args, **kwargs)
+
+    def apply(self, *args, **kwargs) -> Any:
+        """Apply the strategy
 
         Parameters
         ----------
@@ -89,6 +103,11 @@ class Strategy(object):
         kwargs.update({k: v for k, v in config.items() if k not in kwargs})
         return method(*args, **kwargs)
 
+    def change_stage(self, stage: str):
+        """Change the stage of strategy"""
+
+        self._stage = stage
+
     def add_executor(self, stage: str, method: callable, config: dict):
         """Add a executor to strategy
 
@@ -105,11 +124,6 @@ class Strategy(object):
         self._executors[stage] = (method, config)
         if not self._stage:
             self._stage = stage
-
-    def change_stage(self, stage: str):
-        """Change the stage of strategy"""
-
-        self._stage = stage
 
     def get_executor(self) -> Tuple[callable, dict]:
         """Get executor of current stage
@@ -175,8 +189,8 @@ class BaseTool(object):
         The stage of tool
     plan_file: str
         The plan file path.
-    strategy: dict
-        The strategy of the tool.
+    strategys: list[dict]
+        The strategys of the tool.
     workspace: MSCDirectory
         The workspace of the tool.
     options: dict
@@ -191,8 +205,7 @@ class BaseTool(object):
         self,
         stage: str,
         plan_file: str,
-        strategy: dict,
-        workspace: msc_utils.MSCDirectory,
+        strategys: dict,
         options: dict = None,
         verbose_step: int = 50,
         logger: logging.Logger = None,
@@ -202,48 +215,41 @@ class BaseTool(object):
             self._plan = msc_utils.load_dict(plan_file)
         else:
             self._plan = {}
-        self._strategys = self._parse_strategy(msc_utils.copy_dict(strategy))
-        self._workspace = workspace
+        self._strategys = self._parse_strategys(msc_utils.copy_dict(strategys))
+        self._options = options or {}
         self._verbose_step = verbose_step
         self._logger = logger or msc_utils.get_global_logger()
-        self.setup(options)
-        init_title = "{}.INIT ({})".format(self.tool_type().upper(), self.framework())
-        init_info = {
+        title = "{}.SETUP({} @ {})".format(self.tool_type().upper(), self._stage, self.framework())
+        self._logger.info(msc_utils.msg_block(title, self.setup(), width=0))
+
+    def setup(self) -> dict:
+        """Setup the tool
+
+        Returns
+        -------
+        info: dict
+            The setup info.
+        """
+
+        self._tensor_cache = {}
+        self._enabled, self._is_training = True, True
+        self._graphs, self._weights = [], {}
+        self._graph_id, self._forward_cnt = 0, 0
+        return {
             "style": self.tool_style(),
-            "strategys": self._strategys,
+            "strategys": {k: v.inspect() for k, v in self._strategys.items()},
             "options": self._options,
             "verbose_step": self._verbose_step,
             "planed_num": len(self._plan),
         }
-        self._logger.info(msc_utils.msg_block(init_title, init_info, width=0))
 
-    def setup(self, options: dict):
-        """Setup the tool
-
-        Parameters
-        ----------
-        options: dict
-            The options for setup the tool
-        """
-
-        self._options = options or {}
-        self._tensor_status = {}
-        self._enabled, self._is_training = True, True
-        self._graphs, self._weights = [], []
-        self._weight_names = set()
-        self._graph_id, self._forward_cnt = 0, 0
-
-    def change_stage(self, stage: str):
-        """Change the stage of tools and strategy"""
-
-        self._stage = stage
-        for strategy in self._strategys.values():
-            strategy.change_stage(stage)
-
-    def load_graphs(
-        self, graphs: List[MSCGraph], weights: List[Dict[str, tvm.nd.array]], as_cache: bool = False
+    def reset(
+        self,
+        graphs: List[MSCGraph],
+        weights: List[Dict[str, tvm.nd.array]],
+        cache_dir: msc_utils.MSCDirectory = None,
     ) -> Tuple[List[MSCGraph], List[Dict[str, tvm.nd.array]]]:
-        """Load the graphs and weights
+        """Reset the tool with graphs and weights
 
         Parameters
         ----------
@@ -251,8 +257,8 @@ class BaseTool(object):
             The msc graphs.
         weights: list<dic<str, tvm.nd.array>>
             The weights
-        as_cache: bool
-            Whether the graphs and weights are loaded from cache
+        cache_dir: MSCDirectory
+            cache path for save/load info
 
         Returns
         -------
@@ -263,17 +269,30 @@ class BaseTool(object):
         """
 
         self._forward_cnt = 0
-        self._tensor_status = {}
-        if as_cache:
-            self._graphs, self._weights = graphs, weights
+        self._tensor_cache = {}
+        if cache_dir and os.path.isfile(cache_dir.relpath("cache_info.json")):
+            cache_info = msc_utils.load_dict(cache_dir.relpath("cache_info.json"))
+            self.load_cache(cache_dir, cache_info)
         else:
-            self._graphs, self._weights = self._load_graphs(graphs, weights)
-        self._weight_names = set()
-        for sub_weights in self._weights:
-            self._weight_names |= set(sub_weights.keys())
-        return self._graphs, self._weights
+            graphs, weights = self.load_graphs(graphs, weights)
+        self._graphs, self._weights = graphs, {}
+        for w in weights:
+            self._weights.update(w)
+        return self._graphs, weights
 
-    def _load_graphs(
+    def change_stage(self, stage: str):
+        """Change the stage of tools and strategy"""
+
+        self._stage = stage
+        for strategy in self._strategys.values():
+            strategy.change_stage(stage)
+
+    def destory(self):
+        """Destory tool"""
+
+        self._graphs, self._weights = [], {}
+
+    def load_graphs(
         self, graphs: List[MSCGraph], weights: List[Dict[str, tvm.nd.array]]
     ) -> Tuple[List[MSCGraph], List[Dict[str, tvm.nd.array]]]:
         """Load the graphs and weights
@@ -295,11 +314,6 @@ class BaseTool(object):
 
         return graphs, weights
 
-    def destory(self):
-        """Destory tool"""
-
-        self._graphs, self._weights = [], []
-
     def execute_before_build(self, *args, **kwargs):
         """Execute before model build
 
@@ -314,7 +328,7 @@ class BaseTool(object):
         if self._enabled:
             self._graph_id = self._infer_graph_id(kwargs)
             self._logger.debug(
-                "<%s>(%s) before build graph[%d](%s)",
+                "%s.before_build(%s) graph[%d](%s)",
                 self.tool_type().upper(),
                 self._stage,
                 self._graph_id,
@@ -352,7 +366,7 @@ class BaseTool(object):
         if self._enabled:
             output = self._execute_after_build(output)
             self._logger.debug(
-                "<%s>(%s) after build graph[%d](%s)",
+                "%s.after_build(%s) graph[%d](%s)",
                 self.tool_type().upper(),
                 self._stage,
                 self._graph_id,
@@ -391,10 +405,10 @@ class BaseTool(object):
             self._graph_id = self._infer_graph_id(kwargs)
             if self.should_log():
                 self._logger.debug(
-                    "<%s>(%s) before forward[%d] for graph[%d]",
+                    "%s.before_forward[%d](%s) for graph[%d]",
                     self.tool_type().upper(),
-                    self._stage,
                     self._forward_cnt,
+                    self._stage,
                     self._graph_id,
                 )
             self._execute_before_forward(*args, **kwargs)
@@ -430,10 +444,10 @@ class BaseTool(object):
             output = self._execute_after_forward(output)
             if self.should_log():
                 self._logger.debug(
-                    "<%s>(%s) after forward[%d] for graph[%d]",
+                    "%s.after_forward[%d](%s) for graph[%d]",
                     self.tool_type().upper(),
-                    self._stage,
                     self._forward_cnt,
+                    self._stage,
                     self._graph_id,
                 )
             self._forward_cnt += 1
@@ -475,19 +489,36 @@ class BaseTool(object):
             The processed tensor.
         """
 
-        edge_id = self.to_edge_id(name, consumer)
-        strategy = self._get_strategy(name, consumer)
-        if edge_id not in self._tensor_status:
-            self._tensor_status[edge_id] = {}
-        if "process" not in self._tensor_status[edge_id]:
-            self._tensor_status[edge_id]["process"] = strategy and self._check_tensor(
-                name, consumer, scope, strategy
-            )
-        if not self._tensor_status[edge_id]["process"]:
+        if not self._support_scope(scope):
             return tensor
-        return self._process_tensor(tensor, name, consumer, scope, strategy)
+        strategy = self._get_tensor_strategy(name, consumer)
+        if not strategy:
+            return tensor
+        process = self._get_tensor_cache(name, consumer, "process")
+        if process is None:
+            process = self._check_tensor(name, consumer, strategy)
+            self._save_tensor_cache(name, consumer, "process", process)
+        if not process:
+            return tensor
+        return self._process_tensor(tensor, name, consumer, strategy)
 
-    def _check_tensor(self, name: str, consumer: str, scope: str, strategy: Strategy) -> bool:
+    def _support_scope(self, scope: str) -> bool:
+        """Check if the scope si supported
+
+        Parameters
+        -------
+        scope: str
+            The scope mark teacher| student| null
+
+        Returns
+        -------
+        vaild: bool
+            Whether to process the tensor.
+        """
+
+        return True
+
+    def _check_tensor(self, name: str, consumer: str, strategy: Strategy) -> bool:
         """Check if the tensor should be processed
 
         Parameters
@@ -496,8 +527,6 @@ class BaseTool(object):
             The name of the tensor.
         consumer: str
             The name of the consumer.
-        scope: str
-            The scope mark teacher| student| null
         strategy: Strategy
             The strategy for the tensor
 
@@ -509,9 +538,7 @@ class BaseTool(object):
 
         return True
 
-    def _process_tensor(
-        self, tensor: Any, name: str, consumer: str, scope: str, strategy: Strategy
-    ) -> Any:
+    def _process_tensor(self, tensor: Any, name: str, consumer: str, strategy: Strategy) -> Any:
         """Process tensor
 
         Parameters
@@ -522,8 +549,6 @@ class BaseTool(object):
             The name of the tensor.
         consumer: str
             The name of the consumer.
-        scope: str
-            The scope mark teacher| student| null
         strategy: Strategy
             The strategy for the tensor
 
@@ -535,6 +560,35 @@ class BaseTool(object):
 
         return tensor
 
+    def load_cache(self, cache_dir: msc_utils.MSCDirectory, cache_info: dict):
+        """Save runner to cache
+
+        Parameters
+        -------
+        cache_dir: MSCDirectory
+            cache path for save/load info
+        cache_info: dict
+            The cache_info
+        """
+
+        return None
+
+    def save_cache(self, cache_dir: msc_utils.MSCDirectory) -> dict:
+        """Save runner to cache
+
+        Parameters
+        -------
+        cache_dir: MSCDirectory
+            cache path for save/load info
+
+        Returns
+        -------
+        cache_info: dict
+            The cache_info.
+        """
+
+        return {}
+
     def visualize(self, visual_dir: msc_utils.MSCDirectory):
         """Visualize MSCGraphs
 
@@ -544,7 +598,7 @@ class BaseTool(object):
             Visualize path for saving graph
         """
 
-        return
+        return None
 
     def update_plan(self, plan: dict):
         """Update the plan
@@ -557,9 +611,29 @@ class BaseTool(object):
 
         self._plan.update(plan)
 
-    def get_plan(self) -> dict:
+    def get_plan(self, name: str) -> dict:
+        """Get the plan for name
+
+        Parameters
+        ----------
+        name: str
+            The plan name.
+
+        Returns
+        -------
+        plan: dict
+            The plan of the name.
+        """
+
+        return self._plan.get(name, {})
+
+    def finalize(self) -> dict:
         """Get the plan"""
 
+        if self._plan:
+            self._logger.debug(
+                "%s(%s) planed %d tensors", self.tool_type().upper(), self._stage, len(self._plan)
+            )
         return self._plan
 
     def enable(self):
@@ -582,7 +656,7 @@ class BaseTool(object):
 
         self._is_training = False
 
-    def to_edge_id(self, name: str, consumer: str) -> str:
+    def to_tensor_id(self, name: str, consumer: str) -> str:
         """Concat name to unique id
 
         Parameters
@@ -594,18 +668,18 @@ class BaseTool(object):
 
         Returns
         -------
-        edge_id: str
+        tensor_id: str
            The unique name of edge.
         """
 
         return "{}-c-{}".format(name, consumer)
 
-    def from_edge_id(self, edge_id: str) -> Tuple[str]:
+    def from_tensor_id(self, tensor_id: str) -> Tuple[str]:
         """Split name from unique id
 
         Parameters
         ----------
-        edge_id: str
+        tensor_id: str
            The unique name of edge.
 
         Returns
@@ -616,7 +690,7 @@ class BaseTool(object):
             The name of consumer.
         """
 
-        return edge_id.split("-c-")
+        return tensor_id.split("-c-")
 
     def is_weight(self, name: str) -> bool:
         """Check if the tensor is weight
@@ -632,7 +706,7 @@ class BaseTool(object):
             Whether the name is weight.
         """
 
-        return name in self._weight_names
+        return name in self._weights
 
     def should_log(self) -> bool:
         """Check if should log
@@ -763,12 +837,11 @@ class BaseTool(object):
             The data.
         """
 
-        for sub_weights in self._weights:
-            if name in sub_weights:
-                return msc_utils.cast_array(sub_weights[name])
+        if name in self._weights:
+            return msc_utils.cast_array(self._weights[name])
         raise Exception("Can not find data " + str(name))
 
-    def _parse_strategy(self, strategy_list: dict):
+    def _parse_strategys(self, strategy_list: dict):
         """Parse the strategy to get valid strategy
 
         Parameters
@@ -829,7 +902,50 @@ class BaseTool(object):
                 strategys["default"].add_executor(stage, method, copy.deepcopy(stra))
         return strategys
 
-    def _get_strategy(self, name: str, consumer: str) -> dict:
+    def _save_tensor_cache(self, name: str, consumer: str, key: str, value: Any):
+        """Save the data to tensor cache
+
+        Parameters
+        -------
+        name: str
+            The tensor name.
+        consumer: str
+            The name of the consumer.
+        key: str
+            The data key.
+        value: any
+            The value to cache.
+        """
+
+        tensor_id = self.to_tensor_id(name, consumer)
+        if tensor_id not in self._tensor_cache:
+            self._tensor_cache[tensor_id] = {}
+        self._tensor_cache[tensor_id][key] = value
+
+    def _get_tensor_cache(self, name: str, consumer: str, key: str) -> Any:
+        """Get the cached tensor data
+
+        Parameters
+        -------
+        name: str
+            The tensor name.
+        consumer: str
+            The name of the consumer.
+        key: str
+            The data key.
+
+        Returns
+        -------
+        value: any
+            The cached value.
+        """
+
+        tensor_id = self.to_tensor_id(name, consumer)
+        if tensor_id not in self._tensor_cache:
+            return None
+        return self._tensor_cache[tensor_id].get(key)
+
+    def _get_tensor_strategy(self, name: str, consumer: str) -> dict:
         """Get the method by name
 
         Parameters
@@ -845,25 +961,31 @@ class BaseTool(object):
             The method.
         """
 
-        if self.is_weight(name):
-            consumer = self.find_node(consumer)
-            name_refs = [consumer.name + ".weight", consumer.optype + ".weight"]
-        elif consumer == "exit":
-            producer = self.find_producer(name)
-            name_refs = [producer.name + ".output", producer.optype + ".output"]
-        else:
-            consumer = self.find_node(consumer)
-            producer = self.find_producer(name)
-            name_refs = [
-                consumer.name + ".input",
-                consumer.optype + ".input",
-                producer.name + ".output",
-                producer.optype + ".output",
-            ]
-        for n in name_refs:
-            if n in self._strategys:
-                return self._strategys[n]
-        return self._strategys.get("default")
+        tensor_id = self.to_tensor_id(name, consumer)
+        if "strategy" not in self._tensor_cache.get(tensor_id, {}):
+            if self.is_weight(name):
+                consumer = self.find_node(consumer)
+                name_refs = [consumer.name + ".weight", consumer.optype + ".weight"]
+            elif consumer == "exit":
+                producer = self.find_producer(name)
+                name_refs = [producer.name + ".output", producer.optype + ".output"]
+            else:
+                consumer = self.find_node(consumer)
+                producer = self.find_producer(name)
+                name_refs = [
+                    consumer.name + ".input",
+                    consumer.optype + ".input",
+                    producer.name + ".output",
+                    producer.optype + ".output",
+                ]
+            strategy = None
+            for n in name_refs:
+                if n in self._strategys:
+                    strategy = self._strategys[n]
+                    break
+            strategy = strategy or self._strategys.get("default")
+            self._save_tensor_cache(name, consumer, "strategy", strategy)
+        return self._get_tensor_cache(name, consumer, "strategy")
 
     @classmethod
     def tool_type(cls):

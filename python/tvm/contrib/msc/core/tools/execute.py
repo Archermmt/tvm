@@ -45,7 +45,7 @@ def _get_tool_key(tool_type: str) -> str:
         return MSCKey.QUANTIZER
     if tool_type == ToolType.DISTILL:
         return MSCKey.DISTILLER
-    if tool_type == ToolType.DEBUG:
+    if tool_type == ToolType.TRACK:
         return MSCKey.DEBUGGER
     raise TypeError("Unexpected tool type " + str(tool_type))
 
@@ -70,7 +70,7 @@ def add_tool(tool: BaseTool, tool_type: str, tag: str = "main"):
     return tool
 
 
-def create_tool(framework: str, tool_type: str, config: dict, tag: str = "main") -> BaseTool:
+def create_tool(framework: str, tool_type: str, tag: str = "main", **config) -> BaseTool:
     """Create tool by type, config and tag
 
     Parameters
@@ -79,10 +79,10 @@ def create_tool(framework: str, tool_type: str, config: dict, tag: str = "main")
         The framework for implement
     tool_type: str
         The type of the tool prune| quantize| distill...
-    config: dict
-        The config of tool.
     tag: str
         The tag of the tool.
+    config: dict
+        The config of tool.
     """
 
     tool_style = config.pop("tool_style") if "tool_style" in config else "default"

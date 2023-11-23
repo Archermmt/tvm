@@ -28,7 +28,7 @@ from .namespace import MSCMap, MSCKey
 class MSCStage(object):
     """Enum all msc stage names"""
 
-    INIT = "init"
+    SETUP = "setup"
     PREPARE = "prepare"
     PARSE = "parse"
     BASELINE = "baseline"
@@ -38,7 +38,7 @@ class MSCStage(object):
     OPTIMIZE = "optimize"
     COMPILE = "compile"
     SUMMARY = "summary"
-    ALL = [INIT, PREPARE, PARSE, BASELINE, PRUNE, QUANTIZE, DISTILL, OPTIMIZE, COMPILE, SUMMARY]
+    ALL = [SETUP, PREPARE, PARSE, BASELINE, PRUNE, QUANTIZE, DISTILL, OPTIMIZE, COMPILE, SUMMARY]
 
     @classmethod
     def all_stages(cls) -> List[str]:
@@ -67,11 +67,11 @@ def time_stamp(stage: str, log_stage: bool = True, logger: logging.Logger = None
         if log_stage:
             last_stage = MSCMap.get(MSCKey.MSC_STAGE)
             if last_stage:
-                end_msg = "[MSC] End {}".format(last_stage)
+                end_msg = "[MSC] End {}".format(last_stage.upper())
                 logger.info("\n{0} {1} {0}\n".format("#" * 20, end_msg.center(40)))
-            start_msg = "[MSC] Start {}".format(stage)
+            start_msg = "[MSC] Start {}".format(stage.upper())
             logger.info("\n{0} {1} {0}".format("#" * 20, start_msg.center(40)))
-        MSCMap.set(MSCKey.MSC_STAGE, stage)
+        MSCMap.set(MSCKey.MSC_STAGE, stage.upper())
     elif log_stage:
         logger.debug("Start {}".format(stage))
 

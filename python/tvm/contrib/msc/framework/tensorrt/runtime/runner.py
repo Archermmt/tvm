@@ -31,12 +31,18 @@ from tvm.contrib.msc.framework.tensorrt import tools
 class TensorRTRunner(BYOCRunner):
     """Runner of tensorrt"""
 
-    def setup(self):
-        """Setup the runner"""
+    def setup(self) -> dict:
+        """Setup the runner
 
-        super().setup()
+        Returns
+        -------
+        info: dict
+            The setup info.
+        """
+
         if not self._device.startswith("cuda"):
             self._device = "cuda"
+        return super().setup()
 
     @classmethod
     def target_transform(cls, mod: tvm.IRModule):

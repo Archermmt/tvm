@@ -14,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""tvm.contrib.msc.core.tools.debug.method"""
+"""tvm.contrib.msc.core.tools.track.method"""
 
 from typing import List, Dict
 import numpy as np
@@ -24,27 +24,30 @@ from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 
 
-class DebugMethod(object):
-    """Default debug method"""
+class TrackMethod(object):
+    """Default track method"""
 
     @classmethod
     def save_compared(
         cls,
-        debugger: BaseTool,
-        name: str,
+        tracker: BaseTool,
         data: np.ndarray,
+        name: str,
+        consumer: str,
         compare_to: Dict[str, List[str]],
     ) -> np.ndarray:
-        """compare and save the data
+        """Compare and save the data
 
         Parameters
         ----------
-        debugger: BaseDebugger
-            The debugger
-        name: str
-            The name of the weight.
+        tracker: BaseTracker
+            The tracker
         data: np.ndarray
             The source data.
+        name: str
+            The name of the tensor.
+        consumer: str
+            The name of the consumer.
         stage: str
             The current stage of tool.
         compare_to: dict
@@ -58,20 +61,23 @@ class DebugMethod(object):
             The plan of the tensor.
         """
 
+        data = msc_utils.cast_array(data)
         config = {"info": msc_utils.inspect_array(data)}
         # save the data
-        debugger._saver.save_datas({name: data}, debugger._forward_cnt)
-        debugger._logger.debug("Save(%s) %s: %s", debugger._stage, name, msc_utils.MSCArray(data))
+        tracker._saver.save_datas({name: data}, tracker._forward_cnt)
+        tracker._logger.debug("Save(%s) %s: %s", tracker._stage, name, msc_utils.MSCArray(data))
         # compare datas
-        if debugger._stage in compare_to:
+        if tracker._stage in compare_to:
             diffs = {}
-            for stage in compare_to[debugger._stage]:
-                if stage in debugger._loaders:
-                    golden = debugger._loaders[stage].load_data(name, debugger._forward_cnt)
+            for stage in compare_to[tracker._stage]:
+                if stage in tracker._loaders:
+                    if not tracker._loaders[stage].has_data(name, tracker._forward_cnt):
+                        continue
+                    golden = tracker._loaders[stage].load_data(name, tracker._forward_cnt)
                     report = msc_utils.compare_arrays({name: golden}, {name: data})
                     if report["passed"] == 0:
-                        debugger._logger.info(
-                            "Diff(%s2%s) %s: %s", stage, debugger._stage, name, report["info"][name]
+                        tracker._logger.info(
+                            "Diff(%s2%s) %s: %s", stage, tracker._stage, name, report["info"][name]
                         )
                     diffs[stage] = {
                         "pass": report["passed"] == 1,
@@ -86,7 +92,7 @@ class DebugMethod(object):
 
     @classmethod
     def tool_type(cls):
-        return ToolType.DEBUG
+        return ToolType.TRACK
 
 
-msc_utils.register_tool_method(DebugMethod)
+msc_utils.register_tool_method(TrackMethod)

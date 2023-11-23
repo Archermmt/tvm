@@ -14,23 +14,23 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""tvm.contrib.msc.framework.tvm.tools.debug.debugger"""
+"""tvm.contrib.msc.framework.tvm.tools.quantize.quantizer"""
 
 from typing import List, Union
 
 import tvm
 from tvm.contrib.msc.core.tools.tool import ToolType, Strategy
-from tvm.contrib.msc.core.tools.debug import BaseDebugger
+from tvm.contrib.msc.core.tools.quantize import BaseQuantizer
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 
 
-class TVMDebuggerFactory(object):
-    """Debugger factory for tvm"""
+class TVMQuantizerFactory(object):
+    """Quantizer factory for tvm"""
 
-    def create(self, base_cls: BaseDebugger):
-        class debugger(base_cls):
-            """Adaptive debugger for tvm"""
+    def create(self, base_cls: BaseQuantizer):
+        class quantizer(base_cls):
+            """Adaptive quantizer for tvm"""
 
             def _execute_before_build(self, block_builder: tvm.relax.BlockBuilder):
                 """Execute before model build
@@ -42,7 +42,8 @@ class TVMDebuggerFactory(object):
                 """
 
                 self._block_builder = block_builder
-                self._output_vars, self._debug_names = {}, []
+                self._gather_vars, self._gather_names = {}, []
+                super()._execute_before_build(block_builder)
 
             def _execute_after_build(
                 self, output: Union[tvm.relax.Var, List[tvm.relax.DataflowVar]]
@@ -60,11 +61,13 @@ class TVMDebuggerFactory(object):
                     The modified outputs var.
                 """
 
-                self._debug_names = list(sorted(self._output_vars.keys()))
-                debug_vars = [self._output_vars[o]["var"] for o in self._debug_names]
+                if self._calibrated:
+                    return super()._execute_after_build(output)
+                self._gather_names = list(sorted(self._gather_vars.keys()))
+                gather_vars = [self._gather_vars[o]["var"] for o in self._gather_names]
                 if isinstance(output, tvm.relax.Var):
-                    return [output] + debug_vars
-                return output + debug_vars
+                    return super()._execute_after_build([output] + gather_vars)
+                return super()._execute_after_build(output + gather_vars)
 
             def _execute_after_forward(
                 self, outputs: List[tvm.runtime.NDArray]
@@ -82,20 +85,19 @@ class TVMDebuggerFactory(object):
                     The modified output ndarray.
                 """
 
-                output_num = len(outputs) - len(self._debug_names)
-                for data, name in zip(outputs[output_num:], self._debug_names):
-                    self._debug_tensor(data, name, self._output_vars[name]["strategy"])
+                if self.calibrated:
+                    return super()._execute_after_forward(outputs)
+                output_num = len(outputs) - len(self._gather_names)
+                for data, name in zip(outputs[output_num:], self._gather_names):
+                    info = self._gather_vars[name]
+                    for consumer, strategy in zip(info["consumers"], info["strategys"]):
+                        self._gather_tensor(data, name, consumer, strategy)
                 if output_num == 1:
-                    return outputs[0]
-                return outputs[:output_num]
+                    return super()._execute_after_forward(outputs[0])
+                return super()._execute_after_forward(outputs[:output_num])
 
             def _process_tensor(
-                self,
-                tensor: tvm.relax.DataflowVar,
-                name: str,
-                consumer: str,
-                scope: str,
-                strategy: Strategy,
+                self, tensor: tvm.relax.DataflowVar, name: str, consumer: str, strategy: Strategy
             ) -> tvm.relax.DataflowVar:
                 """Process tensor
 
@@ -107,8 +109,6 @@ class TVMDebuggerFactory(object):
                     The name of the tensor.
                 consumer: str
                     The name of the consumer.
-                scope: str
-                    The scope mark teacher| student| null
                 strategy: Strategy
                     The strategy for the tensor
 
@@ -118,21 +118,30 @@ class TVMDebuggerFactory(object):
                     The processed tensor.
                 """
 
-                if self.is_weight(name):
-                    return self._debug_tensor(self.get_data(name), name, strategy)
-                if name not in self._output_vars:
-                    self._output_vars[name] = {"strategy": strategy, "var": tensor}
-                    self._debug_names.append(name)
-                return tensor
+                if not self.calibrated:
+                    if self.is_weight(name):
+                        return self._gather_tensor(self.get_data(name), name, consumer, strategy)
+                    if name not in self._gather_vars:
+                        self._gather_vars[name] = {
+                            "consumers": [consumer],
+                            "strategys": [strategy],
+                            "var": tensor,
+                        }
+                        self._gather_names.append(name)
+                    else:
+                        self._gather_vars[name]["consumers"].append(consumer)
+                        self._gather_vars[name]["strategys"].append(strategy)
+                    return tensor
+                return self._quantize_tensor(tensor, name, consumer, strategy)
 
             @classmethod
             def framework(cls):
                 return MSCFramework.TVM
 
-        return debugger
+        return quantizer
 
 
-factory = TVMDebuggerFactory()
-tools = msc_utils.get_registered_tool_cls(MSCFramework.MSC, ToolType.DEBUG, tool_style="all")
+factory = TVMQuantizerFactory()
+tools = msc_utils.get_registered_tool_cls(MSCFramework.MSC, ToolType.QUANTIZE, tool_style="all")
 for tool in tools.values():
     msc_utils.register_tool_cls(factory.create(tool))

@@ -148,6 +148,65 @@ struct JsonMSCJoint {
 };
 
 /*!
+ * \brief Json serialize and deserialize for WeightJoint.
+ *  WeightJoint is node in WeightGraph with name, wtype and attrbutes.
+ *  WeightJoint has MSCTensor as weight.
+ */
+struct JsonWeightJoint {
+  size_t index;
+  std::string name;
+  std::string shared_ref;
+  std::string weight_type;
+  JsonMSCTensor weight;
+  std::vector<std::string> parents;
+  std::vector<std::string> friends;
+  std::unordered_map<std::string, std::string> attrs;
+
+  void Save(dmlc::JSONWriter* writer) const {
+    writer->BeginObject();
+    writer->WriteObjectKeyValue("index", index);
+    writer->WriteObjectKeyValue("name", name);
+    writer->WriteObjectKeyValue("shared_ref", shared_ref);
+    writer->WriteObjectKeyValue("weight_type", weight_type);
+    writer->WriteObjectKeyValue("weight", weight);
+    writer->WriteObjectKeyValue("parents", parents);
+    writer->WriteObjectKeyValue("friends", friends);
+    writer->WriteObjectKeyValue("attrs", attrs);
+    writer->EndObject();
+  }
+
+  void Load(dmlc::JSONReader* reader) {
+    int bitmask = 0;
+    std::string key;
+    reader->BeginObject();
+    while (reader->NextObjectItem(&key)) {
+      if (key == "index") {
+        reader->Read(&index);
+        bitmask |= 1;
+      } else if (key == "name") {
+        reader->Read(&name);
+        bitmask |= 2;
+      } else if (key == "shared_ref") {
+        reader->Read(&shared_ref);
+      } else if (key == "weight_type") {
+        reader->Read(&weight_type);
+        bitmask |= 4;
+      } else if (key == "weight") {
+        reader->Read(&weight);
+        bitmask |= 8;
+      } else if (key == "parents") {
+        reader->Read(&parents);
+      } else if (key == "friends") {
+        reader->Read(&friends);
+      } else if (key == "attrs") {
+        reader->Read(&attrs);
+      }
+    }
+    ICHECK_EQ(bitmask, 1 | 2 | 4 | 8) << "index, name, weight_type and weight should be given";
+  }
+};
+
+/*!
  * \brief Json serialize and deserialize for MSCGraph.
  *  MSCGraph is core of MSC.
  *  MSCGraph contains MSCJoints as nodes and MSCTensors as edges.
@@ -187,6 +246,39 @@ struct JsonMSCGraph {
       }
     }
     ICHECK_EQ(bitmask, 1 | 2 | 4 | 8) << "name, inputs, outputs and nodes should be given";
+  }
+};
+
+/*!
+ * \brief Json serialize and deserialize for WeightGraph.
+ *  WeightGraph is core of MSC.prune.
+ *  WeightGraph contains WeightJoints as nodes.
+ */
+struct JsonWeightGraph {
+  std::string name;
+  std::vector<JsonWeightJoint> nodes;
+
+  void Save(dmlc::JSONWriter* writer) const {
+    writer->BeginObject();
+    writer->WriteObjectKeyValue("name", name);
+    writer->WriteObjectKeyValue("nodes", nodes);
+    writer->EndObject();
+  }
+
+  void Load(dmlc::JSONReader* reader) {
+    int bitmask = 0;
+    std::string key;
+    reader->BeginObject();
+    while (reader->NextObjectItem(&key)) {
+      if (key == "name") {
+        reader->Read(&name);
+        bitmask |= 1;
+      } else if (key == "nodes") {
+        reader->Read(&nodes);
+        bitmask |= 2;
+      }
+    }
+    ICHECK_EQ(bitmask, 1 | 2) << "name and nodes should be given";
   }
 };
 
@@ -494,6 +586,12 @@ class WeightJointNode : public BaseJointNode {
   MSCTensor weight;
   /*! \brief The friends of weight node. */
   mutable Array<BaseJoint> friends;
+  /*! \brief Export node to json. */
+  const JsonWeightJoint ToJson() const;
+  /*! \brief Load node from json struct. */
+  void FromJson(const JsonWeightJoint& j_joint, const Map<String, BaseJoint>& nodes);
+  /*! \brief Load node from json string. */
+  void FromJson(const std::string& json_str, const Map<String, BaseJoint>& nodes);
   /*! \brief Get parent from the node. */
   const WeightJoint ParentAt(int index) const;
   /*! \brief Get child from the node. */
@@ -544,6 +642,18 @@ class WeightJoint : public BaseJoint {
                       const Array<BaseJoint> parents,
                       const Map<String, String>& attrs = Map<String, String>(),
                       const Array<BaseJoint>& friends = Array<BaseJoint>());
+
+  /*!
+   * \brief The json constructor.
+   * \param j_joint The json describe of the node.
+   */
+  TVM_DLL WeightJoint(const JsonWeightJoint& j_joint, const Map<String, BaseJoint>& nodes);
+
+  /*!
+   * \brief The json constructor.
+   * \param json_str The json describe of the node.
+   */
+  TVM_DLL WeightJoint(const std::string& json_str, const Map<String, BaseJoint>& nodes);
 
   TVM_DEFINE_OBJECT_REF_METHODS(WeightJoint, BaseJoint, WeightJointNode);
 };
@@ -721,6 +831,12 @@ class WeightGraphNode : public BaseGraphNode {
              const Map<String, String>& relation_types);
   /*! \brief Find node in graph. */
   const WeightJoint FindNode(const String& name) const;
+  /*! \brief Export graph to json. */
+  const JsonWeightGraph ToJson() const;
+  /*! \brief Load graph from json. */
+  void FromJson(const JsonWeightGraph& json_str);
+  /*! \brief Load graph from json string. */
+  void FromJson(const std::string& json_str);
   /*! \brief Export graph to prototxt. */
   const String ToPrototxt() const;
 
@@ -750,6 +866,18 @@ class WeightGraph : public BaseGraph {
    */
   TVM_DLL WeightGraph(const MSCGraph& graph, const Map<String, Array<String>>& prunable_types,
                       const Map<String, String>& relation_types);
+
+  /*!
+   * \brief The json constructor.
+   * \param j_graph The json describe of the graph.
+   */
+  TVM_DLL WeightGraph(const JsonWeightGraph& j_graph);
+
+  /*!
+   * \brief The json constructor.
+   * \param json_str The json describe of the graph.
+   */
+  TVM_DLL WeightGraph(const std::string& json_str);
 
   TVM_DEFINE_OBJECT_REF_METHODS(WeightGraph, BaseGraph, WeightGraphNode);
 };

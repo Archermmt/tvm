@@ -478,6 +478,62 @@ WeightJoint::WeightJoint(int index, const String& name, const String& shared_ref
   data_ = std::move(n);
 }
 
+WeightJoint::WeightJoint(const JsonWeightJoint& j_joint, const Map<String, BaseJoint>& nodes) {
+  ObjectPtr<WeightJointNode> n = make_object<WeightJointNode>();
+  n->FromJson(j_joint, nodes);
+  data_ = std::move(n);
+}
+
+WeightJoint::WeightJoint(const std::string& json_str, const Map<String, BaseJoint>& nodes) {
+  ObjectPtr<WeightJointNode> n = make_object<WeightJointNode>();
+  n->FromJson(json_str, nodes);
+  data_ = std::move(n);
+}
+
+const JsonWeightJoint WeightJointNode::ToJson() const {
+  JsonWeightJoint j_joint;
+  j_joint.index = index;
+  j_joint.name = name;
+  j_joint.shared_ref = shared_ref;
+  j_joint.weight_type = weight_type;
+  j_joint.weight = weight->ToJson();
+  for (const auto& pair : attrs) {
+    j_joint.attrs[pair.first] = pair.second;
+  }
+  for (const auto& p : parents) {
+    j_joint.parents.push_back(Downcast<BaseJoint>(p)->name);
+  }
+  for (const auto& f : friends) {
+    j_joint.friends.push_back(Downcast<BaseJoint>(f)->name);
+  }
+
+  return j_joint;
+}
+
+void WeightJointNode::FromJson(const JsonWeightJoint& j_joint,
+                               const Map<String, BaseJoint>& nodes) {
+  index = j_joint.index;
+  name = j_joint.name;
+  shared_ref = j_joint.shared_ref;
+  weight_type = j_joint.weight_type;
+  weight = MSCTensor(j_joint.weight);
+  for (const auto& pair : j_joint.attrs) {
+    attrs.Set(pair.first, pair.second);
+  }
+  for (const auto& p_name : j_joint.parents) {
+    ICHECK(nodes.count(p_name)) << "Can not find parent " << p_name;
+    parents.push_back(nodes[p_name]);
+  }
+}
+
+void WeightJointNode::FromJson(const std::string& json_str, const Map<String, BaseJoint>& nodes) {
+  std::istringstream is(json_str);
+  dmlc::JSONReader reader(&is);
+  JsonWeightJoint j_joint;
+  reader.Read(&j_joint);
+  FromJson(j_joint, nodes);
+}
+
 const WeightJoint WeightJointNode::ParentAt(int index) const {
   size_t v_index = CommonUtils::GetIndex(index, parents.size());
   return Downcast<WeightJoint>(parents[v_index]);
@@ -793,6 +849,18 @@ WeightGraph::WeightGraph(const MSCGraph& graph, const Map<String, Array<String>>
   data_ = std::move(n);
 }
 
+WeightGraph::WeightGraph(const JsonWeightGraph& j_graph) {
+  ObjectPtr<WeightGraphNode> n = make_object<WeightGraphNode>();
+  n->FromJson(j_graph);
+  data_ = std::move(n);
+}
+
+WeightGraph::WeightGraph(const std::string& json_str) {
+  ObjectPtr<WeightGraphNode> n = make_object<WeightGraphNode>();
+  n->FromJson(json_str);
+  data_ = std::move(n);
+}
+
 void WeightGraphNode::Build(const MSCGraph& graph, const Map<String, Array<String>>& prunable_types,
                             const Map<String, String>& relation_types) {
   auto sort_nodes = [&graph](const BaseJoint& node_a, const BaseJoint& node_b) {
@@ -928,6 +996,47 @@ void WeightGraphNode::Build(const MSCGraph& graph, const Map<String, Array<Strin
 const WeightJoint WeightGraphNode::FindNode(const String& name) const {
   ICHECK(nodes.count(name)) << "Can not find node " << name;
   return Downcast<WeightJoint>(nodes[name]);
+}
+
+const JsonWeightGraph WeightGraphNode::ToJson() const {
+  JsonWeightGraph j_graph;
+  j_graph.name = name;
+  for (const auto& n : node_names) {
+    const auto& node = FindNode(n);
+    j_graph.nodes.push_back(node->ToJson());
+  }
+  return j_graph;
+}
+
+void WeightGraphNode::FromJson(const JsonWeightGraph& j_graph) {
+  name = j_graph.name;
+  Map<String, BaseJoint> loaded_nodes;
+  for (const auto& n : j_graph.nodes) {
+    const auto& node = WeightJoint(n, loaded_nodes);
+    loaded_nodes.Set(node->name, node);
+    for (const auto& p : node->parents) {
+      Downcast<BaseJoint>(p)->AddChild(node);
+    }
+    node_names.push_back(node->name);
+    nodes.Set(node->name, node);
+  }
+  // set friends
+  for (const auto& j_joint : j_graph.nodes) {
+    name = j_joint.name;
+    const auto& node = Downcast<WeightJoint>(nodes[name]);
+    for (const auto& f_name : j_joint.friends) {
+      ICHECK(nodes.count(f_name)) << "Can not find friend " << f_name;
+      node->friends.push_back(nodes[f_name]);
+    }
+  }
+}
+
+void WeightGraphNode::FromJson(const std::string& json_str) {
+  std::istringstream is(json_str);
+  dmlc::JSONReader reader(&is);
+  JsonWeightGraph j_graph;
+  reader.Read(&j_graph);
+  FromJson(j_graph);
 }
 
 const String WeightGraphNode::ToPrototxt() const {
@@ -1260,6 +1369,20 @@ TVM_REGISTER_GLOBAL("msc.core.WeightGraphHasNode")
 TVM_REGISTER_GLOBAL("msc.core.WeightGraphFindNode")
     .set_body_typed([](const WeightGraph& graph, const String& name) -> WeightJoint {
       return graph->FindNode(name);
+    });
+
+TVM_REGISTER_GLOBAL("msc.core.WeightGraphToJson")
+    .set_body_typed([](const WeightGraph& graph) -> String {
+      const auto& graph_json = graph->ToJson();
+      std::ostringstream os;
+      dmlc::JSONWriter writer(&os);
+      graph_json.Save(&writer);
+      return os.str();
+    });
+
+TVM_REGISTER_GLOBAL("msc.core.WeightGraphFromJson")
+    .set_body_typed([](const String& graph_json) -> WeightGraph {
+      return WeightGraph(graph_json);
     });
 
 TVM_REGISTER_GLOBAL("msc.core.WeightGraphToPrototxt")

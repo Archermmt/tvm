@@ -165,7 +165,6 @@ class MSCJoint(BaseJoint):
         outputs: List[MSCTensor],
         weights: Dict[str, MSCTensor],
     ):
-
         parents = [i[0] for i in inputs]
         out_indices = [i[1] for i in inputs]
         self.__init_handle_by_constructor__(
@@ -378,7 +377,6 @@ class WeightJoint(BaseJoint):
         parents: List[BaseJoint],
         friends: List[BaseJoint],
     ):
-
         self.__init_handle_by_constructor__(
             _ffi_api.WeightJoint,
             index,
@@ -822,6 +820,66 @@ class WeightGraph(Object):
 
         for n in self.node_names:
             yield self.find_node(n)
+
+    def to_json(self) -> str:
+        """Dump the graph to json.
+
+        Returns
+        -------
+        graph_json: string
+            The graph in json format.
+        """
+
+        return _ffi_api.WeightGraphToJson(self)
+
+    def inspect(self) -> dict:
+        """Extract important info of the graph.
+
+        Returns
+        -------
+        graph_des: dict
+            The graph description in json format.
+        """
+
+        graph_des = {
+            "nodes": {"total": 0},
+        }
+        for node in self.get_nodes():
+            graph_des["nodes"]["total"] += 1
+            if node.weight_type not in graph_des["nodes"]:
+                graph_des["nodes"][node.weight_type] = 1
+            else:
+                graph_des["nodes"][node.weight_type] += 1
+        return graph_des
+
+    @classmethod
+    def from_json(cls, json_str: str) -> BaseGraph:
+        """Load the graph from json.
+
+        Parameters
+        ----------
+        json_str: string
+            The file_path or json string.
+
+        Returns
+        -------
+        graph: WeightGraph
+            The graph.
+        """
+
+        dict_obj = msc_utils.load_dict(json_str)
+        return _ffi_api.WeightGraphFromJson(msc_utils.dump_dict(dict_obj))
+
+    def clone(self) -> BaseGraph:
+        """Clone the graph.
+
+        Returns
+        -------
+        new_graph: MSCGraph
+            The cloned graph.
+        """
+
+        return MSCGraph.from_json(self.to_json())
 
     def visualize(self, path: Optional[str] = None) -> str:
         """Dump the graph to prototxt format.

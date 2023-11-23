@@ -61,13 +61,19 @@ class WrapSession(tf_v1.Session):
 class TensorflowRunner(ModelRunner):
     """Runner of Tensorflow"""
 
-    def setup(self):
-        """Setup the runner"""
+    def setup(self) -> dict:
+        """Setup the runner
 
-        super().setup()
+        Returns
+        -------
+        info: dict
+            The setup info.
+        """
+
         self._tf_graph = None
         self._tf_outputs = None
         self._session = None
+        return super().setup()
 
     def destory(self):
         """Destory runner"""

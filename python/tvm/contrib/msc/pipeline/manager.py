@@ -18,7 +18,6 @@
 """tvm.contrib.msc.pipeline.manager"""
 
 import os
-import json
 import time
 from typing import Dict, Any
 import traceback
@@ -47,6 +46,7 @@ class BaseManager(object):
         # check config
         for stage in ["inputs", "outputs", "dataset", "prepare", "compile"]:
             assert stage in config, "{} should be given to run the pipeline".format(stage)
+        self._model = model
         self._workspace = msc_utils.set_workspace(config.get("workspace"))
         log_path = config.get("log_path") or self._workspace.relpath("MSC_LOG", keep_history=False)
         if config.get("debug", False) and "verbose" not in config:
@@ -54,24 +54,37 @@ class BaseManager(object):
         else:
             verbose = config.get("verbose", "info")
         self._logger = msc_utils.set_global_logger(verbose, log_path)
-        msc_utils.time_stamp(MSCStage.INIT)
-        config_info = {"workspace": self._workspace.path, "config": config}
-        self._logger.info(msc_utils.msg_block("CONFIG", config_info))
-        self._model = model
+        msc_utils.time_stamp(MSCStage.SETUP)
+        self._logger.info(msc_utils.msg_block("SETUP", self.setup(config)))
+
+    def setup(self, config: dict) -> dict:
+        """Setup the manager
+
+        Parameters
+        ----------
+        config: dict
+            The config for manager.
+
+        Returns
+        -------
+        info: dict
+            The setup info.
+        """
+
         self._config, self._debug_config = self.update_config(config)
         self._tools_config = {}
         self._relax_mod, self._runner = None, None
-        self._sample_inputs = None
+        self._data_loader, self._sample_inputs = None, None
         self._report = {
             "success": False,
             "info": {
                 "workspace": self._workspace.path,
-                "log": log_path,
                 "model_type": self._config["model_type"],
             },
             "duration": {},
             "profile": {},
         }
+        return {"workspace": self._workspace.path, "config": config}
 
     def update_config(self, config: dict) -> dict:
         """Update config
@@ -79,7 +92,7 @@ class BaseManager(object):
         Parameters
         ----------
         config: dict
-            The config for pipeline.
+            The config for manager.
 
         Returns
         -------
@@ -100,30 +113,34 @@ class BaseManager(object):
             config = self._update_runner_config(config, stage)
         config = self._update_tool_config(config)
         debug_config = {}
+
+        def _set_debug(stage, stage_config, default=None):
+            if "debug" in stage_config:
+                debug_config[stage] = stage_config.pop("debug")
+            elif default is not None:
+                debug_config[stage] = default
+            return debug_config
+
         if "debug" in config:
-            debug_config.update(
-                {stage: True for stage in ["baseline", "optimize", "compile"] if stage in config}
-            )
-            if "optimize" in config:
-                debug_config.update(
-                    {
-                        t_type: True
-                        for t_type in ToolType.all_types()
-                        if t_type in config["optimize"]
-                    }
-                )
-        else:
             for stage in ["baseline", "optimize", "compile"]:
                 if stage not in config:
                     continue
-                if config[stage].get("debug", False):
-                    debug_config[stage] = True
+                debug_config = _set_debug(stage, config[stage], config["debug"])
             if "optimize" in config:
                 for t_type in ToolType.all_types():
                     if t_type not in config["optimize"]:
                         continue
-                    t_config = config["optimize"][t_type]
-                    debug_config[t_type] = t_config.pop("debug") if "debug" in t_config else False
+                    debug_config = _set_debug(t_type, config["optimize"][t_type], config["debug"])
+        else:
+            for stage in ["baseline", "optimize", "compile"]:
+                if stage not in config:
+                    continue
+                debug_config = _set_debug(stage, config[stage])
+            if "optimize" in config:
+                for t_type in ToolType.all_types():
+                    if t_type not in config["optimize"]:
+                        continue
+                    debug_config = _set_debug(t_type, config["optimize"][t_type])
         ordered_keys = [
             "model_type",
             "inputs",
@@ -149,7 +166,9 @@ class BaseManager(object):
         err_msg = None
         use_cache = self._config.get("use_cache", True)
         try:
-            self._sample_inputs = self.prepare(self._config["prepare"], use_cache)
+            self._data_loader, self._sample_inputs = self.prepare(
+                self._config["prepare"], use_cache
+            )
             self._relax_mod = self.parse(self._config["parse"], use_cache)
             if "baseline" in self._config:
                 self._runner = self.baseline(self._config["baseline"], use_cache)
@@ -179,49 +198,59 @@ class BaseManager(object):
         """
 
         msc_utils.time_stamp(MSCStage.PREPARE)
+
+        # create data loader
+        source_loader = self._config["dataset"].get("loader")
+        max_batch = self._config["dataset"].get("max_batch", 5)
+        assert source_loader, "Dataset loader should be given for msc pipeline"
+        if source_loader.startswith("from_random"):
+
+            def get_random():
+                for _ in range(max_batch):
+                    yield {i[0]: np.random.rand(*i[1]).astype(i[2]) for i in self._config["inputs"]}
+
+            data_loader, source_type = get_random, "Random"
+        elif msc_utils.is_io_dataset(source_loader):
+
+            def load_datas():
+                for inputs, _ in msc_utils.IODataLoader(data_loader, end=max_batch):
+                    yield inputs
+
+            data_loader, source_type = load_datas, "IOData"
+        elif callable(source_loader):
+
+            def get_source():
+                for idx, inputs in enumerate(source_loader()):
+                    if idx >= max_batch:
+                        break
+                    yield inputs
+
+            data_loader, source_type = get_source, "Custom"
+        else:
+            raise TypeError(
+                "Unexpected source loader {}({})".format(source_loader, type(source_loader))
+            )
+        self._logger.info("Create data loader(%s) %s", source_type, data_loader)
+
+        # create golden
         golden_folder = msc_utils.get_dataset_dir().relpath("Golden", use_cache)
         input_names, sample_inputs = [i[0] for i in self._config["inputs"]], None
-        report, source_type = {"golden_folder": golden_folder}, "Unknown"
+        report = {"golden_folder": golden_folder}
         runner_cls = self._get_runner_cls(self._config["model_type"])
         run_func = runner_cls.run_native if hasattr(runner_cls, "run_native") else None
         if use_cache and msc_utils.is_io_dataset(golden_folder):
-            loader, source_type = msc_utils.IODataLoader(golden_folder), "Cache"
-            report["datas_info"] = loader.info
-            sample_inputs = loader[0][0]
-            self._logger.debug("Load %d cached golden from %s", len(loader), golden_folder)
+            golden_loader, source_type = msc_utils.IODataLoader(golden_folder), "Cache"
+            report["datas_info"] = golden_loader.info
+            sample_inputs = golden_loader[0][0]
+            self._logger.debug("Load %d cached golden from %s", len(golden_loader), golden_folder)
         else:
-            # create loader
-            loader = self._config["dataset"].get("loader")
-            assert loader, "Dataset loader should be given for msc pipeline"
-            if loader.startswith("from_random"):
-
-                def get_inputs(max_num=5):
-                    for _ in range(max_num):
-                        yield {
-                            i[0]: np.random.rand(*i[1]).astype(i[2]) for i in self._config["inputs"]
-                        }
-
-                data_loader, source_type = get_inputs, "Random"
-            elif msc_utils.is_io_dataset(loader):
-
-                def get_inputs(max_num=-1):
-                    for _ in range(max_num):
-                        yield {
-                            i[0]: np.random.rand(*i[1]).astype(i[2]) for i in self._config["inputs"]
-                        }
-
-                data_loader, source_type = get_inputs, "Load"
-            else:
-                data_loader, source_type = loader, "Custom"
-            assert callable(data_loader), "Loader {} is not callable".format(data_loader)
-
             # save golden
-            golden_cnt, max_num = 0, self._config["dataset"].get("max_num", 5)
+            golden_cnt, max_golden = 0, self._config["dataset"].get("max_golden", 5)
             saver_options = {"input_names": input_names, "output_names": self._config["outputs"]}
             if run_func:
                 with msc_utils.IODataSaver(golden_folder, saver_options) as saver:
                     for inputs in data_loader():
-                        if golden_cnt >= max_num:
+                        if golden_cnt >= max_golden:
                             break
                         if not sample_inputs:
                             sample_inputs = inputs
@@ -230,10 +259,10 @@ class BaseManager(object):
                         )
                         golden_cnt = saver.save_batch(inputs, outputs)
                     report["datas_info"] = saver.info
-            elif msc_utils.is_io_dataset(loader):
+            elif isinstance(data_loader, msc_utils.IODataLoader):
                 with msc_utils.IODataSaver(golden_folder, saver_options) as saver:
-                    for inputs, outputs in msc_utils.IODataLoader(loader):
-                        if golden_cnt >= max_num:
+                    for inputs, outputs in data_loader():
+                        if golden_cnt >= max_golden:
                             break
                         if not sample_inputs:
                             sample_inputs = inputs
@@ -267,7 +296,7 @@ class BaseManager(object):
             )
             self._logger.info("Profile(prepare) {} times -> {:.2f} ms".format(repeat, avg_time))
             self._report["profile"]["prepare"] = {"latency": "{:.2f} ms".format(avg_time)}
-        return sample_inputs
+        return data_loader, sample_inputs
 
     def parse(self, stage_config: dict, use_cache: bool = False) -> tvm.IRModule:
         """Parse the model to IRModule.
@@ -356,14 +385,18 @@ class BaseManager(object):
             else:
                 msc_utils.time_stamp(MSCStage.PRUNE)
                 runner = self._create_tool_runner(MSCStage.PRUNE, stage_config)
-                pruner = runner.get_tool(ToolType.PRUNE)
-                if not pruner.get_plan():
-                    runner.run(self._sample_inputs)
-                plan = pruner.get_plan()
-                assert plan, "Failed to create plan for {}".format(ToolType.PRUNE)
-                with open(plan_file, "w") as f:
-                    f.write(json.dumps(plan, indent=2))
-                self._logger.info("Save %s plan -> %s", ToolType.PRUNE, plan_file)
+                runner.apply_tool(ToolType.PRUNE, self._data_loader)
+
+        # run quantize
+        if ToolType.QUANTIZE in stage_config:
+            self._tools_config[ToolType.QUANTIZE] = stage_config[ToolType.QUANTIZE]
+            plan_file = stage_config[ToolType.QUANTIZE]["plan_file"]
+            if os.path.isfile(plan_file):
+                self._logger.info("Skip %s with plan_file %s", ToolType.QUANTIZE, plan_file)
+            else:
+                msc_utils.time_stamp(MSCStage.QUANTIZE)
+                runner = self._create_tool_runner(MSCStage.QUANTIZE, stage_config)
+                runner.apply_tool(ToolType.QUANTIZE, self._data_loader)
 
         # optimize and get the runner
         msc_utils.time_stamp(MSCStage.OPTIMIZE)
@@ -480,10 +513,10 @@ class BaseManager(object):
         )
         self._logger.debug("Create runner(%s) by %s(%s)", stage, runner_cls.__name__, run_config)
         # save baseline data for debug
-        if on_debug and ToolType.DEBUG in self._config.get("optimize", {}):
+        if ToolType.TRACK in self._config.get("optimize", {}):
             tools_config = {
                 **tools_config,
-                ToolType.DEBUG: self._config["optimize"][ToolType.DEBUG],
+                ToolType.TRACK: self._config["optimize"][ToolType.TRACK],
             }
         runner = runner_cls(
             self._relax_mod,
@@ -500,12 +533,8 @@ class BaseManager(object):
             self._report["profile"][stage] = self._profile_runner(runner, stage_config)
         if use_cache:
             runner.save_cache(cache_dir)
-        # save debug plan
-        if ToolType.DEBUG in tools_config:
-            plan_file = tools_config[ToolType.DEBUG]["plan_file"]
-            with open(plan_file, "w") as f:
-                f.write(json.dumps(runner.get_tool(ToolType.DEBUG).get_plan(), indent=2))
-            self._logger.info("Save %s(%s) plan -> %s", ToolType.DEBUG, stage, plan_file)
+        if runner.get_tool(ToolType.TRACK):
+            runner.apply_tool(ToolType.TRACK)
         return runner
 
     def _create_tool_runner(self, tool_type: str, stage_config: dict) -> BaseRunner:
@@ -555,10 +584,14 @@ class BaseManager(object):
         stage = runner.stage
         msc_utils.time_stamp(stage + ".profile", False)
         profile_config = stage_config["profile"]
-        report = {}
+        msg, report = "Profile({})".format(stage), {}
 
-        # check result
-        check_config = profile_config.get("check", {})
+        # check accuracy
+        if runner.get_tool(ToolType.PRUNE) or runner.get_tool(ToolType.QUANTIZE):
+            check_config = None
+            self._logger.debug("Disable accuracy check(%s) by tools", stage)
+        else:
+            check_config = profile_config.get("check", {})
         if check_config:
             loader = msc_utils.IODataLoader(msc_utils.get_dataset_dir().relpath("Golden"))
             total, passed = 0, 0
@@ -573,7 +606,7 @@ class BaseManager(object):
             report["accuracy"] = "{}/{}({:.2f}%)".format(passed, total, pass_rate * 100)
             title = "Check({}) pass {}".format(stage, report["accuracy"])
             self._logger.debug(msc_utils.msg_block(title, acc_report))
-            self._logger.info("Accuracy(%s) %d iters -> %s", stage, len(loader), report["accuracy"])
+            msg += " acc {} iters -> {}".format(len(loader), report["accuracy"])
             required_err, err_rate = check_config.get("err_rate", 0), (1 - pass_rate)
             if err_rate > required_err >= 0:
                 raise Exception(
@@ -583,8 +616,12 @@ class BaseManager(object):
                 )
 
         # benchmark model
-        benchmark_config = profile_config.get("benchmark", {})
-        if benchmark_config and not runner.get_tool(ToolType.DEBUG):
+        if runner.get_tool(ToolType.TRACK):
+            benchmark_config = None
+            self._logger.debug("Disable benchmark(%s) by tools", stage)
+        else:
+            benchmark_config = profile_config.get("benchmark", {})
+        if benchmark_config:
             for _ in range(benchmark_config.get("warm_up", 10)):
                 runner.run(self._sample_inputs)
             start = time.time()
@@ -592,12 +629,9 @@ class BaseManager(object):
             for _ in range(repeat):
                 runner.run(self._sample_inputs)
             avg_time = (time.time() - start) * 1000 / repeat
-            self._logger.info(
-                "Profile({}) {} times on {} -> {:.2f} ms".format(
-                    stage, repeat, runner.device, avg_time
-                )
-            )
-            report["latency"] = "{:.2f} ms".format(avg_time)
+            report["latency"] = "{:.2f} ms @ {}".format(avg_time, runner.device)
+            msg += " latency {} times -> {}".format(repeat, report["latency"])
+        self._logger.info(msg)
         return report
 
     def _update_prepare_config(self, config: dict) -> dict:
@@ -748,13 +782,6 @@ class BaseManager(object):
             tool_config["plan_file"] = msc_utils.to_abs_path(
                 tool_config["plan_file"], msc_utils.get_config_dir()
             )
-        # disable accuracy check
-        if not check_acc:
-            for stage in ["optimize", "compile"]:
-                check_config = config.get(stage, {}).get("profile", {}).get("check")
-                if check_config and "err_rate" not in check_config:
-                    self._logger.info("Disable accuracy check for %s by tools", stage)
-                    check_config["err_rate"] = -1
         return config
 
     def get_runnable(self, ret_type: str = "runner") -> Any:
