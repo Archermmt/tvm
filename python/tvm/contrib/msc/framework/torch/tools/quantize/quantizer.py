@@ -26,14 +26,14 @@ class TorchQuantizerFactory(object):
     """Quantizer factory for torch"""
 
     def create(self, base_cls: BaseQuantizer):
-        class quantizer(base_cls):
+        class Quantizer(base_cls):
             """Adaptive quantizer for torch"""
 
             @classmethod
             def framework(cls):
                 return MSCFramework.TORCH
 
-        return quantizer
+        return Quantizer
 
 
 factory = TorchQuantizerFactory()

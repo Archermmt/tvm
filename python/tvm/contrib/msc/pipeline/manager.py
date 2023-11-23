@@ -770,12 +770,9 @@ class BaseManager(object):
 
         if "optimize" not in config:
             return config
-        check_acc = True
         for tool_type in ToolType.all_types():
             if tool_type not in config["optimize"]:
                 continue
-            if tool_type in (ToolType.PRUNE, ToolType.QUANTIZE):
-                check_acc = False
             tool_config = config["optimize"][tool_type]
             if "plan_file" not in tool_config:
                 tool_config["plan_file"] = "msc_{}.json".format(tool_type)

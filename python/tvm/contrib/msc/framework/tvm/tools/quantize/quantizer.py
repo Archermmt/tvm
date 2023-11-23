@@ -29,7 +29,7 @@ class TVMQuantizerFactory(object):
     """Quantizer factory for tvm"""
 
     def create(self, base_cls: BaseQuantizer):
-        class quantizer(base_cls):
+        class Quantizer(base_cls):
             """Adaptive quantizer for tvm"""
 
             def _execute_before_build(self, block_builder: tvm.relax.BlockBuilder):
@@ -138,7 +138,7 @@ class TVMQuantizerFactory(object):
             def framework(cls):
                 return MSCFramework.TVM
 
-        return quantizer
+        return Quantizer
 
 
 factory = TVMQuantizerFactory()

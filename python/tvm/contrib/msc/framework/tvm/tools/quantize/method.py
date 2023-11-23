@@ -14,11 +14,11 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+# pylint: disable=unused-argument
 """tvm.contrib.msc.framework.tvm.tools.quantize.method"""
 
-import numpy as np
-
 import tvm
+from tvm.relax import op as relax_op
 from tvm.contrib.msc.core.tools.quantize import QuantizeMethod, BaseQuantizer
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
@@ -58,25 +58,27 @@ class TVMQuantizeMethod(QuantizeMethod):
         """
 
         if rounding == "null":
-            return torch.clamp(data * scale, min_val, max_val)
+            return relax_op.clip(data * scale, min_val, max_val)
         if rounding == "floor":
-            return torch.clamp(torch.floor(data * scale), min_val, max_val)
+            return relax_op.clip(relax_op.floor(data * scale), min_val, max_val)
         if rounding == "ceil":
-            return torch.clamp(torch.ceil(data * scale), min_val, max_val)
+            return relax_op.clip(relax_op.ceil(data * scale), min_val, max_val)
         if rounding == "round":
-            return torch.clamp(torch.round(data * scale), min_val, max_val)
+            return relax_op.clip(relax_op.round(data * scale), min_val, max_val)
         if rounding == "trunc":
-            return torch.clamp(torch.trunc(data * scale), min_val, max_val)
+            return relax_op.clip(relax_op.trunc(data * scale), min_val, max_val)
         if rounding == "logic_round":
-            data = torch.clamp(data * scale, min_val, max_val)
-            negative_ceil = torch.where(
-                torch.logical_and(data < 0, (data - torch.floor(data)) == 0.5), torch.ceil(data), 0
+            data = relax_op.clip(data * scale, min_val, max_val)
+            negative_ceil = relax_op.where(
+                relax_op.logical_and(data < 0, (data - relax_op.floor(data)) == 0.5),
+                relax_op.ceil(data),
+                0,
             )
-            data = torch.where(
-                torch.logical_and(data < 0, (data - torch.floor(data)) == 0.5), 0, data
+            data = relax_op.where(
+                relax_op.logical_and(data < 0, (data - relax_op.floor(data)) == 0.5), 0, data
             )
-            data = torch.where((data - torch.floor(data)) >= 0.5, torch.ceil(data), data)
-            data = torch.where((data - torch.floor(data)) < 0.5, torch.floor(data), data)
+            data = relax_op.where((data - relax_op.floor(data)) >= 0.5, relax_op.ceil(data), data)
+            data = relax_op.where((data - relax_op.floor(data)) < 0.5, relax_op.floor(data), data)
             return data + negative_ceil
         raise TypeError("Unexpected rounding " + str(rounding))
 

@@ -29,7 +29,7 @@ class TVMTrackerFactory(object):
     """Tracker factory for tvm"""
 
     def create(self, base_cls: BaseTracker):
-        class tracker(base_cls):
+        class Tracker(base_cls):
             """Adaptive tracker for tvm"""
 
             def _execute_before_build(self, block_builder: tvm.relax.BlockBuilder):
@@ -128,7 +128,7 @@ class TVMTrackerFactory(object):
             def framework(cls):
                 return MSCFramework.TVM
 
-        return tracker
+        return Tracker
 
 
 factory = TVMTrackerFactory()

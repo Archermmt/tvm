@@ -26,14 +26,14 @@ class TorchPrunerFactory(object):
     """Pruner factory for torch"""
 
     def create(self, base_cls: BasePruner):
-        class pruner(base_cls):
+        class Pruner(base_cls):
             """Adaptive pruner for torch"""
 
             @classmethod
             def framework(cls):
                 return MSCFramework.TORCH
 
-        return pruner
+        return Pruner
 
 
 factory = TorchPrunerFactory()

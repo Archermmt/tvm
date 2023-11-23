@@ -26,14 +26,14 @@ class TVMPrunerFactory(object):
     """Pruner factory for tvm"""
 
     def create(self, base_cls: BasePruner):
-        class pruner(base_cls):
+        class Pruner(base_cls):
             """Adaptive pruner for tvm"""
 
             @classmethod
             def framework(cls):
                 return MSCFramework.TVM
 
-        return pruner
+        return Pruner
 
 
 factory = TVMPrunerFactory()

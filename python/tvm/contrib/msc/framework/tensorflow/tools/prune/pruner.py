@@ -26,14 +26,14 @@ class TensorflowPrunerFactory(object):
     """Pruner factory for tensorflow"""
 
     def create(self, base_cls: BasePruner):
-        class pruner(base_cls):
+        class Pruner(base_cls):
             """Adaptive pruner for tensorflow"""
 
             @classmethod
             def framework(cls):
                 return MSCFramework.TENSORFLOW
 
-        return pruner
+        return Pruner
 
 
 factory = TensorflowPrunerFactory()

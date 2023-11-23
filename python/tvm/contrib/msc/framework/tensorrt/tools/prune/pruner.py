@@ -26,14 +26,14 @@ class TensorRTPrunerFactory(object):
     """Pruner factory for tensorrt"""
 
     def create(self, base_cls: BasePruner):
-        class pruner(base_cls):
+        class Pruner(base_cls):
             """Adaptive pruner for tensorrt"""
 
             @classmethod
             def framework(cls):
                 return MSCFramework.TENSORRT
 
-        return pruner
+        return Pruner
 
 
 factory = TensorRTPrunerFactory()

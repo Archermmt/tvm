@@ -26,14 +26,14 @@ class TensorflowTrackerFactory(object):
     """Tracker factory for tensorflow"""
 
     def create(self, base_cls: BaseTracker):
-        class tracker(base_cls):
+        class Tracker(base_cls):
             """Adaptive tracker for tensorflow"""
 
             @classmethod
             def framework(cls):
                 return MSCFramework.TENSORFLOW
 
-        return tracker
+        return Tracker
 
 
 factory = TensorflowTrackerFactory()

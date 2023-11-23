@@ -28,7 +28,7 @@ class TensorRTTrackerFactory(object):
     """Tracker factory for tensorrt"""
 
     def create(self, base_cls: BaseTracker):
-        class tracker(base_cls):
+        class Tracker(base_cls):
             """Adaptive tracker for tensorrt"""
 
             def _process_tensor(
@@ -64,7 +64,7 @@ class TensorRTTrackerFactory(object):
             def framework(cls):
                 return MSCFramework.TENSORRT
 
-        return tracker
+        return Tracker
 
 
 factory = TensorRTTrackerFactory()

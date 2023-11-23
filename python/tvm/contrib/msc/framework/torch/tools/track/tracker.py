@@ -26,14 +26,14 @@ class TorchTrackerFactory(object):
     """Tracker factory for torch"""
 
     def create(self, base_cls: BaseTracker):
-        class tracker(base_cls):
+        class Tracker(base_cls):
             """Adaptive tracker for torch"""
 
             @classmethod
             def framework(cls):
                 return MSCFramework.TORCH
 
-        return tracker
+        return Tracker
 
 
 factory = TorchTrackerFactory()

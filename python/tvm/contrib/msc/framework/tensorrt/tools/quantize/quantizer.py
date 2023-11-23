@@ -26,14 +26,14 @@ class TensorRTQuantizerFactory(object):
     """Quantizer factory for tensorrt"""
 
     def create(self, base_cls: BaseQuantizer):
-        class quantizer(base_cls):
+        class Quantizer(base_cls):
             """Adaptive quantizer for tensorrt"""
 
             @classmethod
             def framework(cls):
                 return MSCFramework.TENSORRT
 
-        return quantizer
+        return Quantizer
 
 
 factory = TensorRTQuantizerFactory()

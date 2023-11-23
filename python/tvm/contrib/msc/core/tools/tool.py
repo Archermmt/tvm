@@ -276,8 +276,8 @@ class BaseTool(object):
         else:
             graphs, weights = self.load_graphs(graphs, weights)
         self._graphs, self._weights = graphs, {}
-        for w in weights:
-            self._weights.update(w)
+        for sub_weights in weights:
+            self._weights.update(sub_weights)
         return self._graphs, weights
 
     def change_stage(self, stage: str):
