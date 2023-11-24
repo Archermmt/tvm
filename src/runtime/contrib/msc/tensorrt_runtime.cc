@@ -118,22 +118,19 @@ class MSCTensorRTRuntime : public JSONRuntimeBase {
 #ifdef TVM_GRAPH_EXECUTOR_TENSORRT
   void Run() override {
     SetInputOutputBinds();
-    auto tvm_stream = CUDAThreadEntry::ThreadLocal()->stream;
     if (tool_tag_.size() > 0) {
       const auto* pf = runtime::Registry::Get("msc_tool.callback_step");
       ICHECK(pf != nullptr) << "Cannot find msc_tool.callback_step func.";
       Map<String, runtime::NDArray> input_datas;
       for (const auto& pair : input_bindings_) {
         const auto& tensor_name = engine_->getBindingName(pair.first);
-        if (data_entry_[pair.second]->device.device_type == kDLCUDA) {
-          device_buffers_[pair.first].CopyFrom(data_entry_[pair.second]);
-        }
         input_datas.Set(tensor_name, device_buffers_[pair.first]);
       }
       Map<String, Map<String, runtime::NDArray>> context;
       context.Set("datas", input_datas);
       (*pf)(context, "before_forward", graph_name_, tool_tag_);
     }
+    auto tvm_stream = CUDAThreadEntry::ThreadLocal()->stream;
 #if TRT_VERSION_GE(6, 0, 1)
     ICHECK(context_->enqueueV2(bindings_.data(), tvm_stream, nullptr))
         << "Running TensorRT failed.";
@@ -161,12 +158,13 @@ class MSCTensorRTRuntime : public JSONRuntimeBase {
           continue;
         }
         const auto& tensor_name = engine_->getBindingName(bid);
+        /*
         if (output_bindings_.count(bid)) {
           uint32_t eid = output_bindings_[bid];
           if (data_entry_[eid]->device.device_type == kDLCUDA) {
             device_buffers_[bid].CopyFrom(data_entry_[eid]);
           }
-        }
+        }*/
         output_datas.Set(tensor_name, device_buffers_[bid]);
       }
       Map<String, Map<String, runtime::NDArray>> context;
@@ -252,7 +250,7 @@ class MSCTensorRTRuntime : public JSONRuntimeBase {
                                      data_entry_[eid]->shape + data_entry_[eid]->ndim);
           ICHECK(context_->setBindingDimensions(binding_index, VectorToTrtDims(shape)));
 #endif
-          if (data_entry_[eid]->device.device_type == kDLCUDA) {
+          if (data_entry_[eid]->device.device_type == kDLCUDA && tool_tag_.size() == 0) {
             bindings_[binding_index] = data_entry_[eid]->data;
           } else {
             auto device_buffer = GetOrAllocateDeviceBuffer(eid, binding_index);
@@ -275,7 +273,7 @@ class MSCTensorRTRuntime : public JSONRuntimeBase {
       const auto& name = nodes_[nid].GetOpName() + ":" + std::to_string(outputs_[i].index_);
       int binding_index = engine_->getBindingIndex(name.c_str());
       ICHECK_NE(binding_index, -1);
-      if (data_entry_[eid]->device.device_type == kDLCUDA) {
+      if (data_entry_[eid]->device.device_type == kDLCUDA && tool_tag_.size() == 0) {
         bindings_[binding_index] = data_entry_[eid]->data;
       } else {
         auto device_buffer = GetOrAllocateDeviceBuffer(eid, binding_index);
@@ -293,8 +291,8 @@ class MSCTensorRTRuntime : public JSONRuntimeBase {
         const auto& tensor_name = engine_->getBindingName(bid);
         ICHECK(tensor_ids_.count(tensor_name)) << "Can not find tensor_name " << tensor_name;
         const auto& pair = tensor_ids_[tensor_name];
-        const auto& shape = nodes_[pair.first].GetOpShape()[pair.second];
-        const auto& dtype = nodes_[pair.first].GetOpDataType()[pair.second];
+        auto shape = nodes_[pair.first].GetOpShape()[pair.second];
+        auto dtype = nodes_[pair.first].GetOpDataType()[pair.second];
         device_buffers_[bid] = runtime::NDArray::Empty(shape, dtype, {kDLCUDA, 0});
       }
       bindings_[bid] = device_buffers_[bid]->data;

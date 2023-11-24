@@ -186,8 +186,9 @@ def codegen_tensor(
         The tensor describe for processed tensor.
     """
 
-    tensor = process_tensor(tensor_ctx, name, consumer, scope, tag)
-    return tensor.get("processed", [])
+    tensor_ctx = {**dict(tensor_ctx), "processed": []}
+    tensor_ctx = process_tensor(dict(tensor_ctx), name, consumer, scope, tag)
+    return tensor_ctx["processed"]
 
 
 def wrap_step(step: str, tag: str = "main") -> callable:
@@ -266,14 +267,78 @@ def execute_step(step: str, *args, **kwargs):
     return output
 
 
+def _execute_step_with_context(
+    step_ctx: Dict[str, Any], step: str, graph_name: str, tag: str = "main"
+) -> Dict[str, Any]:
+    """Execute step with contect
+
+    Parameters
+    -------
+    step_ctx: dict<str, any>
+        The step context.
+    step: str
+        The step for tool execution build| forward
+    graph_name: str
+        The graph name.
+    tag: str
+        The tag of the tool.
+
+    Returns
+    -------
+    step_ctx: dict<str, any>
+        The processed step context.
+    """
+
+    for tool in get_tools(tag):
+        if step == "before_build":
+            step_ctx = tool.execute_before_build(step_ctx, graph_name=graph_name)
+        elif step == "before_forward":
+            step_ctx = tool.execute_before_forward(step_ctx, graph_name=graph_name)
+        elif step == "after_build":
+            step_ctx = tool.execute_after_build(step_ctx)
+        elif step == "after_forward":
+            step_ctx = tool.execute_after_forward(step_ctx)
+        else:
+            raise TypeError("Unexpected step " + str(step))
+    return step_ctx
+
+
+@tvm.register_func("msc_tool.codegen_step")
+def codegen_step(
+    step_ctx: Dict[str, str], step: str, graph_name: str, tag: str = "main"
+) -> List[str]:
+    """Codegen step codes
+
+    Parameters
+    -------
+    step_ctx: dict<str, str>
+        The step describe items.
+    step: str
+        The step for tool execution build| forward
+    graph_name: str
+        The graph name.
+    tag: str
+        The tag of the tool.
+
+    Returns
+    -------
+    processed: list<str>
+        The tensor describe for processed tensor.
+    """
+
+    step_ctx = {**dict(step_ctx), "processed": []}
+    step_ctx = _execute_step_with_context(step_ctx, step, graph_name, tag)
+    return step_ctx["processed"]
+
+
 @tvm.register_func("msc_tool.callback_step")
-def callback_step(context: Dict[str, Any], step: str, graph_name: str = "main", tag: str = "main"):
+def callback_step(step_ctx: Dict[str, Any], step: str, graph_name: str = "main", tag: str = "main"):
     """Execute tools for a step
 
     Parameters
     -------
-    context: dict<str, tvm.nd.array>
-        The context to be processed
+    step_ctx: dict<str, Any>
+        The step context.
     step: str
         The step for tool execution build| forward
     graph_name: str
@@ -282,14 +347,4 @@ def callback_step(context: Dict[str, Any], step: str, graph_name: str = "main", 
         The tag of the tool.
     """
 
-    for tool in get_tools(tag):
-        if step == "before_build":
-            tool.execute_before_build(context, graph_name=graph_name)
-        elif step == "after_build":
-            tool.execute_after_build(context, graph_name=graph_name)
-        elif step == "before_forward":
-            tool.execute_before_forward(context, graph_name=graph_name)
-        elif step == "after_forward":
-            tool.execute_after_forward(context, graph_name=graph_name)
-        else:
-            raise TypeError("Unexpected step " + str(step))
+    _execute_step_with_context(step_ctx, step, graph_name, tag)

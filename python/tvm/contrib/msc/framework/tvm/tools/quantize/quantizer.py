@@ -42,7 +42,7 @@ class TVMQuantizerFactory(object):
                 """
 
                 self._block_builder = block_builder
-                self._gather_vars, self._gather_names = {}, []
+                self._gather_tensors, self._gather_names = {}, []
                 super()._execute_before_build(block_builder)
 
             def _execute_after_build(
@@ -63,11 +63,11 @@ class TVMQuantizerFactory(object):
 
                 if self._calibrated:
                     return super()._execute_after_build(output)
-                self._gather_names = list(sorted(self._gather_vars.keys()))
-                gather_vars = [self._gather_vars[o]["var"] for o in self._gather_names]
+                self._gather_names = list(sorted(self._gather_tensors.keys()))
+                gather_tensors = [self._gather_tensors[o]["tensor"] for o in self._gather_names]
                 if isinstance(output, tvm.relax.Var):
-                    return super()._execute_after_build([output] + gather_vars)
-                return super()._execute_after_build(output + gather_vars)
+                    return super()._execute_after_build([output] + gather_tensors)
+                return super()._execute_after_build(output + gather_tensors)
 
             def _execute_after_forward(
                 self, outputs: List[tvm.runtime.NDArray]
@@ -89,8 +89,9 @@ class TVMQuantizerFactory(object):
                     return super()._execute_after_forward(outputs)
                 output_num = len(outputs) - len(self._gather_names)
                 for data, name in zip(outputs[output_num:], self._gather_names):
-                    info = self._gather_vars[name]
-                    for consumer, strategy in zip(info["consumers"], info["strategys"]):
+                    info = self._gather_tensors[name]
+                    for consumer in info["consumers"]:
+                        strategy = self._get_tensor_strategy(name, consumer)
                         self._gather_tensor(data, name, consumer, strategy)
                 if output_num == 1:
                     return super()._execute_after_forward(outputs[0])
@@ -121,16 +122,14 @@ class TVMQuantizerFactory(object):
                 if not self.calibrated:
                     if self.is_weight(name):
                         return self._gather_tensor(self.get_data(name), name, consumer, strategy)
-                    if name not in self._gather_vars:
-                        self._gather_vars[name] = {
+                    if name not in self._gather_tensors:
+                        self._gather_tensors[name] = {
                             "consumers": [consumer],
-                            "strategys": [strategy],
-                            "var": tensor,
+                            "tensor": tensor,
                         }
                         self._gather_names.append(name)
                     else:
-                        self._gather_vars[name]["consumers"].append(consumer)
-                        self._gather_vars[name]["strategys"].append(strategy)
+                        self._gather_tensors[name]["consumers"].append(consumer)
                     return tensor
                 return self._quantize_tensor(tensor, name, consumer, strategy)
 

@@ -42,7 +42,7 @@ class TVMTrackerFactory(object):
                 """
 
                 self._block_builder = block_builder
-                self._track_vars, self._track_names = {}, []
+                self._track_tensors, self._track_names = {}, []
                 super()._execute_before_build(block_builder)
 
             def _execute_after_build(
@@ -61,11 +61,11 @@ class TVMTrackerFactory(object):
                     The modified outputs var.
                 """
 
-                self._track_names = list(sorted(self._track_vars.keys()))
-                track_vars = [self._track_vars[o]["var"] for o in self._track_names]
+                self._track_names = list(sorted(self._track_tensors.keys()))
+                track_tensors = [self._track_tensors[o]["tensor"] for o in self._track_names]
                 if isinstance(output, tvm.relax.Var):
-                    return super()._execute_after_build([output] + track_vars)
-                return super()._execute_after_build(output + track_vars)
+                    return super()._execute_after_build([output] + track_tensors)
+                return super()._execute_after_build(output + track_tensors)
 
             def _execute_after_forward(
                 self, outputs: List[tvm.runtime.NDArray]
@@ -85,8 +85,9 @@ class TVMTrackerFactory(object):
 
                 output_num = len(outputs) - len(self._track_names)
                 for data, name in zip(outputs[output_num:], self._track_names):
-                    info = self._track_vars[name]
-                    self._track_tensor(data, name, info["consumer"], info["strategy"])
+                    consumer = self._track_tensors[name]["consumer"]
+                    strategy = self._get_tensor_strategy(name, consumer)
+                    self._track_tensor(data, name, consumer, strategy)
                 if output_num == 1:
                     return super()._execute_after_forward(outputs[0])
                 return super()._execute_after_forward(outputs[:output_num])
@@ -115,12 +116,8 @@ class TVMTrackerFactory(object):
 
                 if self.is_weight(name):
                     return self._track_tensor(self.get_data(name), name, consumer, strategy)
-                if name not in self._track_vars:
-                    self._track_vars[name] = {
-                        "consumer": consumer,
-                        "strategy": strategy,
-                        "var": tensor,
-                    }
+                if name not in self._track_tensors:
+                    self._track_tensors[name] = {"consumer": consumer, "tensor": tensor}
                     self._track_names.append(name)
                 return tensor
 

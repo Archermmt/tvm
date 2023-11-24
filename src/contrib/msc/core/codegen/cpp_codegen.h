@@ -140,7 +140,8 @@ class CppCodeGen : public BaseCodeGen<ConfigType, HelperType> {
     }
   }
 
-  virtual Map<String, String> GetTensorCtx(const MSCTensor& tensor) {
+  /*! \brief Get the tensor context for codegen_tensor*/
+  virtual const Map<String, String> GetTensorCtx(const MSCTensor& tensor) {
     Map<String, String> tensor_ctx;
     MSCJoint producer;
     if (this->graph()->weight_holders.count(tensor->name)) {
@@ -160,6 +161,11 @@ class CppCodeGen : public BaseCodeGen<ConfigType, HelperType> {
     }
     tensor_ctx.Set("producer", this->IdxNodeBase(producer));
     return tensor_ctx;
+  }
+
+  virtual const Map<String, String> GetGraphCtx() {
+    Map<String, String> graph_ctx;
+    return graph_ctx;
   }
 
   void StartNamespace() {

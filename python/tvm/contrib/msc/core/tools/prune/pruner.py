@@ -91,6 +91,7 @@ class BasePruner(BaseTool):
             _ffi_api.WeightGraph(graph, self._prunable_types, self._relation_types)
             for graph in graphs
         ]
+        self._unpruned_tensors = {}
         if not self._plan:
             return graphs, weights
         return self.prune_graphs(graphs, weights)
@@ -181,9 +182,16 @@ class BasePruner(BaseTool):
             in_indices = _get_in_indices(w_node)
         self._plan[w_node.name] = {"in_indices": in_indices}
         if w_node.friends and w_node != w_node.friends[0]:
-            self._plan[w_node.name]["out_indices"] = self._plan[w_node.friends[0].name][
-                "out_indices"
-            ]
+            lead_name = w_node.friends[0].name
+            if lead_name not in self._plan:
+                self._unpruned_tensors[name] = {
+                    "lead_name": lead_name,
+                    "tensor": tensor,
+                    "consumer": consumer,
+                }
+                self._plan.pop(w_node.name)
+                return tensor
+            self._plan[w_node.name]["out_indices"] = self._plan[lead_name]["out_indices"]
         elif _prunable(w_node):
             self._plan[w_node.name] = strategy(
                 self,
@@ -200,6 +208,16 @@ class BasePruner(BaseTool):
             self._plan[w_node.name]["out_indices"] = in_indices
         else:
             self._plan[w_node.name]["out_indices"] = []
+        lazy_pruned = set()
+        for name, info in self._unpruned_tensors.items():
+            if info["lead_name"] in self._plan:
+                strategy = self._get_tensor_strategy(name, info["consumer"])
+                self._process_tensor(info["tensor"], name, info["consumer"], strategy)
+                lazy_pruned.add(name)
+        if lazy_pruned:
+            self._unpruned_tensors = {
+                k: v for k, v in self._unpruned_tensors.items() if k not in lazy_pruned
+            }
         return tensor
 
     def prune_graphs(
@@ -253,9 +271,13 @@ class BasePruner(BaseTool):
                     else:
                         pruned_weights[w_name] = sub_weights[w_name]
                 if node.optype == "constant" and node.weight_at("const").name in pruned_tensors:
-                    pruned_tensors[node.output_at(0).name] = _prune_by_channel(
-                        node.output_at(0),
-                        pruned_tensors[node.weight_at("const").name].dim_at("C"),
+                    ref_tensor = pruned_tensors[node.weight_at("const").name]
+                    pruned_tensors[node.output_at(0).name] = MSCTensor(
+                        node.output_at(0).name,
+                        ref_tensor.dtype,
+                        ref_tensor.layout.name,
+                        ref_tensor.get_shape(),
+                        ref_tensor.alias,
                     )
                 elif (
                     node.optype in ("nn.conv2d", "msc.conv2d_bias", "msc.linear", "msc.linear_bias")
@@ -325,6 +347,7 @@ class BasePruner(BaseTool):
         self._weight_graphs = [
             WeightGraph.from_json(cache_dir.relpath(f)) for f in cache_info["weight_graphs"]
         ]
+        self._unpruned_tensors = {}
 
     def save_cache(self, cache_dir: msc_utils.MSCDirectory) -> dict:
         """Save runner to cache
@@ -362,6 +385,9 @@ class BasePruner(BaseTool):
     def finalize(self) -> dict:
         """Get the plan"""
 
+        assert not self._unpruned_tensors, "Some tensors are not pruned " + str(
+            self._unpruned_tensors
+        )
         self._plan = {n: c for n, c in self._plan.items() if c["in_indices"] or c["out_indices"]}
         return super().finalize()
 
@@ -434,9 +460,12 @@ class BasePruner(BaseTool):
             return 0, 0
         if w_node.has_attr("in_axis") and w_node.has_attr("out_axis"):
             return int(w_node.get_attr("in_axis")), int(w_node.get_attr("out_axis"))
-        if w_node.weight_type == "const":
-            return -1, w_node.weight.layout_of("C")
-        return w_node.weight.layout_of("I"), w_node.weight.layout_of("O")
+        in_axis, out_axis = w_node.weight.layout_of("I"), w_node.weight.layout_of("O")
+        if in_axis >= 0 and out_axis >= 0:
+            return in_axis, out_axis
+        if w_node.weight.layout_of("C") >= 0:
+            return w_node.weight.layout_of("C"), w_node.weight.layout_of("C")
+        raise Exception("Can not infer in_axis/out_axis from " + str(w_node))
 
     @classmethod
     def tool_type(cls):

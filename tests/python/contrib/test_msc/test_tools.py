@@ -210,4 +210,4 @@ def test_tensorrt_tools(tool_type):
 
 if __name__ == "__main__":
     # tvm.testing.main()
-    test_tvm_tools("quantize")
+    test_tvm_tools("prune")

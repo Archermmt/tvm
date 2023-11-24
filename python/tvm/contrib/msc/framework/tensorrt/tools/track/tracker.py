@@ -31,6 +31,68 @@ class TensorRTTrackerFactory(object):
         class Tracker(base_cls):
             """Adaptive tracker for tensorrt"""
 
+            def _execute_before_build(self, codegen_context: dict) -> dict:
+                """Execute before model build
+
+                Parameters
+                ----------
+                codegen_context: dict
+                    The context.
+
+                Returns
+                ----------
+                codegen_context: dict
+                    The processed context.
+                """
+
+                self._track_tensors = {}
+                super()._execute_before_forward(codegen_context)
+                return codegen_context
+
+            def _execute_before_forward(self, step_context: dict) -> dict:
+                """Execute before model forward
+
+                Parameters
+                ----------
+                step_context: dict
+                    The context.
+
+                Returns
+                ----------
+                step_context: dict
+                    The processed context.
+                """
+
+                for name, data in step_context["datas"].items():
+                    if name not in self._track_tensors:
+                        continue
+                    consumer = self._track_tensors[name]["consumer"]
+                    strategy = self._get_tensor_strategy(name, consumer)
+                    self._track_tensor(data.asnumpy(), name, consumer, strategy)
+                return super()._execute_before_forward(step_context)
+
+            def _execute_after_forward(self, step_context: dict) -> dict:
+                """Execute after model forward
+
+                Parameters
+                ----------
+                step_context: dict
+                    The context.
+
+                Returns
+                ----------
+                step_context: dict
+                    The processed context.
+                """
+
+                for name, data in step_context["datas"].items():
+                    if name not in self._track_tensors:
+                        continue
+                    consumer = self._track_tensors[name]["consumer"]
+                    strategy = self._get_tensor_strategy(name, consumer)
+                    self._track_tensor(data.asnumpy(), name, consumer, strategy)
+                return super()._execute_after_forward(step_context)
+
             def _process_tensor(
                 self, tensor_ctx: Dict[str, str], name: str, consumer: str, strategy: Strategy
             ) -> Dict[str, str]:
@@ -54,10 +116,14 @@ class TensorRTTrackerFactory(object):
                 """
 
                 if self.is_weight(name):
-                    return self._track_tensor(self.get_data(name), name, strategy)
-                print("has tensor_ctx " + str(tensor_ctx))
-                print("name {}, with consumer {}".format(name, consumer))
-                raise Exception("stop here!!")
+                    return self._track_tensor(self.get_data(name), name, consumer, strategy)
+                if name not in self._track_tensors:
+                    self._track_tensors[name] = {
+                        "consumer": consumer,
+                    }
+                    tensor_ctx["processed"].append(
+                        "{}->markOutput(*{});".format(tensor_ctx["ctx"], tensor_ctx["tensor"])
+                    )
                 return tensor_ctx
 
             @classmethod

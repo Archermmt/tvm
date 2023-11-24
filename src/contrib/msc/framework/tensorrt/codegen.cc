@@ -107,15 +107,19 @@ void TensorRTCodeGen::CodeGenClassDefine() {
   if (graph()->weight_holders.size() > 0) {
     stack_.assign("mWeights", "TRTUtils::LoadWeights(\"" + graph()->name + ".wts\")");
   }
+  if (config()->use_tools) {
+    const auto* pf = runtime::Registry::Get("msc_tool.codegen_step");
+    ICHECK(pf != nullptr) << "Cannot find msc_tool.codegen_step func.";
+    const Array<String>& lines =
+        (*pf)(GetGraphCtx(), "before_build", graph()->name, config()->tools_tag);
+    for (const auto& l : lines) {
+      stack_.line(l);
+    }
+  }
   // build layers
   for (const auto& n : graph()->node_names) {
     const auto& node = graph()->FindNode(n);
     CodeGenNode(node, config()->use_tools);
-    /*
-    for (const auto& d : GetOpCodes(node)) {
-      stack_.line(d);
-    }
-    */
   }
   // mark outputs
   stack_.comment("Mark outputs");
@@ -145,6 +149,15 @@ void TensorRTCodeGen::CodeGenClassDefine() {
   } else {
     stack_.func_call("setMaxWorkspaceSize", NullOpt, DocUtils::ToPtrDoc("builder"))
         .call_arg(config()->max_workspace);
+  }
+  if (config()->use_tools) {
+    const auto* pf = runtime::Registry::Get("msc_tool.codegen_step");
+    ICHECK(pf != nullptr) << "Cannot find msc_tool.codegen_step func.";
+    const Array<String>& lines =
+        (*pf)(GetGraphCtx(), "after_build", graph()->name, config()->tools_tag);
+    for (const auto& l : lines) {
+      stack_.line(l);
+    }
   }
   // end define build method
   stack_.func_end("true");
@@ -469,6 +482,16 @@ const Array<Doc> TensorRTCodeGen::GetOpCodes(const MSCJoint& node) {
     LOG(WARNING) << "Failed to get docs for " << node << " : " << err.message();
     throw err;
   }
+}
+
+const Map<String, String> TensorRTCodeGen::GetTensorCtx(const MSCTensor& tensor) {
+  Map<String, String> tensor_ctx;
+  tensor_ctx.Set("ctx", "network");
+  for (const auto& pair :
+       CppCodeGen<TensorRTCodeGenConfig, TensorRTCodeGenHelper>::GetTensorCtx(tensor)) {
+    tensor_ctx.Set(pair.first, pair.second);
+  }
+  return tensor_ctx;
 }
 
 TVM_REGISTER_GLOBAL("msc.framework.tensorrt.GetTensorRTSources")

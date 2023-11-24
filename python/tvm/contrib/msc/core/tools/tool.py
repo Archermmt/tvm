@@ -334,7 +334,8 @@ class BaseTool(object):
                 self._graph_id,
                 "train" if self._is_training else "eval",
             )
-            self._execute_before_build(*args, **kwargs)
+            return self._execute_before_build(*args, **kwargs)
+        return None
 
     def _execute_before_build(self, *args, **kwargs):
         """Execute before model build
@@ -411,7 +412,8 @@ class BaseTool(object):
                     self._stage,
                     self._graph_id,
                 )
-            self._execute_before_forward(*args, **kwargs)
+            return self._execute_before_forward(*args, **kwargs)
+        return None
 
     def _execute_before_forward(self, *args, **kwargs):
         """Execute before model forward
@@ -728,11 +730,14 @@ class BaseTool(object):
            The kwargs for execute.
         """
 
+        if "graph_id" in kwargs:
+            return kwargs.pop("graph_id")
         if "graph_name" in kwargs:
+            name = kwargs.pop("graph_name")
             for idx, g in enumerate(self._graphs):
-                if g.name == kwargs["graph_name"]:
+                if g.name == name:
                     return idx
-        return kwargs.get("graph_id", 0)
+        return 0
 
     def get_nodes(self) -> Iterable[MSCJoint]:
         """Get all the nodes in the graphs.
