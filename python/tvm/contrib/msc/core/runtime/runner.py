@@ -26,7 +26,7 @@ import numpy as np
 import tvm
 from tvm.contrib.msc.core.ir import MSCGraph
 from tvm.contrib.msc.core.frontend import from_relax
-from tvm.contrib.msc.core.tools import BaseTool, ToolType, create_tool, get_tool, get_tools
+from tvm.contrib.msc.core.tools import BaseTool, ToolType, create_tool
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core.utils.message import MSCStage
 from tvm.contrib.msc.core import utils as msc_utils
@@ -163,7 +163,7 @@ class BaseRunner(object):
             self._logger.debug("Translate {} graphs from module".format(len(self._graphs)))
 
         # load graph by tool
-        for tool in get_tools():
+        for tool in self._tools.values():
             self._graphs, self._weights = tool.reset(
                 self._graphs, self._weights, cache_dir=cache_dir
             )
@@ -212,7 +212,7 @@ class BaseRunner(object):
             "model": self._save_model(cache_dir),
             "runnable": self._save_runnable(cache_dir),
         }
-        for tool in get_tools():
+        for tool in self._tools.values():
             cache_info.update(tool.save_cache(cache_dir))
         with open(cache_dir.relpath("cache_info.json"), "w") as f:
             f.write(json.dumps(cache_info, indent=2))
@@ -276,6 +276,22 @@ class BaseRunner(object):
             outputs = [msc_utils.cast_array(data) for data in outputs]
         return outputs
 
+    def get_tool(self, tool_type: str) -> BaseTool:
+        """Get tool by type
+
+        Parameters
+        -------
+        tool_type: str
+            The type of the tool prune| quantize| distill...
+
+        Returns
+        -------
+        tool: BaseTool
+            The saved tool.
+        """
+
+        return self._tools.get(tool_type)
+
     def apply_tool(self, tool_type: str, data_loader: Any = None) -> dict:
         """Execute tool and get plan
 
@@ -288,16 +304,16 @@ class BaseRunner(object):
         """
 
         assert tool_type in self._tools, "Can not find tool " + str(tool_type)
-        if tool_type == ToolType.PRUNE:
-            pruner = self.get_tool(ToolType.PRUNE)
+        if tool_type == ToolType.PRUNER:
+            pruner = self.get_tool(ToolType.PRUNER)
             if not pruner.finalize():
                 assert data_loader, "data_loader should be given to plan prune"
                 for inputs in data_loader():
                     self.run(inputs)
                     break
             plan = pruner.finalize()
-        elif tool_type == ToolType.QUANTIZE:
-            quantizer = self.get_tool(ToolType.QUANTIZE)
+        elif tool_type == ToolType.QUANTIZER:
+            quantizer = self.get_tool(ToolType.QUANTIZER)
             while not quantizer.calibrated:
                 assert data_loader, "data_loader should be given to plan prune"
                 for inputs in data_loader():
@@ -326,22 +342,6 @@ class BaseRunner(object):
             graph.visualize(visual_dir.relpath(graph.name + ".prototxt"))
         for tool in self._tools.values():
             tool.visualize(visual_dir)
-
-    def get_tool(self, tool_type: str) -> BaseTool:
-        """Get tool by type
-
-        Parameters
-        -------
-        tool_type: str
-            The type of the tool prune| quantize| distill...
-
-        Returns
-        -------
-        tool: BaseTool
-            The saved tool.
-        """
-
-        return get_tool(tool_type, self._name)
 
     def get_inputs(self) -> List[Dict[str, str]]:
         """Get the inputs of the model
@@ -704,7 +704,7 @@ class ModelRunner(BaseRunner):
             graphs or self._graphs[0],
             weights or self._weights[0],
             codegen_config=self._generate_config.get("codegen"),
-            print_config=self._generate_config.get("build"),
+            print_config=self._generate_config.get("print"),
             build_folder=self._generate_config["build_folder"],
         )
 
@@ -865,16 +865,16 @@ class BYOCRunner(BaseRunner):
 
         graph_infos = list(zip(graphs or self._graphs, weights or self._weights))
         extra_option = self._generate_config.get("extra_option", {})
-        if self._stage == MSCStage.COMPILE and not self.get_tool(ToolType.TRACK):
+        if self._stage == MSCStage.COMPILE and not self.get_tool(ToolType.TRACKER):
             extra_option["tool_tag"] = ""
         else:
             extra_option["tool_tag"] = self._name
         return self.codegen_func(
             self._byoc_mod,
             graph_infos,
-            codegen_config=self._generate_config.get("codegen"),
-            print_config=self._generate_config.get("build"),
-            extra_option=extra_option,
+            codegen_configs=self._generate_config.get("codegen"),
+            print_configs=self._generate_config.get("print"),
+            extra_options=extra_option,
             build_folder=self._generate_config["build_folder"],
             output_folder=self._generate_config.get("output_folder", msc_utils.get_output_dir()),
         )

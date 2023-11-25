@@ -93,7 +93,7 @@ class TrackMethod(object):
 
     @classmethod
     def tool_type(cls):
-        return ToolType.TRACK
+        return ToolType.TRACKER
 
 
 msc_utils.register_tool_method(TrackMethod)

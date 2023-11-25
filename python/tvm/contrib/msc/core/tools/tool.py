@@ -34,11 +34,11 @@ class ToolType(object):
     """Enum all msc tool types"""
 
     BASE = "base"
-    PRUNE = "prune"
-    QUANTIZE = "quantize"
-    DISTILL = "distill"
-    TRACK = "track"
-    ALL = [PRUNE, QUANTIZE, DISTILL, TRACK]
+    PRUNER = "pruner"
+    QUANTIZER = "quantizer"
+    DISTILLER = "distiller"
+    TRACKER = "tracker"
+    ALL = [PRUNER, QUANTIZER, DISTILLER, TRACKER]
 
     @classmethod
     def all_types(cls) -> List[str]:
@@ -493,15 +493,13 @@ class BaseTool(object):
 
         if not self._support_scope(scope):
             return tensor
-        strategy = self._get_tensor_strategy(name, consumer)
-        if not strategy:
-            return tensor
         process = self._get_tensor_cache(name, consumer, "process")
         if process is None:
-            process = self._check_tensor(name, consumer, strategy)
+            process = self._check_tensor(name, consumer)
             self._save_tensor_cache(name, consumer, "process", process)
         if not process:
             return tensor
+        strategy = self._get_tensor_strategy(name, consumer)
         return self._process_tensor(tensor, name, consumer, strategy)
 
     def _support_scope(self, scope: str) -> bool:
@@ -520,7 +518,7 @@ class BaseTool(object):
 
         return True
 
-    def _check_tensor(self, name: str, consumer: str, strategy: Strategy) -> bool:
+    def _check_tensor(self, name: str, consumer: str) -> bool:
         """Check if the tensor should be processed
 
         Parameters
@@ -529,8 +527,6 @@ class BaseTool(object):
             The name of the tensor.
         consumer: str
             The name of the consumer.
-        strategy: Strategy
-            The strategy for the tensor
 
         Returns
         -------
@@ -538,7 +534,8 @@ class BaseTool(object):
             Whether to process the tensor.
         """
 
-        return True
+        strategy = self._get_tensor_strategy(name, consumer)
+        return strategy is not None
 
     def _process_tensor(self, tensor: Any, name: str, consumer: str, strategy: Strategy) -> Any:
         """Process tensor
@@ -633,8 +630,8 @@ class BaseTool(object):
         """Get the plan"""
 
         if self._plan:
-            self._logger.debug(
-                "%s(%s) planed %d tensors", self.tool_type().upper(), self._stage, len(self._plan)
+            self._logger.info(
+                "%s(%s) plan %d tensors", self.tool_type().upper(), self._stage, len(self._plan)
             )
         return self._plan
 

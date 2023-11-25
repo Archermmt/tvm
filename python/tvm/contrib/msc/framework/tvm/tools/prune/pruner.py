@@ -37,6 +37,6 @@ class TVMPrunerFactory(object):
 
 
 factory = TVMPrunerFactory()
-tools = msc_utils.get_registered_tool_cls(MSCFramework.MSC, ToolType.PRUNE, tool_style="all")
+tools = msc_utils.get_registered_tool_cls(MSCFramework.MSC, ToolType.PRUNER, tool_style="all")
 for tool in tools.values():
     msc_utils.register_tool_cls(factory.create(tool))

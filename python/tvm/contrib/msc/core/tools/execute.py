@@ -39,14 +39,14 @@ def _get_tool_key(tool_type: str) -> str:
         The tool key.
     """
 
-    if tool_type == ToolType.PRUNE:
-        return MSCKey.PRUNER
-    if tool_type == ToolType.QUANTIZE:
-        return MSCKey.QUANTIZER
-    if tool_type == ToolType.DISTILL:
-        return MSCKey.DISTILLER
-    if tool_type == ToolType.TRACK:
-        return MSCKey.DEBUGGER
+    if tool_type == ToolType.PRUNER:
+        return MSCKey.PRUNERS
+    if tool_type == ToolType.QUANTIZER:
+        return MSCKey.QUANTIZERS
+    if tool_type == ToolType.DISTILLER:
+        return MSCKey.DISTILLERS
+    if tool_type == ToolType.TRACKER:
+        return MSCKey.DEBUGGERS
     raise TypeError("Unexpected tool type " + str(tool_type))
 
 

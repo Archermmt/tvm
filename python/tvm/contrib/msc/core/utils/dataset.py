@@ -167,6 +167,10 @@ class BaseDataLoader(object):
         raise NotImplementedError("_data_info is not implemented for BaseDataLoader")
 
     @property
+    def folder(self):
+        return self._folder
+
+    @property
     def info(self):
         return self._info
 

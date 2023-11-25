@@ -63,10 +63,10 @@ class MSCKey:
 
     FUSED_CNT = "fused_cnt"
 
-    PRUNER = "pruner"
-    QUANTIZER = "quantizer"
-    DISTILLER = "distiller"
-    DEBUGGER = "debugger"
+    PRUNERS = "pruners"
+    QUANTIZERS = "quantizers"
+    DISTILLERS = "distillers"
+    DEBUGGERS = "debuggers"
 
 
 class MSCFramework:

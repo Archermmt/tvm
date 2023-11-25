@@ -85,7 +85,7 @@ class TVMQuantizerFactory(object):
                     The modified output ndarray.
                 """
 
-                if self.calibrated:
+                if self._calibrated:
                     return super()._execute_after_forward(outputs)
                 output_num = len(outputs) - len(self._gather_names)
                 for data, name in zip(outputs[output_num:], self._gather_names):
@@ -119,7 +119,7 @@ class TVMQuantizerFactory(object):
                     The processed tensor.
                 """
 
-                if not self.calibrated:
+                if not self._calibrated:
                     if self.is_weight(name):
                         return self._gather_tensor(self.get_data(name), name, consumer, strategy)
                     if name not in self._gather_tensors:
@@ -141,6 +141,6 @@ class TVMQuantizerFactory(object):
 
 
 factory = TVMQuantizerFactory()
-tools = msc_utils.get_registered_tool_cls(MSCFramework.MSC, ToolType.QUANTIZE, tool_style="all")
+tools = msc_utils.get_registered_tool_cls(MSCFramework.MSC, ToolType.QUANTIZER, tool_style="all")
 for tool in tools.values():
     msc_utils.register_tool_cls(factory.create(tool))

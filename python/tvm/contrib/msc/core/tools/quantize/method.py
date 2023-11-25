@@ -359,7 +359,7 @@ class QuantizeMethod(object):
 
     @classmethod
     def tool_type(cls):
-        return ToolType.QUANTIZE
+        return ToolType.QUANTIZER
 
 
 msc_utils.register_tool_method(QuantizeMethod)

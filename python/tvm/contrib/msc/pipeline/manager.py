@@ -377,26 +377,26 @@ class BaseManager(object):
         """
 
         # run prune
-        if ToolType.PRUNE in stage_config:
-            self._tools_config[ToolType.PRUNE] = stage_config[ToolType.PRUNE]
-            plan_file = stage_config[ToolType.PRUNE]["plan_file"]
+        if ToolType.PRUNER in stage_config:
+            self._tools_config[ToolType.PRUNER] = stage_config[ToolType.PRUNER]
+            plan_file = stage_config[ToolType.PRUNER]["plan_file"]
             if os.path.isfile(plan_file):
-                self._logger.info("Skip %s with plan_file %s", ToolType.PRUNE, plan_file)
+                self._logger.info("Skip %s with plan_file %s", ToolType.PRUNER, plan_file)
             else:
                 msc_utils.time_stamp(MSCStage.PRUNE)
                 runner = self._create_tool_runner(MSCStage.PRUNE, stage_config)
-                runner.apply_tool(ToolType.PRUNE, self._data_loader)
+                runner.apply_tool(ToolType.PRUNER, self._data_loader)
 
         # run quantize
-        if ToolType.QUANTIZE in stage_config:
-            self._tools_config[ToolType.QUANTIZE] = stage_config[ToolType.QUANTIZE]
-            plan_file = stage_config[ToolType.QUANTIZE]["plan_file"]
+        if ToolType.QUANTIZER in stage_config:
+            self._tools_config[ToolType.QUANTIZER] = stage_config[ToolType.QUANTIZER]
+            plan_file = stage_config[ToolType.QUANTIZER]["plan_file"]
             if os.path.isfile(plan_file):
-                self._logger.info("Skip %s with plan_file %s", ToolType.QUANTIZE, plan_file)
+                self._logger.info("Skip %s with plan_file %s", ToolType.QUANTIZER, plan_file)
             else:
                 msc_utils.time_stamp(MSCStage.QUANTIZE)
                 runner = self._create_tool_runner(MSCStage.QUANTIZE, stage_config)
-                runner.apply_tool(ToolType.QUANTIZE, self._data_loader)
+                runner.apply_tool(ToolType.QUANTIZER, self._data_loader)
 
         # optimize and get the runner
         msc_utils.time_stamp(MSCStage.OPTIMIZE)
@@ -513,10 +513,10 @@ class BaseManager(object):
         )
         self._logger.debug("Create runner(%s) by %s(%s)", stage, runner_cls.__name__, run_config)
         # save baseline data for debug
-        if ToolType.TRACK in self._config.get("optimize", {}):
+        if ToolType.TRACKER in self._config.get("optimize", {}):
             tools_config = {
                 **tools_config,
-                ToolType.TRACK: self._config["optimize"][ToolType.TRACK],
+                ToolType.TRACKER: self._config["optimize"][ToolType.TRACKER],
             }
         runner = runner_cls(
             self._relax_mod,
@@ -533,8 +533,8 @@ class BaseManager(object):
             self._report["profile"][stage] = self._profile_runner(runner, stage_config)
         if use_cache:
             runner.save_cache(cache_dir)
-        if runner.get_tool(ToolType.TRACK):
-            runner.apply_tool(ToolType.TRACK)
+        if runner.get_tool(ToolType.TRACKER):
+            runner.apply_tool(ToolType.TRACKER)
         return runner
 
     def _create_tool_runner(self, tool_type: str, stage_config: dict) -> BaseRunner:
@@ -587,7 +587,7 @@ class BaseManager(object):
         msg, report = "Profile({})".format(stage), {}
 
         # check accuracy
-        if runner.get_tool(ToolType.PRUNE) or runner.get_tool(ToolType.QUANTIZE):
+        if runner.get_tool(ToolType.PRUNER) or runner.get_tool(ToolType.QUANTIZER):
             check_config = None
             self._logger.debug("Disable accuracy check(%s) by tools", stage)
         else:
@@ -616,7 +616,7 @@ class BaseManager(object):
                 )
 
         # benchmark model
-        if runner.get_tool(ToolType.TRACK):
+        if runner.get_tool(ToolType.TRACKER):
             benchmark_config = None
             self._logger.debug("Disable benchmark(%s) by tools", stage)
         else:

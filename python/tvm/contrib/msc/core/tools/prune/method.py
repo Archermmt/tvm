@@ -112,7 +112,7 @@ class PruneMethod(object):
 
     @classmethod
     def tool_type(cls):
-        return ToolType.PRUNE
+        return ToolType.PRUNER
 
 
 msc_utils.register_tool_method(PruneMethod)

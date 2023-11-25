@@ -88,7 +88,7 @@ class BaseQuantizer(BaseTool):
             self.change_stage("quantize")
         return new_plan
 
-    def _check_tensor(self, name: str, consumer: str, strategy: Strategy) -> bool:
+    def _check_tensor(self, name: str, consumer: str) -> bool:
         """Check if the tensor should be processed
 
         Parameters
@@ -97,16 +97,15 @@ class BaseQuantizer(BaseTool):
             The name of the tensor.
         consumer: str
             The name of the consumer.
-        strategy: Strategy
-            The strategy for the tensor
-
         Returns
         -------
         vaild: bool
             Whether to process the tensor.
         """
 
-        # only process tensor with nbits>0
+        strategy = self._get_tensor_strategy(name, consumer)
+        if not strategy:
+            return False
         if strategy.get_config("nbits", 8) == -1:
             return False
         return True
@@ -131,7 +130,7 @@ class BaseQuantizer(BaseTool):
             The processed tensor.
         """
 
-        if not self.calibrated:
+        if not self._calibrated:
             return self._gather_tensor(tensor, name, consumer, strategy)
         return self._quantize_tensor(tensor, name, consumer, strategy)
 
@@ -191,7 +190,7 @@ class BaseQuantizer(BaseTool):
 
     @classmethod
     def tool_type(cls):
-        return ToolType.QUANTIZE
+        return ToolType.QUANTIZER
 
 
 class DefaultQuantizer(BaseQuantizer):

@@ -17,9 +17,13 @@
 # pylint: disable=unused-import
 """tvm.contrib.msc.framework.tensorrt.runtime.runner"""
 
+from typing import Any
+
 import tvm
 from tvm.contrib.msc.core.runtime import BYOCRunner
+from tvm.contrib.msc.core.tools import ToolType
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
+from tvm.contrib.msc.core import utils as msc_utils
 from tvm.contrib.msc.framework.tensorrt.frontend import (
     partition_for_tensorrt,
     transform_for_tensorrt,
@@ -43,6 +47,36 @@ class TensorRTRunner(BYOCRunner):
         if not self._device.startswith("cuda"):
             self._device = "cuda"
         return super().setup()
+
+    def apply_tool(self, tool_type: str, data_loader: Any = None) -> dict:
+        """Execute tool and get plan
+
+        Parameters
+        -------
+        tool_type: str
+            The tool type, should be in ToolType
+        data_loader:
+            The data loader
+        """
+
+        assert tool_type in self._tools, "Can not find tool " + str(tool_type)
+        if tool_type == ToolType.QUANTIZER:
+            codegen = self._generate_config.get("codegen")
+            if not isinstance(codegen, (list, tuple)):
+                self._generate_config["codegen"] = [msc_utils.copy_dict(codegen)] * len(
+                    self._graphs
+                )
+            quantizer = self.get_tool(ToolType.QUANTIZER)
+            while not quantizer.calibrated:
+                assert data_loader, "data_loader should be given to plan prune"
+                for inputs in data_loader():
+                    self.run(inputs)
+                self._generate_config["codegen"] = quantizer.update_codegen(
+                    self._generate_config["codegen"]
+                )
+                self._generate_model()
+                quantizer.calibrate()
+        return super().apply_tool(tool_type, data_loader)
 
     @classmethod
     def target_transform(cls, mod: tvm.IRModule):

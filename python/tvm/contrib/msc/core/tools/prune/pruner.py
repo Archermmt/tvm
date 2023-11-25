@@ -64,6 +64,34 @@ class BasePruner(BaseTool):
 
         return super().setup()
 
+    def reset(
+        self,
+        graphs: List[MSCGraph],
+        weights: List[Dict[str, tvm.nd.array]],
+        cache_dir: msc_utils.MSCDirectory = None,
+    ) -> Tuple[List[MSCGraph], List[Dict[str, tvm.nd.array]]]:
+        """Reset the tool with graphs and weights
+
+        Parameters
+        ----------
+        graphs: list<MSCgraph>
+            The msc graphs.
+        weights: list<dic<str, tvm.nd.array>>
+            The weights
+        cache_dir: MSCDirectory
+            cache path for save/load info
+
+        Returns
+        -------
+        graphs: list<MSCgraph>
+            The msc graphs.
+        weights: list<dic<str, tvm.nd.array>>
+            The weights
+        """
+
+        self._unpruned_tensors = {}
+        return super().reset(graphs, weights, cache_dir)
+
     def load_graphs(
         self, graphs: List[MSCGraph], weights: List[Dict[str, tvm.nd.array]]
     ) -> Tuple[List[MSCGraph], List[Dict[str, tvm.nd.array]]]:
@@ -91,12 +119,11 @@ class BasePruner(BaseTool):
             _ffi_api.WeightGraph(graph, self._prunable_types, self._relation_types)
             for graph in graphs
         ]
-        self._unpruned_tensors = {}
         if not self._plan:
             return graphs, weights
         return self.prune_graphs(graphs, weights)
 
-    def _check_tensor(self, name: str, consumer: str, strategy: Strategy) -> bool:
+    def _check_tensor(self, name: str, consumer: str) -> bool:
         """Check if the tensor should be processed
 
         Parameters
@@ -105,8 +132,6 @@ class BasePruner(BaseTool):
             The name of the tensor.
         consumer: str
             The name of the consumer.
-        strategy: Strategy
-            The strategy for the tensor
 
         Returns
         -------
@@ -114,8 +139,10 @@ class BasePruner(BaseTool):
             Whether to process the tensor.
         """
 
-        # only process w_node once
         if not self.has_w_node(name):
+            return False
+        strategy = self._get_tensor_strategy(name, consumer)
+        if not strategy:
             return False
         if strategy.get_config("density", 1.0) == 1.0:
             return False
@@ -347,7 +374,6 @@ class BasePruner(BaseTool):
         self._weight_graphs = [
             WeightGraph.from_json(cache_dir.relpath(f)) for f in cache_info["weight_graphs"]
         ]
-        self._unpruned_tensors = {}
 
     def save_cache(self, cache_dir: msc_utils.MSCDirectory) -> dict:
         """Save runner to cache
@@ -469,7 +495,7 @@ class BasePruner(BaseTool):
 
     @classmethod
     def tool_type(cls):
-        return ToolType.PRUNE
+        return ToolType.PRUNER
 
 
 class DefaultPruner(BasePruner):

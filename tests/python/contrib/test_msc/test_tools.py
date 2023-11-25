@@ -60,62 +60,56 @@ def _get_config(model_type, deploy_type, tools_config, inputs, outputs, atol=1e-
 
 def get_tool_config(tool_type):
     config = {}
-    if tool_type == "prune":
+    if tool_type == "pruner":
         config = {
-            "prune": {
-                "plan_file": "msc_prune.json",
-                "strategys": [{"method": "per_channel", "density": 0.8}],
-            }
+            "plan_file": "msc_prune.json",
+            "strategys": [{"method": "per_channel", "density": 0.8}],
         }
-    elif tool_type == "quantize":
+    elif tool_type == "quantizer":
         config = {
-            "quantize": {
-                "plan_file": "msc_quantize.json",
-                "strategys": [
-                    {
-                        "method": "gather_maxmin",
-                        "op_types": ["nn.conv2d", "msc.linear"],
-                        "tensor_types": ["input"],
-                        "stage": "gather",
-                    },
-                    {
-                        "method": "gather_max_per_channel",
-                        "op_types": ["nn.conv2d", "msc.linear"],
-                        "tensor_types": ["weight"],
-                        "stage": "gather",
-                    },
-                    {
-                        "method": "calibrate_maxmin",
-                        "op_types": ["nn.conv2d", "msc.linear"],
-                        "tensor_types": ["input"],
-                        "stage": "calibrate",
-                    },
-                    {
-                        "method": "quantize_normal",
-                        "op_types": ["nn.conv2d", "msc.linear"],
-                        "tensor_types": ["input", "weight"],
-                    },
-                ],
-            }
+            "plan_file": "msc_quantize.json",
+            "strategys": [
+                {
+                    "method": "gather_maxmin",
+                    "op_types": ["nn.conv2d", "msc.linear"],
+                    "tensor_types": ["input"],
+                    "stage": "gather",
+                },
+                {
+                    "method": "gather_max_per_channel",
+                    "op_types": ["nn.conv2d", "msc.linear"],
+                    "tensor_types": ["weight"],
+                    "stage": "gather",
+                },
+                {
+                    "method": "calibrate_maxmin",
+                    "op_types": ["nn.conv2d", "msc.linear"],
+                    "tensor_types": ["input"],
+                    "stage": "calibrate",
+                },
+                {
+                    "method": "quantize_normal",
+                    "op_types": ["nn.conv2d", "msc.linear"],
+                    "tensor_types": ["input", "weight"],
+                },
+            ],
         }
-    elif tool_type == "track":
+    elif tool_type == "tracker":
         config = {
-            "track": {
-                "plan_file": "msc_track.json",
-                "strategys": [
-                    {
-                        "method": "save_compared",
-                        "compare_to": {
-                            "optimize": ["baseline"],
-                            "compile": ["optimize", "baseline"],
-                        },
-                        "op_types": ["nn.relu"],
-                        "tensor_types": ["output"],
-                    }
-                ],
-            }
+            "plan_file": "msc_track.json",
+            "strategys": [
+                {
+                    "method": "save_compared",
+                    "compare_to": {
+                        "optimize": ["baseline"],
+                        "compile": ["optimize", "baseline"],
+                    },
+                    "op_types": ["nn.relu"],
+                    "tensor_types": ["output"],
+                }
+            ],
         }
-    return config
+    return {tool_type: config}
 
 
 def _get_torch_model(name, is_training=False):
@@ -165,7 +159,7 @@ def _test_from_torch(
         manager.destory()
 
 
-@pytest.mark.parametrize("tool_type", ["prune", "track"])
+@pytest.mark.parametrize("tool_type", ["prune", "quantize", "track"])
 def test_tvm_tools(tool_type):
     """Test tools for tvm"""
 
@@ -193,7 +187,7 @@ def test_tvm_tools(tool_type):
 
 
 @requires_tensorrt
-@pytest.mark.parametrize("tool_type", ["prune", "track"])
+@pytest.mark.parametrize("tool_type", ["prune", "quantize", "track"])
 def test_tensorrt_tools(tool_type):
     """Test tools for tensorrt"""
 
@@ -210,4 +204,5 @@ def test_tensorrt_tools(tool_type):
 
 if __name__ == "__main__":
     # tvm.testing.main()
-    test_tvm_tools("prune")
+    # test_tvm_tools("prune")
+    test_tvm_tools("tracker")

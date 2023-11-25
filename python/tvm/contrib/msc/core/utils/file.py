@@ -109,15 +109,13 @@ class MSCDirectory(object):
             f.write(contains)
         return file_path
 
-    def move_file(self, src_file: str, dst_folder: Any, dst_file: str = None):
+    def move_file(self, src_file: str, dst_file: str = None):
         """Move a file to another folder
 
         Parameters
         ----------
         src_file: str
             The name of the source file.
-        dst_folder: MSCDirectory
-            The target folder.
         dst_file: str
             The target file name.
 
@@ -127,21 +125,23 @@ class MSCDirectory(object):
             The abs file path.
         """
 
-        src_path = os.path.join(self.relpath(src_file))
-        assert os.path.isfile(src_path), "Source file {} not exist".format(src_path)
-        dst_path = dst_folder.relpath(dst_file or src_file)
-        os.rename(src_path, dst_path)
-        return dst_path
+        if src_file != os.path.abspath(src_file):
+            src_file = os.path.join(self.relpath(src_file))
+        assert os.path.isfile(src_file), "Source file {} not exist".format(src_file)
+        if not dst_file:
+            dst_file = self.relpath(os.path.basename(src_file))
+        if dst_file != os.path.abspath(dst_file):
+            dst_file = self.relpath(dst_file)
+        os.rename(src_file, dst_file)
+        return dst_file
 
-    def copy_file(self, src_file: str, dst_folder: Any, dst_file: str = None):
+    def copy_file(self, src_file: str, dst_file: str = None):
         """Copy a file to another folder
 
         Parameters
         ----------
         src_file: str
             The name of the source file.
-        dst_folder: MSCDirectory
-            The target folder.
         dst_file: str
             The target file name.
 
@@ -151,11 +151,15 @@ class MSCDirectory(object):
             The abs file path.
         """
 
-        src_path = os.path.join(self.relpath(src_file))
-        assert os.path.isfile(src_path), "Source file {} not exist".format(src_path)
-        dst_path = dst_folder.relpath(dst_file or src_file)
-        shutil.copy2(src_path, dst_path)
-        return dst_path
+        if src_file != os.path.abspath(src_file):
+            src_file = os.path.join(self.relpath(src_file))
+        assert os.path.isfile(src_file), "Source file {} not exist".format(src_file)
+        if not dst_file:
+            dst_file = self.relpath(os.path.basename(src_file))
+        if dst_file != os.path.abspath(dst_file):
+            dst_file = self.relpath(dst_file)
+        shutil.copy2(src_file, dst_file)
+        return dst_file
 
     def create_dir(self, name: str, keep_history: bool = True, cleanup: bool = False) -> Any:
         """Add a dir under the folder

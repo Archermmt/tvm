@@ -37,6 +37,6 @@ class TorchQuantizerFactory(object):
 
 
 factory = TorchQuantizerFactory()
-tools = msc_utils.get_registered_tool_cls(MSCFramework.MSC, ToolType.QUANTIZE, tool_style="all")
+tools = msc_utils.get_registered_tool_cls(MSCFramework.MSC, ToolType.QUANTIZER, tool_style="all")
 for tool in tools.values():
     msc_utils.register_tool_cls(factory.create(tool))

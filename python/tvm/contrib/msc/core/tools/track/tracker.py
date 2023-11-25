@@ -63,25 +63,26 @@ class BaseTracker(BaseTool):
         """
 
         if self._forward_cnt < self._max_iter:
-            passed_info = {}
+            passed = {}
             for info in self._plan.values():
                 if "diffs" not in info[self._stage]:
                     continue
                 for stage, p_info in info[self._stage]["diffs"].items():
-                    if stage not in passed_info:
-                        passed_info[stage] = {"total": 0, "passed": 0}
-                    passed_info[stage]["total"] += 1
+                    if stage not in passed:
+                        passed[stage] = {"total": 0, "passed": 0}
+                    passed[stage]["total"] += 1
                     if p_info["pass"]:
-                        passed_info[stage]["passed"] += 1
+                        passed[stage]["passed"] += 1
             msg = "Track({})[{}] {} datas".format(self._stage, self._forward_cnt, len(self._plan))
-            if passed_info:
-                msg += ", passed ->"
-            for stage, p_info in passed_info.items():
-                msg += " {}: {}/{}".format(stage, p_info["passed"], p_info["total"])
+            if passed:
+                msg += ", passed -> "
+                msg += "; ".join(
+                    ["{}: {}/{}".format(s, i["passed"], i["total"]) for s, i in passed.items()]
+                )
             self._logger.info(msg)
         return output
 
-    def _check_tensor(self, name: str, consumer: str, strategy: Strategy) -> bool:
+    def _check_tensor(self, name: str, consumer: str) -> bool:
         """Check if the tensor should be processed
 
         Parameters
@@ -90,8 +91,6 @@ class BaseTracker(BaseTool):
             The name of the tensor.
         consumer: str
             The name of the consumer.
-        strategy: Strategy
-            The strategy for the tensor
 
         Returns
         -------
@@ -100,6 +99,9 @@ class BaseTracker(BaseTool):
         """
 
         if self._forward_cnt >= self._max_iter:
+            return False
+        strategy = self._get_tensor_strategy(name, consumer)
+        if not strategy:
             return False
         compare_to = strategy.get_config("compare_to", {})
         if self._stage in compare_to:
@@ -160,7 +162,7 @@ class BaseTracker(BaseTool):
 
     @classmethod
     def tool_type(cls):
-        return ToolType.TRACK
+        return ToolType.TRACKER
 
 
 class DefaultTracker(BaseTracker):
