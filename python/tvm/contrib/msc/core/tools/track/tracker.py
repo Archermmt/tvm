@@ -16,7 +16,7 @@
 # under the License.
 """tvm.contrib.msc.core.tools.track.tracker"""
 
-from typing import Any
+from typing import Any, List
 from tvm.contrib.msc.core.tools.tool import ToolType, BaseTool, Strategy
 from tvm.contrib.msc.core import utils as msc_utils
 
@@ -111,7 +111,9 @@ class BaseTracker(BaseTool):
                 return True
         return False
 
-    def _process_tensor(self, tensor: Any, name: str, consumer: str, strategy: Strategy) -> Any:
+    def _process_tensor(
+        self, tensor: Any, name: str, consumer: str, strategys: List[Strategy]
+    ) -> Any:
         """Process tensor
 
         Parameters
@@ -122,8 +124,8 @@ class BaseTracker(BaseTool):
             The name of the tensor.
         consumer: str
             The name of the consumer.
-        strategy: Strategy
-            The strategy for the tensor
+        strategys: list<Strategy>
+            The strategys for the tensor.
 
         Returns
         -------
@@ -131,9 +133,11 @@ class BaseTracker(BaseTool):
             The processed tensor.
         """
 
-        return self._track_tensor(tensor, name, consumer, strategy)
+        return self._track_tensor(tensor, name, consumer, strategys)
 
-    def _track_tensor(self, tensor: Any, name: str, consumer: str, strategy: Strategy) -> Any:
+    def _track_tensor(
+        self, tensor: Any, name: str, consumer: str, strategys: List[Strategy]
+    ) -> Any:
         """Process tensor
 
         Parameters
@@ -144,8 +148,8 @@ class BaseTracker(BaseTool):
             The name of the tensor.
         consumer: str
             The name of the consumer.
-        strategy: Strategy
-            The strategy for the tensor
+        strategys: list<Strategy>
+            The strategys for the tensor.
 
         Returns
         -------
@@ -157,7 +161,10 @@ class BaseTracker(BaseTool):
             return tensor
         if name not in self._plan:
             self._plan[name] = {}
-        self._plan[name][self._stage] = strategy(self, tensor, name, consumer)
+        plan = {}
+        for strategy in strategys:
+            plan.update(strategy(self, tensor, name, consumer))
+        self._plan[name][self._stage] = plan
         return tensor
 
     @classmethod

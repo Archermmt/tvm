@@ -86,14 +86,18 @@ class TVMTrackerFactory(object):
                 output_num = len(outputs) - len(self._track_names)
                 for data, name in zip(outputs[output_num:], self._track_names):
                     consumer = self._track_tensors[name]["consumer"]
-                    strategy = self._get_tensor_strategy(name, consumer)
-                    self._track_tensor(data, name, consumer, strategy)
+                    strategys = self._get_tensor_strategys(name, consumer)
+                    self._track_tensor(data, name, consumer, strategys)
                 if output_num == 1:
                     return super()._execute_after_forward(outputs[0])
                 return super()._execute_after_forward(outputs[:output_num])
 
             def _process_tensor(
-                self, tensor: tvm.relax.DataflowVar, name: str, consumer: str, strategy: Strategy
+                self,
+                tensor: tvm.relax.DataflowVar,
+                name: str,
+                consumer: str,
+                strategys: List[Strategy],
             ) -> tvm.relax.DataflowVar:
                 """Process tensor
 
@@ -105,8 +109,8 @@ class TVMTrackerFactory(object):
                     The name of the tensor.
                 consumer: str
                     The name of the consumer.
-                strategy: Strategy
-                    The strategy for the tensor
+                strategys: list<Strategy>
+                    The strategys for the tensor.
 
                 Returns
                 -------
@@ -115,7 +119,7 @@ class TVMTrackerFactory(object):
                 """
 
                 if self.is_weight(name):
-                    return self._track_tensor(self.get_data(name), name, consumer, strategy)
+                    return self._track_tensor(self.get_data(name), name, consumer, strategys)
                 if name not in self._track_tensors:
                     self._track_tensors[name] = {"consumer": consumer, "tensor": tensor}
                     self._track_names.append(name)

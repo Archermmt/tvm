@@ -65,6 +65,9 @@ class TensorRTCodeGen : public CppCodeGen<TensorRTCodeGenConfig, TensorRTCodeGen
   /*! \brief Get the tensor context for codegen_tensor*/
   const Map<String, String> GetTensorCtx(const MSCTensor& tensor) final;
 
+  /*! \brief Get the step context for codegen_step*/
+  const Map<String, String> GetStepCtx() final;
+
   /*! \brief Generate return on fail codes*/
   void ReturnOnFail(const String& flag, const String& err);
 

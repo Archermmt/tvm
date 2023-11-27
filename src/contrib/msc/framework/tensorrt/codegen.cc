@@ -111,7 +111,7 @@ void TensorRTCodeGen::CodeGenClassDefine() {
     const auto* pf = runtime::Registry::Get("msc_tool.codegen_step");
     ICHECK(pf != nullptr) << "Cannot find msc_tool.codegen_step func.";
     const Array<String>& lines =
-        (*pf)(GetGraphCtx(), "before_build", graph()->name, config()->tools_tag);
+        (*pf)(GetStepCtx(), "before_build", graph()->name, config()->tools_tag);
     for (const auto& l : lines) {
       stack_.line(l);
     }
@@ -150,11 +150,53 @@ void TensorRTCodeGen::CodeGenClassDefine() {
     stack_.func_call("setMaxWorkspaceSize", NullOpt, DocUtils::ToPtrDoc("builder"))
         .call_arg(config()->max_workspace);
   }
+  // set data type
+  if (config()->precision == "float16") {
+    stack_.comment("Set network data_type")
+        .cond_if("!builder->platformHaseFastFp16()")
+        .func_call("logger.log")
+        .call_arg("ILogger::Severity::kINTERNAL_ERROR")
+        .call_arg(DocUtils::ToStrDoc("platform do not support float16, fallback to float32"))
+        .cond_else()
+        .func_call("setFlag", NullOpt, DocUtils::ToPtrDoc("config"))
+        .call_arg("BuilderFlag::kFP16");
+    if (config()->precision_mode == "strict") {
+      stack_.func_call("setFlag", NullOpt, DocUtils::ToPtrDoc("config"))
+          .call_arg("BuilderFlag::kSTRICT_TYPES");
+    }
+    stack_.func_call("logger.log")
+        .call_arg("ILogger::Severity::kINFO")
+        .call_arg(DocUtils::ToStrDoc("use float16 to build the engine"))
+        .cond_end();
+  } else if (config()->precision == "int8") {
+    stack_.comment("Set network data_type")
+        .cond_if("!builder->platformHaseFastInt8()")
+        .func_call("logger.log")
+        .call_arg("ILogger::Severity::kINTERNAL_ERROR")
+        .call_arg(DocUtils::ToStrDoc("platform do not support int8, fallback to float32"))
+        .cond_else()
+        .func_call("setFlag", NullOpt, DocUtils::ToPtrDoc("config"))
+        .call_arg("BuilderFlag::kINT8");
+    if (config()->precision_mode == "strict") {
+      stack_.func_call("setFlag", NullOpt, DocUtils::ToPtrDoc("config"))
+          .call_arg("BuilderFlag::kSTRICT_TYPES");
+    } else if (config()->precision_mode == "prefer") {
+      stack_.func_call("setFlag", NullOpt, DocUtils::ToPtrDoc("config"))
+          .call_arg("BuilderFlag::kPREFER_PRECISION_CONSTRAINTS");
+    } else if (config()->precision_mode == "obey") {
+      stack_.func_call("setFlag", NullOpt, DocUtils::ToPtrDoc("config"))
+          .call_arg("BuilderFlag::kOBEY_PRECISION_CONSTRAINTS");
+    }
+    stack_.func_call("logger.log")
+        .call_arg("ILogger::Severity::kINFO")
+        .call_arg(DocUtils::ToStrDoc("use int8 to build the engine"))
+        .cond_end();
+  }
   if (config()->use_tools) {
     const auto* pf = runtime::Registry::Get("msc_tool.codegen_step");
     ICHECK(pf != nullptr) << "Cannot find msc_tool.codegen_step func.";
     const Array<String>& lines =
-        (*pf)(GetGraphCtx(), "after_build", graph()->name, config()->tools_tag);
+        (*pf)(GetStepCtx(), "after_build", graph()->name, config()->tools_tag);
     for (const auto& l : lines) {
       stack_.line(l);
     }
@@ -492,6 +534,17 @@ const Map<String, String> TensorRTCodeGen::GetTensorCtx(const MSCTensor& tensor)
     tensor_ctx.Set(pair.first, pair.second);
   }
   return tensor_ctx;
+}
+
+const Map<String, String> TensorRTCodeGen::GetStepCtx() {
+  Map<String, String> step_ctx;
+  step_ctx.Set("network", "network");
+  step_ctx.Set("config", "config");
+  step_ctx.Set("builder", "builder");
+  for (const auto& pair : CppCodeGen<TensorRTCodeGenConfig, TensorRTCodeGenHelper>::GetStepCtx()) {
+    step_ctx.Set(pair.first, pair.second);
+  }
+  return step_ctx;
 }
 
 TVM_REGISTER_GLOBAL("msc.framework.tensorrt.GetTensorRTSources")

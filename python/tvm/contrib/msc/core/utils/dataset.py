@@ -301,8 +301,21 @@ class BaseDataSaver(object):
         self.finalize()
 
     def finalize(self):
+        """Finalize the saver"""
+
         with open(os.path.join(self._folder, "datas_info.json"), "w") as f:
             f.write(json.dumps(self._info, indent=2))
+
+    def is_finalized(self) -> bool:
+        """Check if the saver is finalized
+
+        Returns
+        -------
+        is_finalized: bool
+           Whether the saver is finalized.
+        """
+
+        return os.path.isfile(os.path.join(self._folder, "datas_info.json"))
 
     def reset(self):
         self._current = 0
@@ -357,6 +370,10 @@ class BaseDataSaver(object):
         raise NotImplementedError("_save_batch is not implemented for BaseDataSaver")
 
     @property
+    def folder(self):
+        return self._folder
+
+    @property
     def info(self):
         return self._info
 
@@ -402,6 +419,28 @@ class IODataSaver(BaseDataSaver):
         self._input_names = options["input_names"]
         self._output_names = options.get("output_names", [])
         return {"inputs": {}, "outputs": {}, "num_datas": 0}
+
+    def finalize(self):
+        """Finalize the saver"""
+
+        super().finalize()
+        with open(os.path.join(self._folder, "datas_info.txt"), "w") as f:
+            for name in self._input_names + self._output_names:
+                info = self._info["inputs"][name]
+                f.write("{} {} {}\n".format(name, info.get("save_name", name), info["bytes"]))
+
+    def is_finalized(self) -> bool:
+        """Check if the saver is finalized
+
+        Returns
+        -------
+        is_finalized: bool
+           Whether the saver is finalized.
+        """
+
+        if not super().is_finalized():
+            return False
+        return os.path.isfile(os.path.join(self._folder, "datas_info.txt"))
 
     def save_batch(
         self,

@@ -91,14 +91,18 @@ class TVMQuantizerFactory(object):
                 for data, name in zip(outputs[output_num:], self._gather_names):
                     info = self._gather_tensors[name]
                     for consumer in info["consumers"]:
-                        strategy = self._get_tensor_strategy(name, consumer)
-                        self._gather_tensor(data, name, consumer, strategy)
+                        strategys = self._get_tensor_strategys(name, consumer)
+                        self._gather_tensor(data, name, consumer, strategys)
                 if output_num == 1:
                     return super()._execute_after_forward(outputs[0])
                 return super()._execute_after_forward(outputs[:output_num])
 
             def _process_tensor(
-                self, tensor: tvm.relax.DataflowVar, name: str, consumer: str, strategy: Strategy
+                self,
+                tensor: tvm.relax.DataflowVar,
+                name: str,
+                consumer: str,
+                strategys: List[Strategy],
             ) -> tvm.relax.DataflowVar:
                 """Process tensor
 
@@ -110,8 +114,8 @@ class TVMQuantizerFactory(object):
                     The name of the tensor.
                 consumer: str
                     The name of the consumer.
-                strategy: Strategy
-                    The strategy for the tensor
+                strategys: list<Strategy>
+                    The strategys for the tensor.
 
                 Returns
                 -------
@@ -121,7 +125,7 @@ class TVMQuantizerFactory(object):
 
                 if not self._calibrated:
                     if self.is_weight(name):
-                        return self._gather_tensor(self.get_data(name), name, consumer, strategy)
+                        return self._gather_tensor(self.get_data(name), name, consumer, strategys)
                     if name not in self._gather_tensors:
                         self._gather_tensors[name] = {
                             "consumers": [consumer],
@@ -131,7 +135,7 @@ class TVMQuantizerFactory(object):
                     else:
                         self._gather_tensors[name]["consumers"].append(consumer)
                     return tensor
-                return self._quantize_tensor(tensor, name, consumer, strategy)
+                return self._quantize_tensor(tensor, name, consumer, strategys)
 
             @classmethod
             def framework(cls):

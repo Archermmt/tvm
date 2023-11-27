@@ -56,6 +56,8 @@ class BaseRunner(object):
         The device of the model, cpu| cuda| cuda:0|...
     is_training: bool
         Whether use model in training
+    debug_level: int
+        The debug level.
     logger: logging.Logger
         The logger
     """
@@ -70,6 +72,7 @@ class BaseRunner(object):
         name: str = "main",
         device: str = "cpu",
         is_training: bool = False,
+        debug_level: int = 0,
         logger: logging.Logger = None,
     ):
         self._mod = mod
@@ -80,6 +83,7 @@ class BaseRunner(object):
         self._name = name
         self._device = device if self._device_enabled(device) else "cpu"
         self._is_training = is_training
+        self._debug_level = debug_level
         self._logger = logger or msc_utils.get_global_logger()
         self._logger.info(
             msc_utils.msg_block(
@@ -113,6 +117,7 @@ class BaseRunner(object):
             "name": self._name,
             "device": self._device,
             "is_training": self._is_training,
+            "debug_level": self._debug_level,
         }
 
     def change_stage(self, stage: str):
@@ -153,14 +158,16 @@ class BaseRunner(object):
         # Load graphs from cache
         if cache_info.get("graphs"):
             self._graphs, self._weights = self._load_graphs(cache_dir, cache_info["graphs"])
-            self._logger.debug(
-                "Load {} graphs from cache @ {}".format(len(self._graphs), cache_dir)
-            )
+            if self._debug_level >= 1:
+                self._logger.debug(
+                    "Load {} graphs from cache @ {}".format(len(self._graphs), cache_dir)
+                )
 
         # Get or rebuild graphs
         if build_graph or not self._graphs:
             self._graphs, self._weights = self._translate()
-            self._logger.debug("Translate {} graphs from module".format(len(self._graphs)))
+            if self._debug_level >= 1:
+                self._logger.debug("Translate {} graphs from module".format(len(self._graphs)))
 
         # load graph by tool
         for tool in self._tools.values():
@@ -183,7 +190,8 @@ class BaseRunner(object):
                     )
                 )
         self._model_info = self._inspect_model()
-        self._logger.debug(msc_utils.msg_block("MODEL_INFO", self._model_info))
+        if self._debug_level >= 3:
+            self._logger.debug(msc_utils.msg_block("RUNNER.MODEL_INFO", self._model_info))
 
         if cache_info.get("runnable") and not build_graph:
             # Load runnable from cache
@@ -216,9 +224,10 @@ class BaseRunner(object):
             cache_info.update(tool.save_cache(cache_dir))
         with open(cache_dir.relpath("cache_info.json"), "w") as f:
             f.write(json.dumps(cache_info, indent=2))
-        self._logger.debug(
-            msc_utils.msg_block("CACHE_INFO", {"folder": cache_dir, "info": cache_info})
-        )
+        if self._debug_level >= 3:
+            self._logger.debug(
+                msc_utils.msg_block("RUNNER.CACHE_INFO", {"folder": cache_dir, "info": cache_info})
+            )
 
     def run(
         self, inputs: Union[List[np.ndarray], Dict[str, np.ndarray]], ret_type="dict"
@@ -955,6 +964,11 @@ class BYOCRunner(BaseRunner):
             The inspected model info
         """
 
+        if self._debug_level >= 3:
+            for idx, graph in enumerate(self._graphs):
+                self._logger.debug(
+                    msc_utils.msg_block("RUNNER.GRAPH[{}].INFO".format(idx), graph.inspect())
+                )
         return self._byoc_graph.inspect()
 
     def _device_enabled(self, device: str) -> bool:

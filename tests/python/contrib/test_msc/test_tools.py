@@ -24,6 +24,7 @@ import torch
 
 import tvm.testing
 from tvm.contrib.msc.pipeline import MSCManager
+from tvm.contrib.msc.core.tools import ToolType
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 
@@ -33,13 +34,22 @@ requires_tensorrt = pytest.mark.skipif(
 )
 
 
-def _get_config(model_type, deploy_type, tools_config, inputs, outputs, atol=1e-2, rtol=1e-2):
+def _get_config(
+    model_type,
+    compile_type,
+    tools_config,
+    inputs,
+    outputs,
+    atol=1e-2,
+    rtol=1e-2,
+    optimize_type=None,
+):
     """Get msc config"""
     return {
         "model_type": model_type,
         "inputs": inputs,
         "outputs": outputs,
-        "debug": False,
+        "debug_level": 2,
         "dataset": {"loader": "from_random", "max_iter": 5},
         "prepare": {"profile": {"benchmark": {"repeat": 10}}},
         "baseline": {
@@ -47,12 +57,12 @@ def _get_config(model_type, deploy_type, tools_config, inputs, outputs, atol=1e-
             "profile": {"check": {"atol": atol, "rtol": rtol}, "benchmark": {"repeat": 10}},
         },
         "optimize": {
-            "run_type": model_type,
+            "run_type": optimize_type or model_type,
             "profile": {"check": {"atol": atol, "rtol": rtol}, "benchmark": {"repeat": 10}},
             **tools_config,
         },
         "compile": {
-            "run_type": deploy_type,
+            "run_type": compile_type,
             "profile": {"check": {"atol": atol, "rtol": rtol}, "benchmark": {"repeat": 10}},
         },
     }
@@ -60,43 +70,48 @@ def _get_config(model_type, deploy_type, tools_config, inputs, outputs, atol=1e-
 
 def get_tool_config(tool_type):
     config = {}
-    if tool_type == "pruner":
+    if tool_type == ToolType.PRUNER:
         config = {
-            "plan_file": "msc_prune.json",
+            "plan_file": "msc_pruner.json",
             "strategys": [{"method": "per_channel", "density": 0.8}],
         }
-    elif tool_type == "quantizer":
+    elif tool_type == ToolType.QUANTIZER:
         config = {
-            "plan_file": "msc_quantize.json",
+            "plan_file": "msc_quantizer.json",
             "strategys": [
                 {
                     "method": "gather_maxmin",
                     "op_types": ["nn.conv2d", "msc.linear"],
                     "tensor_types": ["input"],
-                    "stage": "gather",
+                    "stages": ["gather"],
                 },
                 {
                     "method": "gather_max_per_channel",
                     "op_types": ["nn.conv2d", "msc.linear"],
                     "tensor_types": ["weight"],
-                    "stage": "gather",
+                    "stages": ["gather"],
                 },
                 {
                     "method": "calibrate_maxmin",
                     "op_types": ["nn.conv2d", "msc.linear"],
                     "tensor_types": ["input"],
-                    "stage": "calibrate",
+                    "stages": ["calibrate"],
                 },
                 {
                     "method": "quantize_normal",
                     "op_types": ["nn.conv2d", "msc.linear"],
                     "tensor_types": ["input", "weight"],
                 },
+                {
+                    "method": "dequantize_normal",
+                    "op_types": ["nn.conv2d", "msc.linear"],
+                    "tensor_types": ["output"],
+                },
             ],
         }
-    elif tool_type == "tracker":
+    elif tool_type == ToolType.TRACKER:
         config = {
-            "plan_file": "msc_track.json",
+            "plan_file": "msc_tracker.json",
             "strategys": [
                 {
                     "method": "save_compared",
@@ -130,7 +145,13 @@ def _get_torch_model(name, is_training=False):
 
 
 def _test_from_torch(
-    deploy_type, tools_config, expected_info, is_training=False, atol=1e-2, rtol=1e-2
+    compile_type,
+    tools_config,
+    expected_info,
+    is_training=False,
+    atol=1e-2,
+    rtol=1e-2,
+    optimize_type=None,
 ):
     torch_model = _get_torch_model("resnet50", is_training)
     if torch_model:
@@ -138,16 +159,17 @@ def _test_from_torch(
             torch_model = torch_model.to(torch.device("cuda:0"))
         config = _get_config(
             MSCFramework.TORCH,
-            deploy_type,
+            compile_type,
             tools_config,
             inputs=[["input_0", [1, 3, 224, 224], "float32"]],
             outputs=["output"],
             atol=atol,
             rtol=rtol,
+            optimize_type=optimize_type,
         )
         manager = MSCManager(torch_model, config)
         report = manager.run_pipe()
-        assert report["success"], "Failed to run pipe for torch -> {}".format(deploy_type)
+        assert report["success"], "Failed to run pipe for torch -> {}".format(compile_type)
         for t_type, config in tools_config.items():
             assert os.path.isfile(
                 msc_utils.get_config_dir().relpath(config["plan_file"])
@@ -156,10 +178,10 @@ def _test_from_torch(
         assert msc_utils.dict_equal(
             model_info, expected_info
         ), "Model info {} mismatch with expected {}".format(model_info, expected_info)
-        manager.destory()
+        # manager.destory()
 
 
-@pytest.mark.parametrize("tool_type", ["prune", "quantize", "track"])
+@pytest.mark.parametrize("tool_type", [ToolType.PRUNER, ToolType.QUANTIZER, ToolType.TRACKER])
 def test_tvm_tools(tool_type):
     """Test tools for tvm"""
 
@@ -187,8 +209,15 @@ def test_tvm_tools(tool_type):
 
 
 @requires_tensorrt
-@pytest.mark.parametrize("tool_type", ["prune", "quantize", "track"])
-def test_tensorrt_tools(tool_type):
+@pytest.mark.parametrize(
+    "tool_type,use_nativate",
+    [
+        (ToolType.PRUNER, False),
+        (ToolType.QUANTIZER, True),
+        (ToolType.TRACKER, False),
+    ],
+)
+def test_tensorrt_tools(tool_type, use_native):
     """Test tools for tensorrt"""
 
     model_info = {
@@ -199,10 +228,24 @@ def test_tensorrt_tools(tool_type):
         "nodes": {"total": 2, "input": 1, "msc_tensorrt": 1},
     }
     tool_config = get_tool_config(tool_type)
-    _test_from_torch(MSCFramework.TENSORRT, tool_config, model_info, is_training=False)
+    if tool_type == ToolType.QUANTIZER:
+        if use_native:
+            tool_config[ToolType.QUANTIZER]["strategys"] = []
+        else:
+            tool_config[ToolType.QUANTIZER]["strategys"][0]["tensor_types"].append("output")
+            tool_config[ToolType.QUANTIZER]["strategys"][2]["tensor_types"].append("output")
+
+    optimize_type = MSCFramework.TENSORRT if use_native else None
+    _test_from_torch(
+        MSCFramework.TENSORRT,
+        tool_config,
+        model_info,
+        is_training=False,
+        optimize_type=optimize_type,
+    )
 
 
 if __name__ == "__main__":
     # tvm.testing.main()
-    # test_tvm_tools("prune")
-    test_tvm_tools("tracker")
+    test_tensorrt_tools(ToolType.QUANTIZER, True)
+    # test_tvm_tools(ToolType.TRACKER)

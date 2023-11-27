@@ -49,7 +49,7 @@ class BaseManager(object):
         self._model = model
         self._workspace = msc_utils.set_workspace(config.get("workspace"))
         log_path = config.get("log_path") or self._workspace.relpath("MSC_LOG", keep_history=False)
-        if config.get("debug", False) and "verbose" not in config:
+        if config.get("debug_level", 0) > 0 and "verbose" not in config:
             verbose = "debug"
         else:
             verbose = config.get("verbose", "info")
@@ -71,7 +71,7 @@ class BaseManager(object):
             The setup info.
         """
 
-        self._config, self._debug_config = self.update_config(config)
+        self._config, self._debug_levels = self.update_config(config)
         self._tools_config = {}
         self._relax_mod, self._runner = None, None
         self._data_loader, self._sample_inputs = None, None
@@ -103,7 +103,7 @@ class BaseManager(object):
         # update prepare and parse
         assert "inputs" in config, "inputs should be given to run manager"
         assert "outputs" in config, "outputs should be given to run manager"
-        config = msc_utils.copy_dict(config)
+        config, debug_levels = msc_utils.copy_dict(config), {}
         for stage in ["prepare", "parse"]:
             if stage not in config:
                 config[stage] = {}
@@ -112,35 +112,38 @@ class BaseManager(object):
         for stage in ["baseline", "optimize", "compile"]:
             config = self._update_runner_config(config, stage)
         config = self._update_tool_config(config)
-        debug_config = {}
 
-        def _set_debug(stage, stage_config, default=None):
-            if "debug" in stage_config:
-                debug_config[stage] = stage_config.pop("debug")
+        def _get_tool_stage(tool_type):
+            if tool_type == ToolType.PRUNER:
+                return MSCStage.PRUNE
+            if tool_type == ToolType.QUANTIZER:
+                return MSCStage.QUANTIZE
+            if tool_type == ToolType.DISTILLER:
+                return MSCStage.DISTILL
+            return tool_type
+
+        def _set_debug_level(stage, stage_config, default=None):
+            if "debug_level" in stage_config:
+                debug_levels[stage] = stage_config["debug_level"]
             elif default is not None:
-                debug_config[stage] = default
-            return debug_config
+                debug_levels[stage] = default
+                stage_config["debug_level"] = default
+            return debug_levels
 
-        if "debug" in config:
-            for stage in ["baseline", "optimize", "compile"]:
-                if stage not in config:
+        debug_level = config.get("debug_level")
+        for stage in ["baseline", "optimize", "compile"]:
+            if stage not in config:
+                continue
+            debug_levels = _set_debug_level(stage, config[stage]["run_config"], debug_level)
+        if "optimize" in config:
+            for t_type in ToolType.all_types():
+                if t_type == ToolType.TRACKER:
                     continue
-                debug_config = _set_debug(stage, config[stage], config["debug"])
-            if "optimize" in config:
-                for t_type in ToolType.all_types():
-                    if t_type not in config["optimize"]:
-                        continue
-                    debug_config = _set_debug(t_type, config["optimize"][t_type], config["debug"])
-        else:
-            for stage in ["baseline", "optimize", "compile"]:
-                if stage not in config:
+                if t_type not in config["optimize"]:
                     continue
-                debug_config = _set_debug(stage, config[stage])
-            if "optimize" in config:
-                for t_type in ToolType.all_types():
-                    if t_type not in config["optimize"]:
-                        continue
-                    debug_config = _set_debug(t_type, config["optimize"][t_type])
+                debug_levels = _set_debug_level(
+                    _get_tool_stage(t_type), config["optimize"][t_type], debug_level
+                )
         ordered_keys = [
             "model_type",
             "inputs",
@@ -152,7 +155,7 @@ class BaseManager(object):
             "optimize",
             "compile",
         ]
-        return {k: config[k] for k in ordered_keys if k in config}, debug_config
+        return {k: config[k] for k in ordered_keys if k in config}, debug_levels
 
     def run_pipe(self) -> dict:
         """Run the pipeline and return object.
@@ -498,7 +501,7 @@ class BaseManager(object):
 
         if self._runner:
             self._runner.destory()
-        on_debug = self._debug_config.get(stage, False)
+        debug_level = self._debug_levels.get(stage, 0)
         cache_dir = msc_utils.get_cache_dir().create_dir(stage) if use_cache else None
         tools_config = tools_config or {}
         msc_utils.time_stamp(stage + ".build", False)
@@ -508,7 +511,9 @@ class BaseManager(object):
             run_config["generate_config"] = {}
         run_config["generate_config"].update(
             {
-                "build_folder": msc_utils.get_build_dir().create_dir(stage, cleanup=not on_debug),
+                "build_folder": msc_utils.get_build_dir().create_dir(
+                    stage, cleanup=(debug_level == 0)
+                ),
             }
         )
         self._logger.debug("Create runner(%s) by %s(%s)", stage, runner_cls.__name__, run_config)

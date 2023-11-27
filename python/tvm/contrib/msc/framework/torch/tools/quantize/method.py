@@ -185,6 +185,7 @@ class TorchQuantizeMethod(QuantizeMethod):
         axis: int = -1,
         sign: bool = True,
         rounding: str = "round",
+        epsilon: float = 1.0 / (1 << 24),
     ) -> torch.Tensor:
         """Calibrate the data by kl_divergence
 
@@ -208,6 +209,8 @@ class TorchQuantizeMethod(QuantizeMethod):
             Whether to use sign.
         rounding str
             The rounding method.
+        epsilon: float
+            The epsilon for get scale.
 
         Returns
         -------
@@ -219,12 +222,9 @@ class TorchQuantizeMethod(QuantizeMethod):
         min_val = -valid_range if sign else 0
         scale_tensor = quantizer._get_tensor_cache(name, consumer, "scale_tensor")
         if scale_tensor is None:
-            if isinstance(scale, list):
-                scale_shape = [s if idx == axis else 1 for idx, s in enumerate(data.shape)]
-                scale_tensor = torch.from_numpy(np.array(scale)).to(data.dtype).to(data.device)
-                scale_tensor = scale_tensor.reshape(scale_shape)
-            else:
-                scale_tensor = scale
+            scale_tensor = cls.get_scale_tensor(data, scale, axis, epsilon)
+            if isinstance(scale_tensor, np.ndarray):
+                scale_tensor = torch.from_numpy(scale_tensor).to(data.device)
             quantizer._save_tensor_cache(name, consumer, "scale_tensor", scale_tensor)
         data = cls.amplify_data(data, scale_tensor, min_val, valid_range, rounding)
         return data / scale_tensor

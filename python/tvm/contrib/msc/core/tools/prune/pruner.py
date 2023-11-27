@@ -90,7 +90,13 @@ class BasePruner(BaseTool):
         """
 
         self._unpruned_tensors = {}
-        return super().reset(graphs, weights, cache_dir)
+        res = super().reset(graphs, weights, cache_dir)
+        if self.should_debug(3):
+            for idx, graph in enumerate(self._weight_graphs):
+                self._logger.debug(
+                    msc_utils.msg_block("PRUNER.WEIGHT_GRAPH[{}].INFO".format(idx), graph.inspect())
+                )
+        return res
 
     def load_graphs(
         self, graphs: List[MSCGraph], weights: List[Dict[str, tvm.nd.array]]
@@ -123,6 +129,66 @@ class BasePruner(BaseTool):
             return graphs, weights
         return self.prune_graphs(graphs, weights)
 
+    def load_cache(self, cache_dir: msc_utils.MSCDirectory, cache_info: dict):
+        """Save runner to cache
+
+        Parameters
+        -------
+        cache_dir: MSCDirectory
+            cache path for save/load info
+        cache_info: dict
+            The cache_info
+        """
+
+        assert (
+            "weight_graphs" in cache_info
+        ), "weight_graphs should be given in cache_info, get " + str(cache_info)
+        self._weight_graphs = [
+            WeightGraph.from_json(cache_dir.relpath(f)) for f in cache_info["weight_graphs"]
+        ]
+
+    def save_cache(self, cache_dir: msc_utils.MSCDirectory) -> dict:
+        """Save runner to cache
+
+        Parameters
+        -------
+        cache_dir: MSCDirectory
+            cache path for save/load info
+
+        Returns
+        -------
+        cache_info: dict
+            The cache_info.
+        """
+
+        cache_info = {"weight_graphs": [g.name + "_graph.json" for g in self._weight_graphs]}
+        with cache_dir:
+            for graph, f_path in zip(self._weight_graphs, cache_info["weight_graphs"]):
+                with open(f_path, "w") as f_graph:
+                    f_graph.write(graph.to_json())
+        return cache_info
+
+    def _parse_strategys(self, strategy_list: dict) -> Dict[str, Strategy]:
+        """Parse the strategy to get valid strategy
+
+        Parameters
+        -------
+        strategy_list: dict
+            The given strategy
+
+        Returns
+        -------
+        strategys: dict<str, Strategy>
+            The parsed strategy.
+        """
+
+        def _update_stages(strategy):
+            if "stages" not in strategy:
+                strategy["stages"] = [msc_utils.MSCStage.PRUNE]
+            return strategy
+
+        return super()._parse_strategys([_update_stages(s) for s in strategy_list])
+
     def _check_tensor(self, name: str, consumer: str) -> bool:
         """Check if the tensor should be processed
 
@@ -148,7 +214,9 @@ class BasePruner(BaseTool):
             return False
         return True
 
-    def _process_tensor(self, tensor: Any, name: str, consumer: str, strategy: Strategy) -> Any:
+    def _process_tensor(
+        self, tensor: Any, name: str, consumer: str, strategys: List[Strategy]
+    ) -> Any:
         """Process tensor
 
         Parameters
@@ -159,8 +227,8 @@ class BasePruner(BaseTool):
             The name of the tensor.
         consumer: str
             The name of the consumer.
-        strategy: Strategy
-            The strategy for the tensor
+        strategys: list<Strategy>
+            The strategys for the tensor.
 
         Returns
         -------
@@ -170,6 +238,9 @@ class BasePruner(BaseTool):
 
         if name in self._plan:
             return tensor
+
+        assert len(strategys) == 1, "pruner should only has 1 strategy, get " + str(strategys)
+        strategy = strategys[0]
 
         def _get_in_indices(w_node: WeightJoint) -> List[int]:
             """Get input indices for weight node"""
@@ -238,8 +309,16 @@ class BasePruner(BaseTool):
         lazy_pruned = set()
         for name, info in self._unpruned_tensors.items():
             if info["lead_name"] in self._plan:
-                strategy = self._get_tensor_strategy(name, info["consumer"])
-                self._process_tensor(info["tensor"], name, info["consumer"], strategy)
+                strategys = self._get_tensor_strategys(name, info["consumer"])
+                self._process_tensor(info["tensor"], name, info["consumer"], strategys)
+                if self.should_debug(2):
+                    self._logger.debug(
+                        "%slazy processed %s-%s: %s",
+                        self.debug_mark(),
+                        name,
+                        consumer,
+                        msc_utils.inspect_array(tensor),
+                    )
                 lazy_pruned.add(name)
         if lazy_pruned:
             self._unpruned_tensors = {
@@ -335,7 +414,8 @@ class BasePruner(BaseTool):
                             pruned_tensors[out.name] = _prune_by_channel(
                                 out, pruned_tensors[node.input_at(0).name].dim_at("C")
                             )
-            self._logger.debug(msc_utils.msg_block("Pruned Tensors", pruned_tensors))
+            if self.should_debug(3):
+                self._logger.debug(msc_utils.msg_block("Pruned Tensors", pruned_tensors))
             pruned_graph = _ffi_api.PruneWeights(graph, pruned_tensors)
             new_graphs.append(pruned_graph)
             new_weights.append(pruned_weights)
@@ -356,45 +436,6 @@ class BasePruner(BaseTool):
             )
         )
         return new_graphs, new_weights
-
-    def load_cache(self, cache_dir: msc_utils.MSCDirectory, cache_info: dict):
-        """Save runner to cache
-
-        Parameters
-        -------
-        cache_dir: MSCDirectory
-            cache path for save/load info
-        cache_info: dict
-            The cache_info
-        """
-
-        assert (
-            "weight_graphs" in cache_info
-        ), "weight_graphs should be given in cache_info, get " + str(cache_info)
-        self._weight_graphs = [
-            WeightGraph.from_json(cache_dir.relpath(f)) for f in cache_info["weight_graphs"]
-        ]
-
-    def save_cache(self, cache_dir: msc_utils.MSCDirectory) -> dict:
-        """Save runner to cache
-
-        Parameters
-        -------
-        cache_dir: MSCDirectory
-            cache path for save/load info
-
-        Returns
-        -------
-        cache_info: dict
-            The cache_info.
-        """
-
-        cache_info = {"weight_graphs": [g.name + "_graph.json" for g in self._weight_graphs]}
-        with cache_dir:
-            for graph, f_path in zip(self._weight_graphs, cache_info["weight_graphs"]):
-                with open(f_path, "w") as f_graph:
-                    f_graph.write(graph.to_json())
-        return cache_info
 
     def visualize(self, visual_dir: msc_utils.MSCDirectory):
         """Visualize MSCGraphs

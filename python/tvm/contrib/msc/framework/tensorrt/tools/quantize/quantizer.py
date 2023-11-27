@@ -18,9 +18,8 @@
 
 import os
 import struct
-from typing import List, Dict, Tuple
+from typing import List, Dict
 
-import tvm
 from tvm.contrib.msc.core.ir import MSCGraph
 from tvm.contrib.msc.core.tools.tool import ToolType, Strategy
 from tvm.contrib.msc.core.tools.quantize import BaseQuantizer
@@ -35,29 +34,13 @@ class TensorRTQuantizerFactory(object):
         class Quantizer(base_cls):
             """Adaptive quantizer for tensorrt"""
 
-            def reset(
-                self,
-                graphs: List[MSCGraph],
-                weights: List[Dict[str, tvm.nd.array]],
-                cache_dir: msc_utils.MSCDirectory = None,
-            ) -> Tuple[List[MSCGraph], List[Dict[str, tvm.nd.array]]]:
-                """Reset the tool with graphs and weights
-
-                Parameters
-                ----------
-                graphs: list<MSCgraph>
-                    The msc graphs.
-                weights: list<dic<str, tvm.nd.array>>
-                    The weights
-                cache_dir: MSCDirectory
-                    cache path for save/load info
+            def setup(self) -> dict:
+                """Setup the tool
 
                 Returns
                 -------
-                graphs: list<MSCgraph>
-                    The msc graphs.
-                weights: list<dic<str, tvm.nd.array>>
-                    The weights
+                info: dict
+                    The setup info.
                 """
 
                 if self._plan:
@@ -66,7 +49,7 @@ class TensorRTQuantizerFactory(object):
                     )
                 else:
                     self._use_range = False
-                return super().reset(graphs, weights, cache_dir)
+                return super().setup()
 
             def _execute_before_build(self, codegen_context: dict) -> dict:
                 """Execute before model build
@@ -83,25 +66,71 @@ class TensorRTQuantizerFactory(object):
                 """
 
                 config_folder = msc_utils.get_config_dir()
-                self._range_files = {
-                    g.name: config_folder.relpath(g.name + ".range") for g in self._graphs
-                }
-                self._calibrate_savers = {}
+                self._range_files = [config_folder.relpath(g.name + ".range") for g in self._graphs]
+                self._calibrate_savers = []
                 if self._calibrated:
                     if self._use_range:
-                        for graph in self._graphs:
-                            if not os.path.isfile(self._range_files[graph.name]):
-                                self._plan_to_range(graph, self._range_files[graph.name])
+                        for r_file, graph in zip(self._range_files, self._graphs):
+                            if not os.path.isfile(r_file):
+                                self._plan_to_range(graph, r_file)
                     else:
                         self._quantized_tensors = set()
                 else:
                     calibrate_folder = msc_utils.get_dataset_dir().create_dir("Calibrate")
                     for graph in self._graphs:
                         saver_options = {"input_names": [i.name for i in graph.get_inputs()]}
-                        self._calibrate_savers[graph.name] = msc_utils.IODataSaver(
+                        saver = msc_utils.IODataSaver(
                             calibrate_folder.relpath(graph.name), saver_options
                         )
+                        self._calibrate_savers.append(saver)
                 super()._execute_before_forward(codegen_context)
+                return codegen_context
+
+            def _execute_after_build(self, codegen_context: dict) -> dict:
+                """Execute after model build
+
+                Parameters
+                ----------
+                codegen_context: dict
+                    The context.
+
+                Returns
+                ----------
+                codegen_context: dict
+                    The processed context.
+                """
+
+                if self._use_range or not self._calibrated:
+                    if self._calibrate_savers and any(
+                        not s.is_finalized() for s in self._calibrate_savers
+                    ):
+                        return codegen_context
+                    processed = ["// Set int8 calibrator"]
+                    version = [int(v) for v in codegen_context["version"].split(".")]
+                    range_file = self.get_graph().name + ".range"
+                    if self._calibrated:
+                        processed.extend(
+                            [
+                                'if (!FileUtils::FileExist("{}")) {{'.format(range_file),
+                                '  logger.log(ILogger::Severity::kERROR, "Can not find range file {} for calibrator");'.format(
+                                    range_file
+                                ),
+                                "  return -1;",
+                                "}",
+                            ]
+                        )
+                    processed.append(
+                        'MSCInt8EntropyCalibrator2 calibrator("{}", "{}");'.format(
+                            range_file, self._calibrate_savers[self._graph_id].folder
+                        ),
+                    )
+                    setter = (
+                        codegen_context["config"]
+                        if msc_utils.compare_version(version, [6, 0, 0]) >= 0
+                        else codegen_context["builder"]
+                    )
+                    processed.append("{}->setInt8Calibrator(&calibrator);".format(setter))
+                    codegen_context["processed"].extend(processed)
                 return codegen_context
 
             def _execute_before_forward(self, step_context: dict) -> dict:
@@ -119,16 +148,20 @@ class TensorRTQuantizerFactory(object):
                 """
 
                 if not self._calibrated:
-                    saver = self._calibrate_savers[self.graph.name]
+                    saver = self._calibrate_savers[self._graph_id]
                     saver.save_batch(
                         {name: data.asnumpy() for name, data in step_context["datas"].items()}
                     )
                 return super()._execute_before_forward(step_context)
 
-            def _process_tensor(
-                self, tensor_ctx: Dict[str, str], name: str, consumer: str, strategy: Strategy
+            def _quantize_tensor(
+                self,
+                tensor_ctx: Dict[str, str],
+                name: str,
+                consumer: str,
+                strategys: List[Strategy],
             ) -> Dict[str, str]:
-                """Process tensor
+                """Quantize tensor
 
                 Parameters
                 -------
@@ -138,8 +171,8 @@ class TensorRTQuantizerFactory(object):
                     The name of the tensor.
                 consumer: str
                     The name of the consumer.
-                strategy: Strategy
-                    The strategy for the tensor
+                strategys: list<Strategy>
+                    The strategys for the tensor.
 
                 Returns
                 -------
@@ -147,27 +180,9 @@ class TensorRTQuantizerFactory(object):
                     Tensor items with processed.
                 """
 
-                if self._calibrated and not self._use_range and name not in self._quantized_tensors:
+                if not self._use_range and name not in self._quantized_tensors:
                     self._quantized_tensors.add(name)
-                    plan = self._plan[self._to_tensor_id(name, consumer)]
-                    nbits = plan.get("nbits", 8)
-                    precision = "DataType::k"
-                    if nbits == -1:
-                        precision += "FLOAT"
-                    if nbits == 8:
-                        precision += "INT8"
-                    elif nbits == 16:
-                        precision += "HALF"
-                    else:
-                        raise TypeError("nbits {} is not supported".format(nbits))
-                    tensor_ctx["processed"].extend(
-                        [
-                            "{}->setPrecision({})".format(tensor_ctx["producer"], precision),
-                            "{0}->setDynamicRange(-{1},{1})".format(
-                                tensor_ctx["tensor"], plan["scale"]
-                            ),
-                        ]
-                    )
+                    return super()._quantize_tensor(tensor_ctx, name, consumer, strategys)
                 return tensor_ctx
 
             def calibrate(self) -> dict:
@@ -179,9 +194,10 @@ class TensorRTQuantizerFactory(object):
                     The calibrated plan.
                 """
 
-                for graph in self._graphs:
-                    self._range_to_plan(graph, self._range_files[graph.name])
-                self._calibrated = True
+                for r_file, graph in zip(self._range_files, self._graphs):
+                    self._range_to_plan(graph, r_file)
+                self._calibrated, self._use_range = True, True
+                self._forward_cnt = 0
                 return self._plan
 
             def update_codegen(self, codegen_configs: List[Dict[str, str]]) -> List[Dict[str, str]]:
@@ -199,20 +215,20 @@ class TensorRTQuantizerFactory(object):
 
                 if self._calibrated:
                     if self._use_range:
-                        for idx, graph in enumerate(self._graphs):
-                            if os.path.isfile(self._range_files[graph.name]):
-                                codegen_configs[idx].update(
-                                    {
-                                        "range_file": self._range_files[graph.name],
-                                    }
-                                )
+                        for config, r_file in zip(codegen_configs, self._range_files):
+                            if os.path.isfile(r_file):
+                                config.update({"range_file": r_file, "data_type": "int8"})
                 else:
-                    for idx, graph in enumerate(self._graphs):
-                        codegen_configs[idx].update(
-                            {
-                                "dataset": self._calibrate_savers[graph.name].folder,
-                                "range_file": self._range_files[graph.name],
-                            }
+                    for config, saver, r_file in zip(
+                        codegen_configs, self._calibrate_savers, self._range_files
+                    ):
+                        saver.finalize()
+                        if self.should_debug(1):
+                            self._logger.debug(
+                                "%ssave dataset to %s", self.debug_mark(), saver.folder
+                            )
+                        config.update(
+                            {"dataset": saver.folder, "range_file": r_file, "data_type": "int8"}
                         )
                 return codegen_configs
 

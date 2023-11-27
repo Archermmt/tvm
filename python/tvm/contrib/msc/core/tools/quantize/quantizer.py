@@ -16,10 +16,8 @@
 # under the License.
 """tvm.contrib.msc.core.tools.quantize.quantizer"""
 
-from typing import List, Tuple, Dict, Any
+from typing import List, Dict, Any
 
-import tvm
-from tvm.contrib.msc.core.ir import MSCGraph
 from tvm.contrib.msc.core.tools.tool import ToolType, BaseTool, Strategy
 from tvm.contrib.msc.core import utils as msc_utils
 
@@ -27,38 +25,23 @@ from tvm.contrib.msc.core import utils as msc_utils
 class BaseQuantizer(BaseTool):
     """Base quantizer for all"""
 
-    def reset(
-        self,
-        graphs: List[MSCGraph],
-        weights: List[Dict[str, tvm.nd.array]],
-        cache_dir: msc_utils.MSCDirectory = None,
-    ) -> Tuple[List[MSCGraph], List[Dict[str, tvm.nd.array]]]:
-        """Reset the tool with graphs and weights
-
-        Parameters
-        ----------
-        graphs: list<MSCgraph>
-            The msc graphs.
-        weights: list<dic<str, tvm.nd.array>>
-            The weights
-        cache_dir: MSCDirectory
-            cache path for save/load info
+    def setup(self) -> dict:
+        """Setup the tool
 
         Returns
         -------
-        graphs: list<MSCgraph>
-            The msc graphs.
-        weights: list<dic<str, tvm.nd.array>>
-            The weights
+        info: dict
+            The setup info.
         """
 
         if self._plan:
             self._calibrated = True
+            self.change_stage(msc_utils.MSCStage.QUANTIZE)
         else:
             self._calibrated = False
             self._calibrate_plan = {}
             self.change_stage("gather")
-        return super().reset(graphs, weights, cache_dir)
+        return super().setup()
 
     def calibrate(self) -> dict:
         """Calibrate the datas
@@ -85,8 +68,30 @@ class BaseQuantizer(BaseTool):
             self._calibrated = True
             for name, plan in new_plan.items():
                 self._plan[name] = {k: v for k, v in plan.items() if k not in ("calibrated")}
-            self.change_stage("quantize")
+            self.change_stage(msc_utils.MSCStage.QUANTIZE)
+        self._forward_cnt = 0
         return new_plan
+
+    def _parse_strategys(self, strategy_list: dict) -> Dict[str, Strategy]:
+        """Parse the strategy to get valid strategy
+
+        Parameters
+        -------
+        strategy_list: dict
+            The given strategy
+
+        Returns
+        -------
+        strategys: dict<str, Strategy>
+            The parsed strategy.
+        """
+
+        def _update_stages(strategy):
+            if "stages" not in strategy:
+                strategy["stages"] = [msc_utils.MSCStage.QUANTIZE]
+            return strategy
+
+        return super()._parse_strategys([_update_stages(s) for s in strategy_list])
 
     def _check_tensor(self, name: str, consumer: str) -> bool:
         """Check if the tensor should be processed
@@ -103,14 +108,16 @@ class BaseQuantizer(BaseTool):
             Whether to process the tensor.
         """
 
-        strategy = self._get_tensor_strategy(name, consumer)
-        if not strategy:
+        strategys = self._get_tensor_strategys(name, consumer)
+        if not strategys:
             return False
-        if strategy.get_config("nbits", 8) == -1:
+        if any(s.get_config("nbits", 8) for s in strategys) == -1:
             return False
         return True
 
-    def _process_tensor(self, tensor: Any, name: str, consumer: str, strategy: Strategy) -> Any:
+    def _process_tensor(
+        self, tensor: Any, name: str, consumer: str, strategys: List[Strategy]
+    ) -> Any:
         """Process tensor
 
         Parameters
@@ -121,8 +128,8 @@ class BaseQuantizer(BaseTool):
             The name of the tensor.
         consumer: str
             The name of the consumer.
-        strategy: Strategy
-            The strategy for the tensor
+        strategys: list<Strategy>
+            The strategys for the tensor.
 
         Returns
         -------
@@ -131,11 +138,13 @@ class BaseQuantizer(BaseTool):
         """
 
         if not self._calibrated:
-            return self._gather_tensor(tensor, name, consumer, strategy)
-        return self._quantize_tensor(tensor, name, consumer, strategy)
+            return self._gather_tensor(tensor, name, consumer, strategys)
+        return self._quantize_tensor(tensor, name, consumer, strategys)
 
-    def _gather_tensor(self, tensor: Any, name: str, consumer: str, strategy: Strategy) -> Any:
-        """Calibrate tensor
+    def _gather_tensor(
+        self, tensor: Any, name: str, consumer: str, strategys: List[Strategy]
+    ) -> Any:
+        """Gather tensor datas
 
         Parameters
         -------
@@ -145,8 +154,8 @@ class BaseQuantizer(BaseTool):
             The name of the tensor.
         consumer: str
             The name of the consumer.
-        strategy: Strategy
-            The strategy for the tensor
+        strategys: list<Strategy>
+            The strategys for the tensor.
 
         Returns
         -------
@@ -154,14 +163,17 @@ class BaseQuantizer(BaseTool):
             The processed tensor.
         """
 
+        assert len(strategys) == 1, "gather should only has 1 strategy, get " + str(strategys)
         tensor_id = self.to_tensor_id(name, consumer)
         plan = self._calibrate_plan.get(tensor_id, {})
         if plan.get("calibrated", False):
             return tensor
-        self._calibrate_plan[tensor_id] = strategy(self, tensor, name, consumer, plan)
+        self._calibrate_plan[tensor_id] = strategys[0](self, tensor, name, consumer, plan)
         return tensor
 
-    def _quantize_tensor(self, tensor: Any, name: str, consumer: str, strategy: Strategy) -> Any:
+    def _quantize_tensor(
+        self, tensor: Any, name: str, consumer: str, strategys: List[Strategy]
+    ) -> Any:
         """Quantize tensor
 
         Parameters
@@ -172,8 +184,8 @@ class BaseQuantizer(BaseTool):
             The name of the tensor.
         consumer: str
             The name of the consumer.
-        strategy: Strategy
-            The strategy for the tensor
+        strategys: list<Strategy>
+            The strategys for the tensor.
 
         Returns
         -------
@@ -182,7 +194,9 @@ class BaseQuantizer(BaseTool):
         """
 
         tensor_id = self.to_tensor_id(name, consumer)
-        return strategy(self, tensor, name, consumer, **self.get_plan(tensor_id))
+        for strategy in strategys:
+            tensor = strategy(self, tensor, name, consumer, **self.get_plan(tensor_id))
+        return tensor
 
     @property
     def calibrated(self):

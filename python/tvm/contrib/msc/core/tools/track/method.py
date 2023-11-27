@@ -66,7 +66,6 @@ class TrackMethod(object):
         config = {"info": msc_utils.inspect_array(data)}
         # save the data
         tracker._saver.save_datas({name: data}, tracker._forward_cnt)
-        tracker._logger.debug("Save(%s) %s: %s", tracker._stage, name, msc_utils.MSCArray(data))
         # compare datas
         if tracker._stage in compare_to:
             diffs = {}
@@ -78,11 +77,14 @@ class TrackMethod(object):
                     report = msc_utils.compare_arrays({name: golden}, {name: data})
                     if report["passed"] == 0:
                         tracker._logger.info(
-                            "Diff(%s2%s) %s: %s", stage, tracker._stage, name, report["info"][name]
+                            "%sdiff with %s -> %s",
+                            tracker.debug_mark(),
+                            stage,
+                            report["info"][name],
                         )
                     diffs[stage] = {
                         "pass": report["passed"] == 1,
-                        **msc_utils.inspect_array(np.abs(golden - data)),
+                        "info": msc_utils.inspect_array(np.abs(golden - data)),
                     }
             config["diffs"] = diffs
         return config

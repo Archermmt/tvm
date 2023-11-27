@@ -16,7 +16,7 @@
 # under the License.
 """tvm.contrib.msc.framework.tensorrt.tools.track.tracker"""
 
-from typing import Dict
+from typing import Dict, List
 
 from tvm.contrib.msc.core.tools.tool import ToolType, Strategy
 from tvm.contrib.msc.core.tools.track import BaseTracker
@@ -67,8 +67,8 @@ class TensorRTTrackerFactory(object):
                     if name not in self._track_tensors:
                         continue
                     consumer = self._track_tensors[name]["consumer"]
-                    strategy = self._get_tensor_strategy(name, consumer)
-                    self._track_tensor(data.asnumpy(), name, consumer, strategy)
+                    strategys = self._get_tensor_strategys(name, consumer)
+                    self._track_tensor(data.asnumpy(), name, consumer, strategys)
                 return super()._execute_before_forward(step_context)
 
             def _execute_after_forward(self, step_context: dict) -> dict:
@@ -89,12 +89,16 @@ class TensorRTTrackerFactory(object):
                     if name not in self._track_tensors:
                         continue
                     consumer = self._track_tensors[name]["consumer"]
-                    strategy = self._get_tensor_strategy(name, consumer)
-                    self._track_tensor(data.asnumpy(), name, consumer, strategy)
+                    strategys = self._get_tensor_strategys(name, consumer)
+                    self._track_tensor(data.asnumpy(), name, consumer, strategys)
                 return super()._execute_after_forward(step_context)
 
             def _process_tensor(
-                self, tensor_ctx: Dict[str, str], name: str, consumer: str, strategy: Strategy
+                self,
+                tensor_ctx: Dict[str, str],
+                name: str,
+                consumer: str,
+                strategys: List[Strategy],
             ) -> Dict[str, str]:
                 """Process tensor
 
@@ -106,8 +110,8 @@ class TensorRTTrackerFactory(object):
                     The name of the tensor.
                 consumer: str
                     The name of the consumer.
-                strategy: Strategy
-                    The strategy for the tensor
+                strategys: list<Strategy>
+                    The strategys for the tensor.
 
                 Returns
                 -------
@@ -116,7 +120,7 @@ class TensorRTTrackerFactory(object):
                 """
 
                 if self.is_weight(name):
-                    return self._track_tensor(self.get_data(name), name, consumer, strategy)
+                    return self._track_tensor(self.get_data(name), name, consumer, strategys)
                 if name not in self._track_tensors:
                     self._track_tensors[name] = {
                         "consumer": consumer,

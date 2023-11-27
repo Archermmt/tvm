@@ -163,9 +163,16 @@ class CppCodeGen : public BaseCodeGen<ConfigType, HelperType> {
     return tensor_ctx;
   }
 
-  virtual const Map<String, String> GetGraphCtx() {
-    Map<String, String> graph_ctx;
-    return graph_ctx;
+  /*! \brief Get the step context for codegen_step*/
+  virtual const Map<String, String> GetStepCtx() {
+    Map<String, String> step_ctx;
+    std::string version = "";
+    for (size_t i = 0; i < this->config()->version.size(); i++) {
+      version += std::to_string(this->config()->version[i]) +
+                 (i < this->config()->version.size() - 1 ? "." : "");
+    }
+    step_ctx.Set("version", version);
+    return step_ctx;
   }
 
   void StartNamespace() {
