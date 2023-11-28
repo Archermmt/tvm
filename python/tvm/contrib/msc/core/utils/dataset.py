@@ -425,8 +425,11 @@ class IODataSaver(BaseDataSaver):
 
         super().finalize()
         with open(os.path.join(self._folder, "datas_info.txt"), "w") as f:
-            for name in self._input_names + self._output_names:
+            for name in self._input_names:
                 info = self._info["inputs"][name]
+                f.write("{} {} {}\n".format(name, info.get("save_name", name), info["bytes"]))
+            for name in self._output_names:
+                info = self._info["outputs"][name]
                 f.write("{} {} {}\n".format(name, info.get("save_name", name), info["bytes"]))
 
     def is_finalized(self) -> bool:

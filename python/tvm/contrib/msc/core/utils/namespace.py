@@ -47,6 +47,10 @@ class MSCMap:
     def contains(cls, key: str):
         return key in cls.MAP
 
+    @classmethod
+    def reset(cls):
+        cls.MAP = {}
+
 
 class MSCKey:
     """Keys for the MSCMap"""
@@ -54,19 +58,15 @@ class MSCKey:
     WORKSPACE = "workspace"
     VERBOSE = "verbose"
     GLOBALE_LOGGER = "global_logger"
-    REGISTERED_FUNCS = "registered_funcs"
-    REGISTERED_TOOLS_CLS = "registered_tools_cls"
-    REGISTERED_TOOLS_METHOD = "registered_tools_method"
-
     MSC_STAGE = "msc_stage"
     TIME_STAMPS = "time_stamps"
-
-    FUSED_CNT = "fused_cnt"
 
     PRUNERS = "pruners"
     QUANTIZERS = "quantizers"
     DISTILLERS = "distillers"
     DEBUGGERS = "debuggers"
+
+    FUSED_CNT = "fused_cnt"
 
 
 class MSCFramework:

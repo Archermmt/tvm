@@ -26,7 +26,7 @@ import numpy as np
 import tvm
 from tvm.contrib.msc.core.ir import MSCGraph
 from tvm.contrib.msc.core.frontend import from_relax
-from tvm.contrib.msc.core.tools import BaseTool, ToolType, create_tool
+from tvm.contrib.msc.core.tools import BaseTool, ToolType, create_tool, remove_tool
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core.utils.message import MSCStage
 from tvm.contrib.msc.core import utils as msc_utils
@@ -381,7 +381,7 @@ class BaseRunner(object):
             self._model = None
         if self._runnable:
             self._runnable = None
-        for tool in self._tools.values():
+        for t_type, tool in self._tools.items():
             tool.destory()
 
     def _translate(self) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:

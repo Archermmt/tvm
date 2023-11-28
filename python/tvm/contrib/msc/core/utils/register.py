@@ -16,8 +16,40 @@
 # under the License.
 """tvm.contrib.msc.core.utils.register"""
 
-from typing import Any
-from .namespace import MSCMap, MSCKey, MSCFramework
+from typing import Any, Optional
+from .namespace import MSCFramework
+
+
+class MSCRegistery:
+    """The registery for MSC"""
+
+    REGISTERY = {}
+    MSC_FUNCS = "msc_funcs"
+    MSC_TOOLS_CLS = "msc_tools_cls"
+    MSC_TOOLS_METHOD = "msc_tools_method"
+
+    @classmethod
+    def register(cls, key: str, value: Any):
+        cls.REGISTERY[key] = value
+        return value
+
+    @classmethod
+    def unregister(cls, key: str):
+        if key in cls.REGISTERY:
+            return cls.REGISTERY.pop(key)
+        return None
+
+    @classmethod
+    def get(cls, key: str, default: Optional[Any] = None) -> Any:
+        return cls.REGISTERY.get(key, default)
+
+    @classmethod
+    def contains(cls, key: str):
+        return key in cls.REGISTERY
+
+    @classmethod
+    def reset(cls):
+        cls.REGISTERY = {}
 
 
 def register_func(name: str, func: callable, framework: str = MSCFramework.MSC):
@@ -33,11 +65,11 @@ def register_func(name: str, func: callable, framework: str = MSCFramework.MSC):
         Should be from MSCFramework.
     """
 
-    funcs = MSCMap.get(MSCKey.REGISTERED_FUNCS, {})
+    funcs = MSCRegistery.get(MSCRegistery.MSC_FUNCS, {})
     if framework not in funcs:
         funcs[framework] = {}
     funcs[framework][name] = func
-    MSCMap.set(MSCKey.REGISTERED_FUNCS, funcs)
+    MSCRegistery.register(MSCRegistery.MSC_FUNCS, funcs)
 
 
 def get_registered_func(name: str, framework: str = MSCFramework.MSC):
@@ -56,7 +88,7 @@ def get_registered_func(name: str, framework: str = MSCFramework.MSC):
         The registered function.
     """
 
-    funcs = MSCMap.get(MSCKey.REGISTERED_FUNCS, {})
+    funcs = MSCRegistery.get(MSCRegistery.MSC_FUNCS, {})
     if framework not in funcs:
         return None
     return funcs[framework].get(name)
@@ -71,7 +103,7 @@ def register_tool_cls(tool_cls: Any):
         The tool class to be registered.
     """
 
-    tools_cls = MSCMap.get(MSCKey.REGISTERED_TOOLS_CLS, {})
+    tools_cls = MSCRegistery.get(MSCRegistery.MSC_TOOLS_CLS, {})
     for key in ["framework", "tool_type", "tool_style"]:
         assert hasattr(tool_cls, key), "{} should be given to register tool class".format(key)
     if tool_cls.framework() not in tools_cls:
@@ -81,7 +113,7 @@ def register_tool_cls(tool_cls: Any):
         framework_tools[tool_cls.tool_type()] = {}
     tools = framework_tools[tool_cls.tool_type()]
     tools[tool_cls.tool_style()] = tool_cls
-    MSCMap.set(MSCKey.REGISTERED_TOOLS_CLS, tools_cls)
+    MSCRegistery.register(MSCRegistery.MSC_TOOLS_CLS, tools_cls)
 
 
 def get_registered_tool_cls(framework: str, tool_type: str, tool_style: str) -> Any:
@@ -102,7 +134,7 @@ def get_registered_tool_cls(framework: str, tool_type: str, tool_style: str) -> 
         The registered tool class.
     """
 
-    tools_cls = MSCMap.get(MSCKey.REGISTERED_TOOLS_CLS, {})
+    tools_cls = MSCRegistery.get(MSCRegistery.MSC_TOOLS_CLS, {})
     if tool_style == "all":
         return tools_cls.get(framework, {}).get(tool_type, {})
     return tools_cls.get(framework, {}).get(tool_type, {}).get(tool_style)
@@ -119,7 +151,7 @@ def register_tool_method(method_cls: Any, method_style: str = "default"):
         The style of the method.
     """
 
-    tools_method = MSCMap.get(MSCKey.REGISTERED_TOOLS_METHOD, {})
+    tools_method = MSCRegistery.get(MSCRegistery.MSC_TOOLS_METHOD, {})
     assert hasattr(method_cls, "framework") and hasattr(
         method_cls, "tool_type"
     ), "framework and tool_type should be given to register tool method"
@@ -127,7 +159,7 @@ def register_tool_method(method_cls: Any, method_style: str = "default"):
         tools_method[method_cls.framework()] = {}
     register_name = "{}.{}".format(method_cls.tool_type(), method_style)
     tools_method[method_cls.framework()][register_name] = method_cls
-    MSCMap.set(MSCKey.REGISTERED_TOOLS_METHOD, tools_method)
+    MSCRegistery.register(MSCRegistery.MSC_TOOLS_METHOD, tools_method)
 
 
 def get_registered_tool_method(
@@ -150,6 +182,6 @@ def get_registered_tool_method(
         The method class.
     """
 
-    tools_method = MSCMap.get(MSCKey.REGISTERED_TOOLS_METHOD, {})
+    tools_method = MSCRegistery.get(MSCRegistery.MSC_TOOLS_METHOD, {})
     register_name = "{}.{}".format(tool_type, method_style)
     return tools_method.get(framework, {}).get(register_name)

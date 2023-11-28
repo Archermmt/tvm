@@ -81,6 +81,7 @@ class QuantizeMethod(object):
         scale: float,
         axis: int = -1,
         epsilon: float = 1.0 / (1 << 24),
+        expand_dims: bool = True,
     ) -> Union[float, np.ndarray]:
         """Get the scale tensor
 
@@ -100,6 +101,8 @@ class QuantizeMethod(object):
             The axis.
         epsilon: float
             The epsilon for get scale.
+        expand_dims: bool
+            Whether to expand dims
 
         Returns
         -------
@@ -109,9 +112,10 @@ class QuantizeMethod(object):
 
         data = msc_utils.cast_array(data)
         if isinstance(scale, list):
-            scale_shape = [s if idx == axis else 1 for idx, s in enumerate(data.shape)]
             scale_tensor = np.array(scale).astype(data.dtype)
-            scale_tensor = scale_tensor.reshape(scale_shape)
+            if expand_dims:
+                scale_shape = [s if idx == axis else 1 for idx, s in enumerate(data.shape)]
+                scale_tensor = scale_tensor.reshape(scale_shape)
             if scale_tensor.min() <= epsilon:
                 scale_mask = scale_tensor <= epsilon
                 scale_tensor[scale_mask] = 0

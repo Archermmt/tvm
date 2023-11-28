@@ -134,6 +134,42 @@ def get_tools(tag: str = "main") -> Iterable[BaseTool]:
             yield tool
 
 
+def remove_tool(tool_type: str, tag: str = "main"):
+    """Remove tool by type and tag
+
+    Parameters
+    -------
+    tool_type: str
+        The type of the tool prune| quantize| distill...
+    tag: str
+        The tag of the tool.
+    """
+
+    tool_key = _get_tool_key(tool_type)
+    tools = MSCMap.get(tool_key, {})
+    if tag in tools:
+        tools.pop(tag)
+        MSCMap.set(tool_key, tools)
+
+
+def remove_tools(tag: str = "main"):
+    """Remove all saved tools by tag
+
+    Parameters
+    -------
+    tag: str
+        The tag of the tool.
+
+    Returns
+    -------
+    tools: iterable<BaseTool>
+        The saved tools.
+    """
+
+    for t_type in ToolType.all_types():
+        remove_tool(t_type, tag)
+
+
 def process_tensor(tensor: Any, name: str, consumer: str, scope: str, tag: str = "main") -> Any:
     """Process tensor with tools
 

@@ -50,6 +50,9 @@ class MSCArray(object):
             return "np", data
         if isinstance(data, tvm.runtime.NDArray):
             return "tvm", data.asnumpy()
+        if isinstance(data, tvm.relax.Var):
+            shape = [int(s) for s in data.struct_info.shape]
+            return "var", np.zeros(shape, dtype=data.struct_info.dtype)
         try:
             import torch  # pylint: disable=import-outside-toplevel
 
@@ -86,9 +89,8 @@ class MSCArray(object):
             Whether the data is array like.
         """
 
-        if isinstance(data, np.ndarray):
-            return True
-        if isinstance(data, tvm.runtime.NDArray):
+        normal_types = (np.ndarray, tvm.runtime.NDArray, tvm.relax.Var)
+        if isinstance(data, normal_types):
             return True
         if isinstance(data, (list, tuple)) and all(isinstance(d, (int, float)) for d in data):
             return True

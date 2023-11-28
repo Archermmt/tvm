@@ -49,7 +49,7 @@ def _get_config(
         "model_type": model_type,
         "inputs": inputs,
         "outputs": outputs,
-        "debug_level": 2,
+        "debug_level": 0,
         "dataset": {"loader": "from_random", "max_iter": 5},
         "prepare": {"profile": {"benchmark": {"repeat": 10}}},
         "baseline": {
@@ -82,7 +82,7 @@ def get_tool_config(tool_type):
                 {
                     "method": "gather_maxmin",
                     "op_types": ["nn.conv2d", "msc.linear"],
-                    "tensor_types": ["input"],
+                    "tensor_types": ["input", "output"],
                     "stages": ["gather"],
                 },
                 {
@@ -94,7 +94,7 @@ def get_tool_config(tool_type):
                 {
                     "method": "calibrate_maxmin",
                     "op_types": ["nn.conv2d", "msc.linear"],
-                    "tensor_types": ["input"],
+                    "tensor_types": ["input", "output"],
                     "stages": ["calibrate"],
                 },
                 {
@@ -178,7 +178,7 @@ def _test_from_torch(
         assert msc_utils.dict_equal(
             model_info, expected_info
         ), "Model info {} mismatch with expected {}".format(model_info, expected_info)
-        # manager.destory()
+        manager.destory()
 
 
 @pytest.mark.parametrize("tool_type", [ToolType.PRUNER, ToolType.QUANTIZER, ToolType.TRACKER])
@@ -210,7 +210,7 @@ def test_tvm_tools(tool_type):
 
 @requires_tensorrt
 @pytest.mark.parametrize(
-    "tool_type,use_nativate",
+    "tool_type,use_native",
     [
         (ToolType.PRUNER, False),
         (ToolType.QUANTIZER, True),
@@ -228,13 +228,8 @@ def test_tensorrt_tools(tool_type, use_native):
         "nodes": {"total": 2, "input": 1, "msc_tensorrt": 1},
     }
     tool_config = get_tool_config(tool_type)
-    if tool_type == ToolType.QUANTIZER:
-        if use_native:
-            tool_config[ToolType.QUANTIZER]["strategys"] = []
-        else:
-            tool_config[ToolType.QUANTIZER]["strategys"][0]["tensor_types"].append("output")
-            tool_config[ToolType.QUANTIZER]["strategys"][2]["tensor_types"].append("output")
-
+    if tool_type == ToolType.QUANTIZER and use_native:
+        tool_config[ToolType.QUANTIZER]["strategys"] = []
     optimize_type = MSCFramework.TENSORRT if use_native else None
     _test_from_torch(
         MSCFramework.TENSORRT,
@@ -246,6 +241,5 @@ def test_tensorrt_tools(tool_type, use_native):
 
 
 if __name__ == "__main__":
-    # tvm.testing.main()
-    test_tensorrt_tools(ToolType.QUANTIZER, True)
-    # test_tvm_tools(ToolType.TRACKER)
+    tvm.testing.main()
+    # test_tensorrt_tools(ToolType.QUANTIZER, True)

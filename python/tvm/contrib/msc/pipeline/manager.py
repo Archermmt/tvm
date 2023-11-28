@@ -26,7 +26,7 @@ import numpy as np
 import tvm
 from tvm.contrib.msc.core.runtime import BaseRunner
 from tvm.contrib.msc.core.tools import ToolType
-from tvm.contrib.msc.core.utils.namespace import MSCFramework, MSCMap, MSCKey
+from tvm.contrib.msc.core.utils.namespace import MSCFramework, MSCMap
 from tvm.contrib.msc.core.utils.message import MSCStage
 from tvm.contrib.msc.core import utils as msc_utils
 
@@ -46,6 +46,7 @@ class BaseManager(object):
         # check config
         for stage in ["inputs", "outputs", "dataset", "prepare", "compile"]:
             assert stage in config, "{} should be given to run the pipeline".format(stage)
+        MSCMap.reset()
         self._model = model
         self._workspace = msc_utils.set_workspace(config.get("workspace"))
         log_path = config.get("log_path") or self._workspace.relpath("MSC_LOG", keep_history=False)
@@ -461,7 +462,6 @@ class BaseManager(object):
             Whether to keep workspace.
         """
 
-        MSCMap.delete(MSCKey.TIME_STAMPS)
         if self._runner:
             self._runner.destory()
         if not keep_workspace:

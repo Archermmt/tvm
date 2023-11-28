@@ -53,7 +53,10 @@ void RelaxOpCode::BuilderEmit(const String& ret, const String& name) {
   }
 }
 
-const ExprDoc RelaxOpCode::GetOutDtype(const String& key) {
+const ExprDoc RelaxOpCode::GetOutDtype(const String& key, int input_idx) {
+  if (input_idx >= 0 && node()->inputs.size() > input_idx) {
+    return DocUtils::ToDoc(IdxInput(input_idx) + ".struct_info.dtype");
+  }
   std::string out_dtype;
   if (!node()->GetAttr(key, &out_dtype) && config()->from_relay) {
     return DocUtils::ToStrDoc(node()->OutputAt(0)->DTypeName());
