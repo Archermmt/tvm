@@ -67,15 +67,13 @@ class TensorRTRunner(BYOCRunner):
                     self._graphs
                 )
             quantizer = self.get_tool(ToolType.QUANTIZER)
-            while not quantizer.calibrated:
-                assert data_loader, "data_loader should be given to plan prune"
-                for inputs in data_loader():
-                    self.run(inputs)
-                self._generate_config["codegen"] = quantizer.update_codegen(
-                    self._generate_config["codegen"]
-                )
-                self._generate_model()
-                quantizer.calibrate()
+            assert data_loader, "data_loader should be given to plan prune"
+            for inputs in data_loader():
+                self.run(inputs)
+            self._generate_config = quantizer.config_generate(self._generate_config)
+            self._generate_model()
+            quantizer.calibrate()
+            assert quantizer.calibrated, "Failed to calibrate the tenosrrt quantizer"
         return super().apply_tool(tool_type, data_loader)
 
     @classmethod

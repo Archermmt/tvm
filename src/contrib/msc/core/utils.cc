@@ -56,9 +56,9 @@ int CommonUtils::CompareVersion(const std::vector<size_t>& given_version,
   ICHECK_EQ(target_version.size(), 3) << "Target version should be in format major,minor,patch";
   for (size_t i = 0; i < 3; i++) {
     if (given_version[i] > target_version[i]) {
-      return -1;
-    } else if (given_version[i] < target_version[i]) {
       return 1;
+    } else if (given_version[i] < target_version[i]) {
+      return -1;
     }
   }
   return 0;

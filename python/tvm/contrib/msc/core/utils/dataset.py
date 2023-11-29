@@ -294,6 +294,9 @@ class BaseDataSaver(object):
     def setup(self, options: dict):
         return {"num_datas": 0}
 
+    def __str__(self):
+        return "<{}> @ {}".format(self.__class__.__name__, self._folder)
+
     def __enter__(self):
         return self
 

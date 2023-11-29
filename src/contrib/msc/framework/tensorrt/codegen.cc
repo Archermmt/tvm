@@ -108,15 +108,6 @@ void TensorRTCodeGen::CodeGenClassDefine() {
   if (graph()->weight_holders.size() > 0) {
     stack_.assign("mWeights", "TRTUtils::LoadWeights(\"" + graph()->name + ".wts\")");
   }
-  if (config()->use_tools) {
-    const auto* pf = runtime::Registry::Get("msc_tool.codegen_step");
-    ICHECK(pf != nullptr) << "Cannot find msc_tool.codegen_step func.";
-    const Array<String>& lines =
-        (*pf)(GetStepCtx(), "before_build", graph()->name, config()->tools_tag);
-    for (const auto& l : lines) {
-      stack_.line(l);
-    }
-  }
   // build layers
   for (const auto& n : graph()->node_names) {
     const auto& node = graph()->FindNode(n);
@@ -153,8 +144,8 @@ void TensorRTCodeGen::CodeGenClassDefine() {
   }
   // set data type
   if (config()->precision == "float16") {
-    stack_.comment("Set network data_type")
-        .cond_if("!builder->platformHaseFastFp16()")
+    stack_.comment("Set network precision")
+        .cond_if("!builder->platformHasFastFp16()")
         .func_call("logger.log")
         .call_arg("ILogger::Severity::kINTERNAL_ERROR")
         .call_arg(DocUtils::ToStrDoc("platform do not support float16, fallback to float32"))
@@ -170,8 +161,8 @@ void TensorRTCodeGen::CodeGenClassDefine() {
         .call_arg(DocUtils::ToStrDoc("use float16 to build the engine"))
         .cond_end();
   } else if (config()->precision == "int8") {
-    stack_.comment("Set network data_type")
-        .cond_if("!builder->platformHaseFastInt8()")
+    stack_.comment("Set network precision")
+        .cond_if("!builder->platformHasFastInt8()")
         .func_call("logger.log")
         .call_arg("ILogger::Severity::kINTERNAL_ERROR")
         .call_arg(DocUtils::ToStrDoc("platform do not support int8, fallback to float32"))
@@ -192,15 +183,6 @@ void TensorRTCodeGen::CodeGenClassDefine() {
         .call_arg("ILogger::Severity::kINFO")
         .call_arg(DocUtils::ToStrDoc("use int8 to build the engine"))
         .cond_end();
-  }
-  if (config()->use_tools) {
-    const auto* pf = runtime::Registry::Get("msc_tool.codegen_step");
-    ICHECK(pf != nullptr) << "Cannot find msc_tool.codegen_step func.";
-    const Array<String>& lines =
-        (*pf)(GetStepCtx(), "after_build", graph()->name, config()->tools_tag);
-    for (const auto& l : lines) {
-      stack_.line(l);
-    }
   }
   // end define build method
   stack_.func_end("true");
@@ -357,6 +339,16 @@ void TensorRTCodeGen::CodeGenMain() {
       .func_call("createBuilderConfig", NullOpt, DocUtils::ToPtrDoc("builder"))
       .pop_nest();
   ReturnOnFail("config", "Failed to create config");
+  // codegen before build
+  if (config()->use_tools) {
+    const auto* pf = runtime::Registry::Get("msc_tool.codegen_step");
+    ICHECK(pf != nullptr) << "Cannot find msc_tool.codegen_step func.";
+    const Array<String>& lines =
+        (*pf)(GetStepCtx(), "before_build", graph()->name, config()->tools_tag);
+    for (const auto& l : lines) {
+      stack_.line(l);
+    }
+  }
   // build model
   stack_.comment("Build model")
       .declare(graph()->name, "model")
@@ -368,6 +360,16 @@ void TensorRTCodeGen::CodeGenMain() {
   }
   stack_.call_arg("logger");
   ReturnOnFail("pass", "Failed to build model");
+  // codegen after build
+  if (config()->use_tools) {
+    const auto* pf = runtime::Registry::Get("msc_tool.codegen_step");
+    ICHECK(pf != nullptr) << "Cannot find msc_tool.codegen_step func.";
+    const Array<String>& lines =
+        (*pf)(GetStepCtx(), "after_build", graph()->name, config()->tools_tag);
+    for (const auto& l : lines) {
+      stack_.line(l);
+    }
+  }
   // Set profile flag
   stack_.comment("Set profile flag")
       .declare("ProfilingVerbosity", "profile_verbose")

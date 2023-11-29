@@ -337,8 +337,11 @@ class CalibrateHelper {
   CalibrateHelper(const std::string& range_file, const std::string& folder, int max_size = -1);
 
   ~CalibrateHelper() {
-    for (const auto& pair : cpu_buffers_) {
-      free(pair.second);
+    for (const auto& buffer : cpu_buffers_) {
+      free(buffer);
+    }
+    for (const auto& buffer : gpu_buffers_) {
+      CHECK(cudaFree(buffer));
     }
   }
 
@@ -352,7 +355,8 @@ class CalibrateHelper {
   std::unique_ptr<DatasetReader> reader_;
   std::string range_file_;
   std::vector<char> cache_;
-  std::unordered_map<std::string, void*> cpu_buffers_;
+  std::vector<void*> cpu_buffers_;
+  std::vector<void*> gpu_buffers_;
 };
 
 #define CALIBRATE_MEMBERS(Calibrator)                                                       \\
@@ -361,7 +365,7 @@ class CalibrateHelper {
     helper_.reset(new CalibrateHelper(range_file, folder, max_size));                       \\
   }                                                                                         \\
                                                                                             \\
-  virtual ~Calibrator();                                                                    \\
+  virtual ~Calibrator() {}                                                                  \\
                                                                                             \\
   int getBatchSize() const noexcept override { return 1; }                                  \\
                                                                                             \\
@@ -417,22 +421,24 @@ CalibrateHelper::CalibrateHelper(const std::string& range_file, const std::strin
                                  int max_size) {
   range_file_ = range_file;
   reader_.reset(new DatasetReader(folder, max_size));
-  for (const auto& name : reader_->GetTensorNames()) {
-    cpu_buffers_[name] = malloc(reader_->GetTensorSize(name));
+  const auto& tensor_names = reader_->GetTensorNames();
+  cpu_buffers_.resize(tensor_names.size());
+  gpu_buffers_.resize(tensor_names.size());
+  for (size_t i = 0; i < tensor_names.size(); i++) {
+    size_t tensor_size = reader_->GetTensorSize(tensor_names[i]);
+    cpu_buffers_[i] = malloc(tensor_size);
+    CHECK(cudaMalloc(&gpu_buffers_[i], tensor_size));
   }
 }
 
 bool CalibrateHelper::GetBatch(void* bindings[], const char* names[], int nbBindings) {
-  void* buffers[cpu_buffers_.size()];
-  for (size_t i = 0; i < nbBindings; i++) {
-    buffers[i] = cpu_buffers_[names[i]];
-  }
-  if (!reader_->ReadNext(buffers)) {
+  if (!reader_->ReadNext(cpu_buffers_.data())) {
     return false;
   }
   for (size_t i = 0; i < nbBindings; i++) {
-    CHECK(cudaMemcpy(bindings[i], buffers[i], reader_->GetTensorSize(names[i]),
+    CHECK(cudaMemcpy(gpu_buffers_[i], cpu_buffers_[i], reader_->GetTensorSize(names[i]),
                      cudaMemcpyHostToDevice));
+    bindings[i] = gpu_buffers_[i];
   }
   return true;
 }

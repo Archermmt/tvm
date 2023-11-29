@@ -18,7 +18,7 @@
 
 import os
 import struct
-from typing import List, Dict
+from typing import List, Dict, Any
 
 from tvm.contrib.msc.core.ir import MSCGraph
 from tvm.contrib.msc.core.tools.tool import ToolType, Strategy
@@ -67,22 +67,38 @@ class TensorRTQuantizerFactory(object):
 
                 config_folder = msc_utils.get_config_dir()
                 self._range_files = [config_folder.relpath(g.name + ".range") for g in self._graphs]
-                self._calibrate_savers = []
+                calibrate_root = msc_utils.get_dataset_dir().create_dir("Calibrate")
+                self._calibrate_folders = [calibrate_root.relpath(g.name) for g in self._graphs]
                 if self._calibrated:
                     if self._use_range:
                         for r_file, graph in zip(self._range_files, self._graphs):
-                            if not os.path.isfile(r_file):
+                            if os.path.isfile(r_file):
+                                self._logger.debug(
+                                    "Graph[%s](%s) use saved range file: %s",
+                                    graph.name,
+                                    self._stage,
+                                    r_file,
+                                )
+                            else:
                                 self._plan_to_range(graph, r_file)
                     else:
                         self._quantized_tensors = set()
-                else:
-                    calibrate_folder = msc_utils.get_dataset_dir().create_dir("Calibrate")
-                    for graph in self._graphs:
+                elif self._stage == "gather":
+                    self._calibrate_savers = []
+                    for folder, graph in zip(self._calibrate_folders, self._graphs):
                         saver_options = {"input_names": [i.name for i in graph.get_inputs()]}
-                        saver = msc_utils.IODataSaver(
-                            calibrate_folder.relpath(graph.name), saver_options
-                        )
+                        saver = msc_utils.IODataSaver(folder, saver_options)
                         self._calibrate_savers.append(saver)
+                        self._logger.debug(
+                            "Graph[%s](%s) create calibrate saver: %s",
+                            graph.name,
+                            self._stage,
+                            saver,
+                        )
+                else:
+                    assert all(
+                        msc_utils.is_io_dataset(f) for f in self._calibrate_folders
+                    ), "Some IODataset missing: " + str(self._calibrate_folders)
                 super()._execute_before_forward(codegen_context)
 
             def _execute_after_build(self, codegen_context: dict) -> dict:
@@ -99,11 +115,9 @@ class TensorRTQuantizerFactory(object):
                     The processed context.
                 """
 
+                if self._stage == "gather":
+                    return codegen_context
                 if self._use_range or not self._calibrated:
-                    if self._calibrate_savers and any(
-                        not s.is_finalized() for s in self._calibrate_savers
-                    ):
-                        return codegen_context
                     processed = ["// Set int8 calibrator"]
                     version = [int(v) for v in codegen_context["version"].split(".")]
                     range_file = self.get_graph().name + ".range"
@@ -120,7 +134,7 @@ class TensorRTQuantizerFactory(object):
                         )
                     processed.append(
                         'MSCInt8EntropyCalibrator2 calibrator("{}", "{}");'.format(
-                            range_file, self._calibrate_savers[self._graph_id].folder
+                            range_file, self._calibrate_folders[self._graph_id]
                         ),
                     )
                     setter = (
@@ -199,39 +213,41 @@ class TensorRTQuantizerFactory(object):
                     self._range_to_plan(graph, r_file)
                 self._calibrated, self._use_range = True, True
                 self._forward_cnt = 0
+                self.change_stage("quantize")
                 return self._plan
 
-            def update_codegen(self, codegen_configs: List[Dict[str, str]]) -> List[Dict[str, str]]:
-                """Update the codegen configs
+            def config_generate(
+                self, generate_config: List[Dict[str, Any]]
+            ) -> List[Dict[str, Any]]:
+                """Update the generate configs
+
                 Parameters
                 ----------
-                codegen_configs: list<dict<str, str>>
-                    The codegen_configs.
+                generate_configs: list<dict<str, Any>>
+                    The generate_configs.
 
                 Returns
                 -------
-                codegen_configs: list<dict<str, str>>
-                    The updated codegen_configs.
+                generate_configs: list<dict<str, Any>>
+                    The updated generate_configs.
                 """
 
                 if self._calibrated:
                     if self._use_range:
-                        for config, r_file in zip(codegen_configs, self._range_files):
+                        for config, r_file in zip(generate_config["codegen"], self._range_files):
                             if os.path.isfile(r_file):
-                                config.update({"range_file": r_file, "data_type": "int8"})
-                else:
+                                config.update({"range_file": r_file, "precision": "int8"})
+                elif self._stage == "gather":
                     for config, saver, r_file in zip(
-                        codegen_configs, self._calibrate_savers, self._range_files
+                        generate_config["codegen"], self._calibrate_savers, self._range_files
                     ):
                         saver.finalize()
-                        if self.on_debug(1):
-                            self._logger.debug(
-                                "%ssave dataset to %s", self.msg_mark(), saver.folder
-                            )
+                        self._logger.debug("%ssave dataset to %s", self.msg_mark(), saver.folder)
                         config.update(
-                            {"dataset": saver.folder, "range_file": r_file, "data_type": "int8"}
+                            {"dataset": saver.folder, "range_file": r_file, "precision": "int8"}
                         )
-                return codegen_configs
+                    self.change_stage("calibrate")
+                return generate_config
 
             def _plan_to_range(self, graph: MSCGraph, range_file: str, title="MSCCalibrate"):
                 """Extract plan config to range_file
@@ -261,6 +277,13 @@ class TensorRTQuantizerFactory(object):
                         if t_name not in recorded:
                             f.write("{}: {}\n").format(t_name, _scale_to_hex(info["scale"]))
                             recorded.add(t_name)
+                self._logger.debug(
+                    "Graph[%s](%s) extract %d plan to range %s",
+                    graph.name,
+                    self._stage,
+                    len(recorded),
+                    range_file,
+                )
 
             def _range_to_plan(self, graph: MSCGraph, range_file: str):
                 """Extract scale in range_file to plan
@@ -273,6 +296,7 @@ class TensorRTQuantizerFactory(object):
                     The input range_file path.
                 """
 
+                range_num = 0
                 with open(range_file, "r") as f:
                     f.readline()
                     line = f.readline()
@@ -283,6 +307,7 @@ class TensorRTQuantizerFactory(object):
                             value = 0.0
                         else:
                             value = struct.unpack("!f", bytes.fromhex(scale))[0] * 127
+                        range_num += 1
                         consumers = graph.find_consumers()
                         if consumers:
                             for c in consumers:
@@ -296,6 +321,13 @@ class TensorRTQuantizerFactory(object):
                                 "use_range": True,
                             }
                         line = f.readline()
+                self._logger.debug(
+                    "Graph[%s](%s) extract %d range to plan from %s",
+                    graph.name,
+                    self._stage,
+                    range_num,
+                    range_file,
+                )
 
             @classmethod
             def framework(cls):

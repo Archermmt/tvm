@@ -70,10 +70,9 @@ def to_sub_tensorrt(
     output_folder = output_folder or msc_utils.msc_dir("msc_output")
     depends = {}
     if "range_file" in codegen_config:
-        depends[os.path.basename(codegen_config["range_file"])] = {
-            "src": codegen_config["range_file"],
-            "copy_back": True,
-        }
+        range_file = codegen_config["range_file"]
+        codegen_config["range_file"] = os.path.basename(range_file)
+        depends[codegen_config["range_file"]] = {"src": range_file, "copy_back": True}
 
     def _create_depends(folder: msc_utils.MSCDirectory) -> str:
         if weights:
