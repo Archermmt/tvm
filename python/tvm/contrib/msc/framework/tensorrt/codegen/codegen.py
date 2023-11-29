@@ -68,11 +68,12 @@ def to_sub_tensorrt(
         codegen_config["tensorrt_root"] = _ffi_api.GetTensorRTRoot()
     build_folder = build_folder or msc_utils.msc_dir(keep_history=False, cleanup=True)
     output_folder = output_folder or msc_utils.msc_dir("msc_output")
+    depends = {}
     if "range_file" in codegen_config:
-        range_file = codegen_config["range_file"]
-        codegen_config["range_file"] = os.path.basename(codegen_config["range_file"])
-    else:
-        range_file = None
+        depends[os.path.basename(codegen_config["range_file"])] = {
+            "src": codegen_config["range_file"],
+            "copy_back": True,
+        }
 
     def _create_depends(folder: msc_utils.MSCDirectory) -> str:
         if weights:
@@ -95,9 +96,10 @@ def to_sub_tensorrt(
         with folder.create_dir("utils") as utils_folder:
             for name, source in get_trt_sources().items():
                 utils_folder.add_file(name, source)
-        # copy range file
-        if range_file and os.path.isfile(range_file):
-            folder.copy_file(range_file)
+        # copy depends
+        for path, info in depends.items():
+            if os.path.exists(info["src"]):
+                folder.copy(info["src"], path)
 
     def _build_engine(engine_name: str, folder: msc_utils.MSCDirectory) -> str:
         with open("engine.log", "w") as log_f:
@@ -108,8 +110,9 @@ def to_sub_tensorrt(
         ), "Failed to test engine {} under {}, check engine.log for detail".format(
             engine_name, os.getcwd()
         )
-        if range_file and os.path.isfile(codegen_config["range_file"]):
-            folder.copy_file(codegen_config["range_file"], range_file)
+        for path, info in depends.items():
+            if info.get("copy_back", False) and os.path.exists(path):
+                folder.copy(path, info["src"])
         return folder.move_file(engine_name + ".trt", output_folder.relpath(engine_name + ".trt"))
 
     codegen = CodeGen(

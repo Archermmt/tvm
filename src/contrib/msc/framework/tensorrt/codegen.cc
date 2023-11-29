@@ -39,10 +39,11 @@ void TensorRTCodeGen::CodeGenClassDeclare() {
   stack_.line("#include \"NvInfer.h\"")
       .line("#include \"NvInferRuntimeCommon.h\"")
       .line("#include \"utils/base.h\"")
-      .line("#include \"utils/trt_common.h\"")
-      .line()
-      .line("using namespace nvinfer1;")
-      .line();
+      .line("#include \"utils/trt_common.h\"");
+  if (config()->precision == "int8") {
+    stack_.line("#include \"utils/trt_quantize.h\"");
+  }
+  stack_.line().line("using namespace nvinfer1;").line();
   StartNamespace();
   // start class declare
   stack_.class_def(graph()->name).class_start().scope_start("public:");

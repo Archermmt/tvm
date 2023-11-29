@@ -327,9 +327,9 @@ def _execute_step_with_context(
 
     for tool in get_tools(tag):
         if step == "before_build":
-            step_ctx = tool.execute_before_build(step_ctx, graph_name=graph_name)
+            tool.execute_before_build(step_ctx, graph_name=graph_name)
         elif step == "before_forward":
-            step_ctx = tool.execute_before_forward(step_ctx, graph_name=graph_name)
+            tool.execute_before_forward(step_ctx, graph_name=graph_name)
         elif step == "after_build":
             step_ctx = tool.execute_after_build(step_ctx)
         elif step == "after_forward":

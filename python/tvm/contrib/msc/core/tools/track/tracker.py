@@ -40,7 +40,9 @@ class BaseTracker(BaseTool):
                 self._loaders[folder] = msc_utils.SimpleDataLoader(data_folder.relpath(folder))
         self._saver = msc_utils.SimpleDataSaver(data_folder.relpath(self._stage))
         self._max_iter = self._options.get("max_iter", 1)
-        return super().setup()
+        info = super().setup()
+        info.update({"saver": self._saver, "loaders": self._loaders})
+        return info
 
     def finalize(self) -> dict:
         """Get the plan"""

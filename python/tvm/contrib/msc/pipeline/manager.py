@@ -114,7 +114,7 @@ class BaseManager(object):
             config = self._update_runner_config(config, stage)
         config = self._update_tool_config(config)
 
-        def _get_tool_stage(tool_type):
+        def _get_tool_stage(tool_type: str) -> str:
             if tool_type == ToolType.PRUNER:
                 return MSCStage.PRUNE
             if tool_type == ToolType.QUANTIZER:
@@ -123,7 +123,7 @@ class BaseManager(object):
                 return MSCStage.DISTILL
             return tool_type
 
-        def _set_debug_level(stage, stage_config, default=None):
+        def _set_debug_level(stage: str, stage_config: dict, default: int = None) -> dict:
             if "debug_level" in stage_config:
                 debug_levels[stage] = stage_config["debug_level"]
             elif default is not None:
@@ -138,8 +138,6 @@ class BaseManager(object):
             debug_levels = _set_debug_level(stage, config[stage]["run_config"], debug_level)
         if "optimize" in config:
             for t_type in ToolType.all_types():
-                if t_type == ToolType.TRACKER:
-                    continue
                 if t_type not in config["optimize"]:
                     continue
                 debug_levels = _set_debug_level(
@@ -592,18 +590,19 @@ class BaseManager(object):
         msg, report = "Profile({})".format(stage), {}
 
         # check accuracy
-        if runner.get_tool(ToolType.PRUNER) or runner.get_tool(ToolType.QUANTIZER):
-            check_config = None
-            self._logger.debug("Disable accuracy check(%s) by tools", stage)
-        else:
-            check_config = profile_config.get("check", {})
+        check_config = profile_config.get("check", {})
         if check_config:
             loader = msc_utils.IODataLoader(msc_utils.get_dataset_dir().relpath("Golden"))
             total, passed = 0, 0
-            acc_report = {}
+            acc_report = {"config": check_config}
             for idx, (inputs, outputs) in enumerate(loader):
                 results = runner.run(inputs)
-                iter_report = msc_utils.compare_arrays(outputs, results)
+                iter_report = msc_utils.compare_arrays(
+                    outputs,
+                    results,
+                    atol=check_config.get("atol", 1e-2),
+                    rtol=check_config.get("rtol", 1e-2),
+                )
                 total += iter_report["total"]
                 passed += iter_report["passed"]
                 acc_report["iter_" + str(idx)] = iter_report["info"]
@@ -612,13 +611,16 @@ class BaseManager(object):
             title = "Check({}) pass {}".format(stage, report["accuracy"])
             self._logger.debug(msc_utils.msg_block(title, acc_report))
             msg += " acc {} iters -> {}".format(len(loader), report["accuracy"])
-            required_err, err_rate = check_config.get("err_rate", 0), (1 - pass_rate)
-            if err_rate > required_err >= 0:
-                raise Exception(
-                    "Failed to profile the runner({}), err_rate {} > required {}".format(
-                        stage, err_rate, required_err
+            if runner.get_tool(ToolType.PRUNER) or runner.get_tool(ToolType.QUANTIZER):
+                self._logger.debug("Disable accuracy check(%s) by tools", stage)
+            else:
+                required_err, err_rate = check_config.get("err_rate", 0), (1 - pass_rate)
+                if err_rate > required_err >= 0:
+                    raise Exception(
+                        "Failed to profile the runner({}), err_rate {} > required {}".format(
+                            stage, err_rate, required_err
+                        )
                     )
-                )
 
         # benchmark model
         if runner.get_tool(ToolType.TRACKER):

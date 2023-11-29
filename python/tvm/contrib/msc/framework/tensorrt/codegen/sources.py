@@ -316,6 +316,7 @@ def get_trt_quantize_h_code():
 
 #include <cassert>
 #include <fstream>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -362,7 +363,7 @@ class CalibrateHelper {
                                                                                             \\
   virtual ~Calibrator();                                                                    \\
                                                                                             \\
-  int getBatchSize const noexecept override { return 1; }                                   \\
+  int getBatchSize() const noexcept override { return 1; }                                  \\
                                                                                             \\
   bool getBatch(void* bindings[], const char* names[], int nbBindings) noexcept override {  \\
     return helper_->GetBatch(bindings, names, nbBindings);                                  \\
@@ -424,7 +425,7 @@ CalibrateHelper::CalibrateHelper(const std::string& range_file, const std::strin
 bool CalibrateHelper::GetBatch(void* bindings[], const char* names[], int nbBindings) {
   void* buffers[cpu_buffers_.size()];
   for (size_t i = 0; i < nbBindings; i++) {
-    buffers[i] = cpu_buffers_[names[i]].second;
+    buffers[i] = cpu_buffers_[names[i]];
   }
   if (!reader_->ReadNext(buffers)) {
     return false;

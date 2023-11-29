@@ -91,7 +91,7 @@ class BasePruner(BaseTool):
 
         self._unpruned_tensors = {}
         res = super().reset(graphs, weights, cache_dir)
-        if self.should_debug(3):
+        if self.on_debug(3):
             for idx, graph in enumerate(self._weight_graphs):
                 self._logger.debug(
                     msc_utils.msg_block("PRUNER.WEIGHT_GRAPH[{}].INFO".format(idx), graph.inspect())
@@ -311,10 +311,10 @@ class BasePruner(BaseTool):
             if info["lead_name"] in self._plan:
                 strategys = self._get_tensor_strategys(name, info["consumer"])
                 self._process_tensor(info["tensor"], name, info["consumer"], strategys)
-                if self.should_debug(2):
+                if self.on_debug(2):
                     self._logger.debug(
                         "%slazy processed %s-%s: %s",
-                        self.debug_mark(),
+                        self.msg_mark(),
                         name,
                         consumer,
                         msc_utils.inspect_array(tensor),
@@ -414,7 +414,7 @@ class BasePruner(BaseTool):
                             pruned_tensors[out.name] = _prune_by_channel(
                                 out, pruned_tensors[node.input_at(0).name].dim_at("C")
                             )
-            if self.should_debug(3):
+            if self.on_debug(3):
                 self._logger.debug(msc_utils.msg_block("Pruned Tensors", pruned_tensors))
             pruned_graph = _ffi_api.PruneWeights(graph, pruned_tensors)
             new_graphs.append(pruned_graph)

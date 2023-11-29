@@ -467,9 +467,8 @@ class BaseTool(object):
         if self._enabled:
             self._graph_id = self._infer_graph_id(kwargs)
             self._processed_tensor = {}
-            self._logger.debug("%sStart Build", self.debug_mark(in_forward=False))
-            return self._execute_before_build(*args, **kwargs)
-        return None
+            self._logger.debug("%sStart Build", self.msg_mark(in_forward=False))
+            self._execute_before_build(*args, **kwargs)
 
     def _execute_before_build(self, *args, **kwargs):
         """Execute before model build
@@ -500,7 +499,7 @@ class BaseTool(object):
 
         if self._enabled:
             output = self._execute_after_build(output)
-            self._logger.debug("%sEnd Build", self.debug_mark(in_forward=False))
+            self._logger.debug("%sEnd Build", self.msg_mark(in_forward=False))
         return output
 
     def _execute_after_build(self, output: Any) -> Any:
@@ -533,10 +532,9 @@ class BaseTool(object):
         if self._enabled:
             self._graph_id = self._infer_graph_id(kwargs)
             self._processed_tensor = {}
-            if self.should_debug(2):
-                self._logger.debug("%sStart Forward", self.debug_mark())
-            return self._execute_before_forward(*args, **kwargs)
-        return None
+            if self.on_debug(2):
+                self._logger.debug("%sStart Forward", self.msg_mark())
+            self._execute_before_forward(*args, **kwargs)
 
     def _execute_before_forward(self, *args, **kwargs):
         """Execute before model forward
@@ -567,10 +565,10 @@ class BaseTool(object):
 
         if self._enabled:
             output = self._execute_after_forward(output)
-            if self.should_debug(2):
+            if self.on_debug(2):
                 self._logger.debug(
                     "%sEnd Forward, process %d tensors",
-                    self.debug_mark(),
+                    self.msg_mark(),
                     len(self._processed_tensor),
                 )
             self._forward_cnt += 1
@@ -616,34 +614,21 @@ class BaseTool(object):
             return tensor
         strategys = self._get_tensor_strategys(name, consumer)
         strategy_mark = ".".join([s.get_executor().name for s in strategys])
-
-        def _tensor_info(t_type: str, tensor: Any) -> str:
-            return "{}{}({}) {}-{}: {}".format(
-                self.debug_mark(),
-                t_type,
-                strategy_mark,
-                name,
-                consumer,
-                msc_utils.inspect_array(tensor),
-            )
-
         cached_tensor = self._get_processed(name, consumer, strategy_mark)
         if cached_tensor is not None:
-            if self.should_debug(2):
-                self._logger.debug(_tensor_info("cached", cached_tensor))
+            self.debug_tensor(cached_tensor, name, consumer, "cached({})".format(strategy_mark))
             return cached_tensor
         process = self._get_tensor_cache(name, consumer, "process")
         if process is None:
             process = self._check_tensor(name, consumer)
             self._save_tensor_cache(name, consumer, "process", process)
-            if process and self.should_debug(3):
-                self._logger.debug("%sprocess tensor %s-%s", self.debug_mark(), name, consumer)
+            if process and self.on_debug(3):
+                self._logger.debug("%sprocess tensor %s-%s", self.msg_mark(), name, consumer)
         if not process:
             return tensor
         tensor = self._process_tensor(tensor, name, consumer, strategys)
         self._save_processed(name, consumer, tensor, strategy_mark)
-        if self.should_debug(2):
-            self._logger.debug(_tensor_info("processed", tensor))
+        self.debug_tensor(tensor, name, consumer, "processed({})".format(strategy_mark))
         return tensor
 
     def _support_scope(self, scope: str) -> bool:
@@ -864,7 +849,7 @@ class BaseTool(object):
 
         return name in self._weights
 
-    def should_debug(self, debug_level: int = 1) -> bool:
+    def on_debug(self, debug_level: int = 1) -> bool:
         """Check if should log
 
         Parameters
@@ -874,7 +859,7 @@ class BaseTool(object):
 
         Returns
         -------
-        should_debug: bool
+        on_debug: bool
             Whether to log debug info.
         """
 
@@ -882,12 +867,12 @@ class BaseTool(object):
             return False
         return self._debug_level >= debug_level
 
-    def debug_mark(self, in_forward=True) -> str:
+    def msg_mark(self, in_forward=True) -> str:
         """Get the debug title
 
         Returns
         -------
-        debug_mark: str
+        msg_mark: str
             Get the debug title.
         """
 
@@ -896,6 +881,35 @@ class BaseTool(object):
             title += ".F[{}]".format(self._forward_cnt)
         title += "({}) ".format(self._stage)
         return title
+
+    def debug_tensor(
+        self, tensor: Any, name: str, consumer: str, t_mark: str, debug_level: int = 2
+    ) -> str:
+        """Get the debug tensor info
+
+        Parameters
+        -------
+        tensor: array_like
+            The tensor
+        name: str
+            The name of tensor.
+        consumer: str
+            The name of consumer.
+        t_mark: str
+            The mark of tensor.
+        debug_level: int
+           The given debug_level.
+        """
+
+        if self.on_debug(debug_level):
+            self._logger.debug(
+                "%s%s %s-%s: %s",
+                self.msg_mark(),
+                t_mark,
+                name,
+                consumer,
+                msc_utils.inspect_array(tensor),
+            )
 
     def _infer_graph_id(self, kwargs: dict) -> int:
         """Infer graph id from kwargs

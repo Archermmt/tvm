@@ -144,7 +144,7 @@ class MSCTensorRTRuntime : public JSONRuntimeBase {
       const auto& name = nodes_[nid].GetOpName() + ":" + std::to_string(outputs_[i].index_);
       int binding_index = engine_->getBindingIndex(name.c_str());
       ICHECK_NE(binding_index, -1);
-      if (data_entry_[eid]->device.device_type != kDLCUDA) {
+      if (data_entry_[eid]->device.device_type != kDLCUDA || tool_tag_.size() > 0) {
         auto device_buffer = GetOrAllocateDeviceBuffer(eid, binding_index);
         device_buffer.CopyTo(const_cast<DLTensor*>(data_entry_[eid]));
       }
@@ -158,13 +158,6 @@ class MSCTensorRTRuntime : public JSONRuntimeBase {
           continue;
         }
         const auto& tensor_name = engine_->getBindingName(bid);
-        /*
-        if (output_bindings_.count(bid)) {
-          uint32_t eid = output_bindings_[bid];
-          if (data_entry_[eid]->device.device_type == kDLCUDA) {
-            device_buffers_[bid].CopyFrom(data_entry_[eid]);
-          }
-        }*/
         output_datas.Set(tensor_name, device_buffers_[bid]);
       }
       Map<String, Map<String, runtime::NDArray>> context;

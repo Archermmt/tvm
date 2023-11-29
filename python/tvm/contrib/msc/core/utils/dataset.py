@@ -50,7 +50,7 @@ class BaseDataLoader(object):
             self._end = min(end, self._info["num_datas"])
 
     def __str__(self):
-        return "<{}> @ {}".format(self._class__.__name__, self._folder)
+        return "<{}> @ {}".format(self.__class__.__name__, self._folder)
 
     def __getitem__(self, idx):
         if idx + self._start >= self._end:

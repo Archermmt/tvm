@@ -46,8 +46,7 @@ class TensorRTTrackerFactory(object):
                 """
 
                 self._track_tensors = {}
-                super()._execute_before_forward(codegen_context)
-                return codegen_context
+                super()._execute_before_build(codegen_context)
 
             def _execute_before_forward(self, step_context: dict) -> dict:
                 """Execute before model forward

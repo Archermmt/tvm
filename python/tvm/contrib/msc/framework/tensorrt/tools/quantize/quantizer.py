@@ -84,7 +84,6 @@ class TensorRTQuantizerFactory(object):
                         )
                         self._calibrate_savers.append(saver)
                 super()._execute_before_forward(codegen_context)
-                return codegen_context
 
             def _execute_after_build(self, codegen_context: dict) -> dict:
                 """Execute after model build
@@ -152,7 +151,9 @@ class TensorRTQuantizerFactory(object):
                     saver.save_batch(
                         {name: data.asnumpy() for name, data in step_context["datas"].items()}
                     )
-                return super()._execute_before_forward(step_context)
+                    for name, data in step_context["datas"].items():
+                        self.debug_tensor(data, name, "any", "ctx_gathered")
+                super()._execute_before_forward(step_context)
 
             def _quantize_tensor(
                 self,
@@ -223,9 +224,9 @@ class TensorRTQuantizerFactory(object):
                         codegen_configs, self._calibrate_savers, self._range_files
                     ):
                         saver.finalize()
-                        if self.should_debug(1):
+                        if self.on_debug(1):
                             self._logger.debug(
-                                "%ssave dataset to %s", self.debug_mark(), saver.folder
+                                "%ssave dataset to %s", self.msg_mark(), saver.folder
                             )
                         config.update(
                             {"dataset": saver.folder, "range_file": r_file, "data_type": "int8"}
