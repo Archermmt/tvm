@@ -344,8 +344,8 @@ def to_abs_path(path: str, root_dir: MSCDirectory = None, keep_history: bool = T
 
 
 get_build_dir = partial(get_workspace_subdir, name="Build")
-get_config_dir = partial(get_workspace_subdir, name="Config")
-get_output_dir = partial(get_workspace_subdir, name="Output")
-get_dataset_dir = partial(get_workspace_subdir, name="Dataset")
-get_visual_dir = partial(get_workspace_subdir, name="Visual")
 get_cache_dir = partial(get_workspace_subdir, name="Cache")
+get_config_dir = partial(get_workspace_subdir, name="Config")
+get_dataset_dir = partial(get_workspace_subdir, name="Dataset")
+get_output_dir = partial(get_workspace_subdir, name="Output")
+get_visual_dir = partial(get_workspace_subdir, name="Visual")
