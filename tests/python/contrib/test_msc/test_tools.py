@@ -46,6 +46,7 @@ def _get_config(
 ):
     """Get msc config"""
     return {
+        "workspace": msc_utils.msc_dir(),
         "model_type": model_type,
         "inputs": inputs,
         "outputs": outputs,
