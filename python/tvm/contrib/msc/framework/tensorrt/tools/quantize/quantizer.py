@@ -77,7 +77,7 @@ class TensorRTQuantizerFactory(object):
                 ----------
                 graphs: list<MSCgraph>
                     The msc graphs.
-                weights: list<dic<str, tvm.nd.array>>
+                weights: list<dict<str, tvm.nd.array>>
                     The weights
                 cache_dir: MSCDirectory
                     cache path for save/load info
@@ -86,7 +86,7 @@ class TensorRTQuantizerFactory(object):
                 -------
                 graphs: list<MSCgraph>
                     The msc graphs.
-                weights: list<dic<str, tvm.nd.array>>
+                weights: list<dict<str, tvm.nd.array>>
                     The weights
                 """
 

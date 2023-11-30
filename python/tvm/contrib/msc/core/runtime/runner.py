@@ -26,7 +26,7 @@ import numpy as np
 import tvm
 from tvm.contrib.msc.core.ir import MSCGraph
 from tvm.contrib.msc.core.frontend import from_relax
-from tvm.contrib.msc.core.tools import BaseTool, ToolType, create_tool
+from tvm.contrib.msc.core.tools import BaseTool, ToolType, ToolScope, create_tool
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core.utils.message import MSCStage
 from tvm.contrib.msc.core import utils as msc_utils
@@ -76,9 +76,9 @@ class BaseRunner(object):
         logger: logging.Logger = None,
     ):
         self._mod = mod
-        self._tools_config = tools_config or {}
-        self._translate_config = translate_config or {}
-        self._generate_config = generate_config or {}
+        self._tools_config = msc_utils.copy_dict(tools_config)
+        self._translate_config = msc_utils.copy_dict(translate_config)
+        self._generate_config = msc_utils.copy_dict(generate_config)
         self._stage = stage
         self._name = name
         self._device = device if self._device_enabled(device) else "cpu"
@@ -103,9 +103,7 @@ class BaseRunner(object):
         if "build_folder" not in self._generate_config:
             self._generate_config["build_folder"] = msc_utils.get_build_dir()
         if self._tools_config:
-            if "codegen" not in self._generate_config:
-                self._generate_config["codegen"] = {}
-            self._generate_config["codegen"].update({"use_tools": True, "tools_tag": self._name})
+            self._update_codegen({"use_tools": True, "tools_tag": self._name})
         self._graphs, self._weights = [], []
         self._model, self._model_info = None, {}
         self._runnable = None
@@ -169,24 +167,41 @@ class BaseRunner(object):
             if self._debug_level >= 1:
                 self._logger.debug("Translate {} graphs from module".format(len(self._graphs)))
 
-        # load graph by tool
-        for tool in self._tools.values():
-            self._graphs, self._weights = tool.reset(
-                self._graphs, self._weights, cache_dir=cache_dir
-            )
-
-        # reset graph for tools
-        for tool in self._tools.values():
-            self._graphs, self._weights = tool.reset(
-                self._graphs, self._weights, cache_dir=cache_dir
-            )
-
         if cache_info.get("model") and not build_graph:
             # Load model from cache
+            for tool in self._tools.values():
+                self._graphs, self._weights = tool.reset(
+                    self._graphs, self._weights, cache_dir=cache_dir
+                )
             self._model = self._load_model(cache_dir, cache_info["model"])
         else:
             # Generate model
-            self._model = self._generate_model()
+            if ToolType.DISTILLER in self._tools:
+                distiller = self._tools[ToolType.DISTILLER]
+                build_root = self._generate_config["build_folder"]
+
+                def _build_scope_model(
+                    scope: str, graphs: List[MSCGraph], weights: List[Dict[str, tvm.nd.array]]
+                ):
+                    self._update_codegen({"tools_scope": scope})
+                    self._generate_config["build_folder"] = build_root.create_dir(scope)
+                    return self._generate_model(graphs, weights)
+
+                # build teacher model
+                graphs, weights = distiller.reset(self._graphs, self._weights)
+                teacher_model = _build_scope_model(ToolScope.TEACHER, graphs, weights)
+                # build student model
+                for tool in self._tools.values():
+                    self._graphs, self._weights = tool.reset(self._graphs, self._weights)
+                student_model = _build_scope_model(ToolScope.STUDENT, self._graphs, self._weights)
+                print("teacher_model " + str(teacher_model))
+                print("student_model " + str(student_model))
+                self._model = distiller.build_model(teacher_model, student_model)
+            else:
+                # reset graph for tools
+                for tool in self._tools.values():
+                    self._graphs, self._weights = tool.reset(self._graphs, self._weights)
+                self._model = self._generate_model()
             if "loader" in self._generate_config:
                 loader, generate_config = self._generate_config["loader"]
                 self._model = loader(self._model, **generate_config)
@@ -358,6 +373,26 @@ class BaseRunner(object):
         self._logger.info("Save %s plan -> %s", tool_type, plan_file)
         return plan
 
+    def _update_codegen(self, config: Dict[str, Any]):
+        """Update the codegen in generate_config
+
+        Parameters
+        -------
+        config: dict
+            The extra config for codegen.
+        """
+
+        if "codegen" not in self._generate_config:
+            self._generate_config["codegen"] = {}
+        codegen = self._generate_config["codegen"]
+        if isinstance(codegen, dict):
+            codegen.update(config)
+        elif isinstance(codegen, (list, tuple)):
+            for c in codegen:
+                c.update(config)
+        else:
+            raise TypeError("Unexpecet codegen config " + str(codegen))
+
     def visualize(self, visual_dir: msc_utils.MSCDirectory):
         """Visualize MSCGraphs
 
@@ -464,7 +499,7 @@ class BaseRunner(object):
         -------
         graphs: list<MSCgraph>
             The msc graphs.
-        weights: list<dic<str, tvm.nd.array>>
+        weights: list<dict<str, tvm.nd.array>>
             The weights
 
         Returns
@@ -609,6 +644,10 @@ class BaseRunner(object):
 
         return True
 
+    @classmethod
+    def support_tool(cls, tool_type: str) -> bool:
+        return True
+
     @property
     def stage(self):
         return self._stage
@@ -720,7 +759,7 @@ class ModelRunner(BaseRunner):
         -------
         graphs: list<MSCgraph>
             The msc graphs.
-        weights: list<dic<str, tvm.nd.array>>
+        weights: list<dict<str, tvm.nd.array>>
             The weights
 
         Returns
@@ -883,7 +922,7 @@ class BYOCRunner(BaseRunner):
         -------
         graphs: list<MSCgraph>
             The msc graphs.
-        weights: list<dic<str, tvm.nd.array>>
+        weights: list<dict<str, tvm.nd.array>>
             The weights
 
         Returns
@@ -1006,6 +1045,10 @@ class BYOCRunner(BaseRunner):
             dev_id = int(device.split(":")[1]) if ":" in device else 0
             return tvm.cuda(dev_id).exist
         return False
+
+    @classmethod
+    def support_tool(cls, tool_type: str) -> bool:
+        return tool_type not in (ToolType.DISTILLER)
 
     @property
     def partition_func(self):

@@ -14,6 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+# pylint: disable=unused-argument
 """tvm.contrib.msc.framework.tensorrt.tools.track.tracker"""
 
 from typing import Dict, List
@@ -110,6 +111,7 @@ class TensorRTTrackerFactory(object):
                 tensor_ctx: Dict[str, str],
                 name: str,
                 consumer: str,
+                scope: str,
                 strategys: List[Strategy],
             ) -> Dict[str, str]:
                 """Process tensor
@@ -122,6 +124,8 @@ class TensorRTTrackerFactory(object):
                     The name of the tensor.
                 consumer: str
                     The name of the consumer.
+                scope: str
+                    The scope mark teacher| student| null.
                 strategys: list<Strategy>
                     The strategys for the tensor.
 

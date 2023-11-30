@@ -378,8 +378,9 @@ class BaseManager(object):
             The runner.
         """
 
+        runner_cls = self._get_runner_cls(stage_config["run_type"])
         # run prune
-        if ToolType.PRUNER in stage_config:
+        if ToolType.PRUNER in stage_config and runner_cls.support_tool(ToolType.PRUNER):
             self._tools_config[ToolType.PRUNER] = stage_config[ToolType.PRUNER]
             plan_file = stage_config[ToolType.PRUNER]["plan_file"]
             if os.path.isfile(plan_file):
@@ -390,7 +391,7 @@ class BaseManager(object):
                 runner.apply_tool(ToolType.PRUNER, self._data_loader)
 
         # run quantize
-        if ToolType.QUANTIZER in stage_config:
+        if ToolType.QUANTIZER in stage_config and runner_cls.support_tool(ToolType.PRUNER):
             self._tools_config[ToolType.QUANTIZER] = stage_config[ToolType.QUANTIZER]
             plan_file = stage_config[ToolType.QUANTIZER]["plan_file"]
             if os.path.isfile(plan_file):
@@ -521,6 +522,9 @@ class BaseManager(object):
                 **tools_config,
                 ToolType.TRACKER: self._config["optimize"][ToolType.TRACKER],
             }
+        tools_config = {
+            t_type: info for t_type, info in tools_config.items() if runner_cls.support_tool(t_type)
+        }
         runner = runner_cls(
             self._relax_mod,
             tools_config=tools_config,
@@ -609,7 +613,7 @@ class BaseManager(object):
             pass_rate = float(passed) / total
             report["accuracy"] = "{}/{}({:.2f}%)".format(passed, total, pass_rate * 100)
             title = "Check({}) pass {}".format(stage, report["accuracy"])
-            self._logger.debug(msc_utils.msg_block(title, acc_report))
+            self._logger.debug(msc_utils.msg_block(title, acc_report, width=0))
             msg += " acc {} iters -> {}".format(len(loader), report["accuracy"])
             if runner.get_tool(ToolType.PRUNER) or runner.get_tool(ToolType.QUANTIZER):
                 self._logger.debug("Disable accuracy check(%s) by tools", stage)

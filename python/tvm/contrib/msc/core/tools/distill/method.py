@@ -14,11 +14,23 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""tvm.contrib.msc.core.tools"""
+"""tvm.contrib.msc.core.tools.distill.method"""
 
-from .tool import *
-from .execute import *
-from .prune import *
-from .quantize import *
-from .distill import *
-from .track import *
+from tvm.contrib.msc.core.tools.tool import ToolType
+from tvm.contrib.msc.core.utils.namespace import MSCFramework
+from tvm.contrib.msc.core import utils as msc_utils
+
+
+class DistillMethod(object):
+    """Default distill method"""
+
+    @classmethod
+    def framework(cls):
+        return MSCFramework.MSC
+
+    @classmethod
+    def tool_type(cls):
+        return ToolType.DISTILLER
+
+
+msc_utils.register_tool_method(DistillMethod)

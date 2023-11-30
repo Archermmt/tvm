@@ -80,7 +80,7 @@ class TensorRTRunner(BYOCRunner):
         -------
         graphs: list<MSCgraph>
             The msc graphs.
-        weights: list<dic<str, tvm.nd.array>>
+        weights: list<dict<str, tvm.nd.array>>
             The weights
 
         Returns

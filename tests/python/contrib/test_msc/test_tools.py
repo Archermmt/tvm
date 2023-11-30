@@ -46,7 +46,6 @@ def _get_config(
 ):
     """Get msc config"""
     return {
-        "workspace": msc_utils.msc_dir(),
         "model_type": model_type,
         "inputs": inputs,
         "outputs": outputs,
@@ -69,7 +68,7 @@ def _get_config(
     }
 
 
-def get_tool_config(tool_type):
+def get_tool_config(tool_type, use_distill):
     config = {}
     if tool_type == ToolType.PRUNER:
         config = {
@@ -125,6 +124,9 @@ def get_tool_config(tool_type):
                 }
             ],
         }
+    if use_distill:
+        distill_config = {"plan_file": "msc_distiller.json", "strategys": []}
+        return {tool_type: config, ToolType.DISTILLER: distill_config}
     return {tool_type: config}
 
 
@@ -182,8 +184,17 @@ def _test_from_torch(
         manager.destory()
 
 
-@pytest.mark.parametrize("tool_type", [ToolType.PRUNER, ToolType.QUANTIZER, ToolType.TRACKER])
-def test_tvm_tools(tool_type):
+@pytest.mark.parametrize(
+    "tool_type,use_distill",
+    [
+        (ToolType.PRUNER, False),
+        (ToolType.PRUNER, True),
+        (ToolType.QUANTIZER, False),
+        (ToolType.QUANTIZER, True),
+        (ToolType.TRACKER, False),
+    ],
+)
+def test_tvm_tools(tool_type, use_distill):
     """Test tools for tvm"""
 
     model_info = {
@@ -205,20 +216,21 @@ def test_tvm_tools(tool_type):
             "msc.linear_bias": 1,
         },
     }
-    tool_config = get_tool_config(tool_type)
+    tool_config = get_tool_config(tool_type, use_distill)
     _test_from_torch(MSCFramework.TVM, tool_config, model_info, is_training=True)
 
 
 @requires_tensorrt
 @pytest.mark.parametrize(
-    "tool_type,use_native",
+    "tool_type,use_distill,use_native",
     [
-        (ToolType.PRUNER, False),
-        (ToolType.QUANTIZER, True),
-        (ToolType.TRACKER, False),
+        (ToolType.PRUNER, False, False),
+        (ToolType.PRUNER, True, False),
+        (ToolType.QUANTIZER, False, True),
+        (ToolType.TRACKER, False, False),
     ],
 )
-def test_tensorrt_tools(tool_type, use_native):
+def test_tensorrt_tools(tool_type, use_distill, use_native):
     """Test tools for tensorrt"""
 
     model_info = {
@@ -228,7 +240,7 @@ def test_tensorrt_tools(tool_type, use_native):
         "outputs": [{"name": "output", "shape": [1, 1000], "dtype": "float32", "layout": ""}],
         "nodes": {"total": 2, "input": 1, "msc_tensorrt": 1},
     }
-    tool_config = get_tool_config(tool_type)
+    tool_config = get_tool_config(tool_type, use_distill)
     if tool_type == ToolType.QUANTIZER and use_native:
         tool_config[ToolType.QUANTIZER]["strategys"] = []
     optimize_type = MSCFramework.TENSORRT if use_native else None
@@ -242,4 +254,5 @@ def test_tensorrt_tools(tool_type, use_native):
 
 
 if __name__ == "__main__":
-    tvm.testing.main()
+    # tvm.testing.main()
+    test_tvm_tools(ToolType.PRUNER, False)

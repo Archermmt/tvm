@@ -114,7 +114,7 @@ class BaseTracker(BaseTool):
         return False
 
     def _process_tensor(
-        self, tensor: Any, name: str, consumer: str, strategys: List[Strategy]
+        self, tensor: Any, name: str, consumer: str, scope: str, strategys: List[Strategy]
     ) -> Any:
         """Process tensor
 
@@ -126,6 +126,8 @@ class BaseTracker(BaseTool):
             The name of the tensor.
         consumer: str
             The name of the consumer.
+        scope: str
+            The scope mark teacher| student| null.
         strategys: list<Strategy>
             The strategys for the tensor.
 
