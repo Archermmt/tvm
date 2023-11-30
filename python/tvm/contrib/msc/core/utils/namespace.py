@@ -64,7 +64,7 @@ class MSCKey:
     PRUNERS = "pruners"
     QUANTIZERS = "quantizers"
     DISTILLERS = "distillers"
-    DEBUGGERS = "debuggers"
+    TRACKERS = "trackers"
 
     FUSED_CNT = "fused_cnt"
 

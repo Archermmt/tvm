@@ -54,7 +54,8 @@ void RelaxOpCode::BuilderEmit(const String& ret, const String& name) {
 }
 
 const ExprDoc RelaxOpCode::GetOutDtype(const String& key, int input_idx) {
-  if (input_idx >= 0 && node()->inputs.size() > static_cast<size_t>(input_idx)) {
+  if (config()->use_tools && input_idx >= 0 &&
+      node()->inputs.size() > static_cast<size_t>(input_idx)) {
     return DocUtils::ToDoc(IdxInput(input_idx) + ".struct_info.dtype");
   }
   std::string out_dtype;

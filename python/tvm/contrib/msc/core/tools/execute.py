@@ -46,7 +46,7 @@ def _get_tool_key(tool_type: str) -> str:
     if tool_type == ToolType.DISTILLER:
         return MSCKey.DISTILLERS
     if tool_type == ToolType.TRACKER:
-        return MSCKey.DEBUGGERS
+        return MSCKey.TRACKERS
     raise TypeError("Unexpected tool type " + str(tool_type))
 
 

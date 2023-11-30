@@ -175,6 +175,12 @@ class BaseRunner(object):
                 self._graphs, self._weights, cache_dir=cache_dir
             )
 
+        # reset graph for tools
+        for tool in self._tools.values():
+            self._graphs, self._weights = tool.reset(
+                self._graphs, self._weights, cache_dir=cache_dir
+            )
+
         if cache_info.get("model") and not build_graph:
             # Load model from cache
             self._model = self._load_model(cache_dir, cache_info["model"])
@@ -395,7 +401,7 @@ class BaseRunner(object):
             self._model = None
         if self._runnable:
             self._runnable = None
-        for t_type, tool in self._tools.items():
+        for tool in self.get_tools():
             tool.destory()
 
     def _translate(self) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:

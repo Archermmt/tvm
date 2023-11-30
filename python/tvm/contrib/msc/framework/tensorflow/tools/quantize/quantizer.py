@@ -25,7 +25,20 @@ from tvm.contrib.msc.core import utils as msc_utils
 class TensorflowQuantizerFactory(object):
     """Quantizer factory for tensorflow"""
 
-    def create(self, base_cls: BaseQuantizer):
+    def create(self, base_cls: BaseQuantizer) -> BaseQuantizer:
+        """Create adaptive quantizer
+
+        Parameters
+        ----------
+        base_cls: BaseQuantizer
+            The base quantizer class
+
+        Returns
+        -------
+        quantizer_cls: BaseQuantizer
+            The quantizer class.
+        """
+
         class Quantizer(base_cls):
             """Adaptive quantizer for tensorflow"""
 

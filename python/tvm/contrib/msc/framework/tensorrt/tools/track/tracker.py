@@ -27,7 +27,20 @@ from tvm.contrib.msc.core import utils as msc_utils
 class TensorRTTrackerFactory(object):
     """Tracker factory for tensorrt"""
 
-    def create(self, base_cls: BaseTracker):
+    def create(self, base_cls: BaseTracker) -> BaseTracker:
+        """Create adaptive tracker
+
+        Parameters
+        ----------
+        base_cls: BaseTracker
+            The base tracker class
+
+        Returns
+        -------
+        tracker_cls: BaseTracker
+            The tracker class.
+        """
+
         class Tracker(base_cls):
             """Adaptive tracker for tensorrt"""
 

@@ -260,7 +260,6 @@ class Strategy(object):
            The copied strategy
         """
 
-        methods = methods or {}
         configs = configs or {}
         strategy = Strategy(
             name or self._name, tensor_type or self._tensor_type, stage or self._stage

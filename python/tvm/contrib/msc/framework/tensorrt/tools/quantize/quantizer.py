@@ -31,7 +31,20 @@ from tvm.contrib.msc.core import utils as msc_utils
 class TensorRTQuantizerFactory(object):
     """Quantizer factory for tensorrt"""
 
-    def create(self, base_cls: BaseQuantizer):
+    def create(self, base_cls: BaseQuantizer) -> BaseQuantizer:
+        """Create adaptive quantizer
+
+        Parameters
+        ----------
+        base_cls: BaseQuantizer
+            The base quantizer class
+
+        Returns
+        -------
+        quantizer_cls: BaseQuantizer
+            The quantizer class.
+        """
+
         class Quantizer(base_cls):
             """Adaptive quantizer for tensorrt"""
 
@@ -142,7 +155,7 @@ class TensorRTQuantizerFactory(object):
                     processed.extend(
                         [
                             'if (!FileUtils::FileExist("{}")) {{'.format(range_file),
-                            '  logger.log(ILogger::Severity::kERROR, "Can not find range file {} for calibrator");'.format(
+                            '  logger.log(ILogger::Severity::kERROR, "{} not exist!");'.format(
                                 range_file
                             ),
                             "  return -1;",

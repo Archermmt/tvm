@@ -49,25 +49,6 @@ class WrapRunnable(object):
         return execute_step("after_forward", output)
 
 
-class WrapRunnable(object):
-    """Wrapped runnable for tools
-
-    Parameters
-    -------
-    runnable: tvm.relax.VirtualMachine
-        The virtual machine.
-    entry: str
-        The entry funcname.
-    """
-
-    def __init__(self, runnable: tvm.relax.VirtualMachine, entry: str = "main"):
-        self._runnable = runnable
-        self._entry = entry
-
-    def __call__(self, *inputs) -> List[tvm.nd.array]:
-        return self._runnable[self._entry](*inputs)
-
-
 class TVMRunner(ModelRunner):
     """Runner of Relax"""
 

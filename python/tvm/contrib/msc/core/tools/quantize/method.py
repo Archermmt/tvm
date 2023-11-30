@@ -335,6 +335,7 @@ class QuantizeMethod(object):
             The plan of the tensor.
         """
 
+        # pylint: disable=import-outside-toplevel
         import ctypes
         from tvm.relay import quantize as _quantize
 

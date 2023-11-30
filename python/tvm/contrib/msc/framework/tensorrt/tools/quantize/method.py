@@ -18,7 +18,6 @@
 """tvm.contrib.msc.framework.tensorrt.tools.quantize.method"""
 
 from typing import Dict
-import numpy as np
 
 from tvm.contrib.msc.core.tools.quantize import QuantizeMethod, BaseQuantizer
 from tvm.contrib.msc.core.utils.namespace import MSCFramework

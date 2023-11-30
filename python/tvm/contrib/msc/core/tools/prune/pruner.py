@@ -307,19 +307,17 @@ class BasePruner(BaseTool):
         else:
             self._plan[w_node.name]["out_indices"] = []
         lazy_pruned = set()
-        for name, info in self._unpruned_tensors.items():
+        for lazy_name, info in self._unpruned_tensors.items():
             if info["lead_name"] in self._plan:
-                strategys = self._get_tensor_strategys(name, info["consumer"])
-                self._process_tensor(info["tensor"], name, info["consumer"], strategys)
-                if self.on_debug(2):
-                    self._logger.debug(
-                        "%slazy processed %s-%s: %s",
-                        self.msg_mark(),
-                        name,
-                        consumer,
-                        msc_utils.inspect_array(tensor),
-                    )
-                lazy_pruned.add(name)
+                strategys = self._get_tensor_strategys(lazy_name, info["consumer"])
+                lazy_tensor = self._process_tensor(
+                    info["tensor"], lazy_name, info["consumer"], strategys
+                )
+                strategy_mark = ".".join([s.get_executor().name for s in strategys])
+                self.debug_tensor(
+                    lazy_tensor, lazy_name, consumer, "lazy processed({})".format(strategy_mark)
+                )
+                lazy_pruned.add(lazy_name)
         if lazy_pruned:
             self._unpruned_tensors = {
                 k: v for k, v in self._unpruned_tensors.items() if k not in lazy_pruned

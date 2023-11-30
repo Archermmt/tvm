@@ -242,4 +242,3 @@ def test_tensorrt_tools(tool_type, use_native):
 
 if __name__ == "__main__":
     tvm.testing.main()
-    # test_tensorrt_tools(ToolType.QUANTIZER, True)

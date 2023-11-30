@@ -112,7 +112,7 @@ def to_sub_tensorrt(
         for path, info in depends.items():
             if info.get("copy_back", False) and os.path.exists(path):
                 folder.copy(path, info["src"])
-        return folder.move_file(engine_name + ".trt", output_folder.relpath(engine_name + ".trt"))
+        return folder.move(engine_name + ".trt", output_folder.relpath(engine_name + ".trt"))
 
     codegen = CodeGen(
         graph,
