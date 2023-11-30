@@ -17,9 +17,10 @@
 # pylint: disable=unused-import
 """tvm.contrib.msc.framework.tensorrt.runtime.runner"""
 
-from typing import Any
+from typing import Any, List, Dict
 
 import tvm
+from tvm.contrib.msc.core.ir import MSCGraph
 from tvm.contrib.msc.core.runtime import BYOCRunner
 from tvm.contrib.msc.core.tools import ToolType
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
@@ -61,20 +62,40 @@ class TensorRTRunner(BYOCRunner):
 
         assert tool_type in self._tools, "Can not find tool " + str(tool_type)
         if tool_type == ToolType.QUANTIZER:
-            codegen = self._generate_config.get("codegen")
-            if not isinstance(codegen, (list, tuple)):
-                self._generate_config["codegen"] = [msc_utils.copy_dict(codegen)] * len(
-                    self._graphs
-                )
             quantizer = self.get_tool(ToolType.QUANTIZER)
             assert data_loader, "data_loader should be given to plan prune"
             for inputs in data_loader():
                 self.run(inputs)
-            self._generate_config = quantizer.config_generate(self._generate_config)
             self._generate_model()
             quantizer.calibrate()
             assert quantizer.calibrated, "Failed to calibrate the tenosrrt quantizer"
         return super().apply_tool(tool_type, data_loader)
+
+    def _generate_model(
+        self, graphs: List[MSCGraph] = None, weights: List[Dict[str, tvm.nd.array]] = None
+    ) -> Any:
+        """Codegen the model according to framework
+
+        Parameters
+        -------
+        graphs: list<MSCgraph>
+            The msc graphs.
+        weights: list<dic<str, tvm.nd.array>>
+            The weights
+
+        Returns
+        -------
+        model: Any
+            The meta model
+        """
+
+        codegen = self._generate_config.get("codegen")
+        if not isinstance(codegen, (list, tuple)):
+            self._generate_config["codegen"] = [msc_utils.copy_dict(codegen)] * len(self._graphs)
+        for tool in self.get_tools():
+            self._generate_config = tool.config_generate(self._generate_config)
+
+        return super()._generate_model(graphs, weights)
 
     @classmethod
     def target_transform(cls, mod: tvm.IRModule):

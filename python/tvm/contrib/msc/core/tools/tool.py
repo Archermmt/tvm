@@ -734,6 +734,22 @@ class BaseTool(object):
 
         return tensor
 
+    def config_generate(self, generate_config: Dict[str, Any]) -> Dict[str, Any]:
+        """Update the generate configs
+
+        Parameters
+        ----------
+        generate_config: dict<str, Any>
+            The generate_config.
+
+        Returns
+        -------
+        generate_config: dict<str, Any>
+            The updated generate_config.
+        """
+
+        return generate_config
+
     def visualize(self, visual_dir: msc_utils.MSCDirectory):
         """Visualize MSCGraphs
 

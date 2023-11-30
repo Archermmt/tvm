@@ -20,13 +20,13 @@
 import os
 import json
 import logging
-from typing import Dict, Optional, Any, List, Tuple, Union
+from typing import Dict, Optional, Any, List, Tuple, Union, Iterable
 import numpy as np
 
 import tvm
 from tvm.contrib.msc.core.ir import MSCGraph
 from tvm.contrib.msc.core.frontend import from_relax
-from tvm.contrib.msc.core.tools import BaseTool, ToolType, create_tool, remove_tool
+from tvm.contrib.msc.core.tools import BaseTool, ToolType, create_tool
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core.utils.message import MSCStage
 from tvm.contrib.msc.core import utils as msc_utils
@@ -300,6 +300,20 @@ class BaseRunner(object):
         """
 
         return self._tools.get(tool_type)
+
+    def get_tools(self) -> Iterable[BaseTool]:
+        """Get all saved tools by tag
+
+        Returns
+        -------
+        tools: iterable<BaseTool>
+            The saved tools.
+        """
+
+        for t_type in ToolType.all_types():
+            tool = self.get_tool(t_type)
+            if tool:
+                yield tool
 
     def apply_tool(self, tool_type: str, data_loader: Any = None) -> dict:
         """Execute tool and get plan
