@@ -16,14 +16,163 @@
 # under the License.
 """tvm.contrib.msc.core.tools.distill.distiller"""
 
-from typing import List, Any
+import os
+from typing import List, Any, Dict, Tuple
 
+import tvm
+from tvm.contrib.msc.core.ir import MSCGraph
 from tvm.contrib.msc.core.tools.tool import ToolType, BaseTool, Strategy
 from tvm.contrib.msc.core import utils as msc_utils
 
 
 class BaseDistiller(BaseTool):
     """Base distiller for all"""
+
+    def setup(self) -> dict:
+        """Setup the tool
+
+        Returns
+        -------
+        info: dict
+            The setup info.
+        """
+
+        self._max_iter = self._options.get("max_iter", 5)
+        self._save_step = self._options.get("save_step", 50)
+        self._weights_folder = msc_utils.get_weights_dir().create_dir("Distill")
+        self._weights_path = self._weights_folder.relpath("distill_{}.bin".format(self._max_iter))
+        self._distilled = os.path.isfile(self._weights_path)
+        return super().setup()
+
+    def _reset(self):
+        """Extra reset for tool"""
+
+        super()._reset()
+        self._current_iter = 0
+        self._total_loss = 0
+
+    def load_graphs(
+        self, graphs: List[MSCGraph], weights: List[Dict[str, tvm.nd.array]]
+    ) -> Tuple[List[MSCGraph], List[Dict[str, tvm.nd.array]]]:
+        """Load the graphs and weights
+
+        Parameters
+        ----------
+        graphs: list<MSCgraph>
+            The msc graphs.
+        weights: list<dict<str, tvm.nd.array>>
+            The weights
+
+        Returns
+        -------
+        graphs: list<MSCgraph>
+            The msc graphs.
+        weights: list<dict<str, tvm.nd.array>>
+            The weights
+        """
+
+        graphs, weights = super().load_graphs(graphs, weights)
+        if not self._distilled:
+            return graphs, weights
+        with open(self._weights_path, "rb") as f:
+            distilled_weights = tvm.runtime.load_param_dict(f.read())
+        for sub_weights in weights:
+            sub_weights.update({k: v for k, v in distilled_weights.items() if k in sub_weights})
+        self._logger.info("Update %d distilled weights", len(distilled_weights))
+        return graphs, weights
+
+    def build_model(self, teacher: Any, student: Any) -> Any:
+        """Build the model with teacher and student
+
+        Parameters
+        ----------
+        teacher: Any
+            The teacher model
+        student: Any
+            The student model
+
+        Returns
+        -------
+        model: Any
+            The built model.
+        """
+
+        raise NotImplementedError("build_model is not implemented in BaseDistiller")
+
+    def learn(self, loss: Any):
+        """Learn after forward
+
+        Parameters
+        ----------
+        loss: Any
+            The loss after forward
+        """
+
+        if self.on_debug(3):
+            self._logger.debug("%sStart Learn", self.msg_mark())
+        self._total_loss += float(self._learn(loss))
+
+    def _learn(self, loss: Any):
+        """Learn after forward
+
+        Parameters
+        ----------
+        loss: Any
+            The loss after forward
+        """
+
+        raise NotImplementedError("_learn is not implemented in BaseDistiller")
+
+    def distill(self) -> Dict[str, Any]:
+        """Distill the knowledge
+
+        Returns
+        -------
+        weights: dict<str, Any>
+            The distilled weights.
+        """
+
+        weights = self._distill()
+        if self._current_iter >= self._max_iter or (
+            self._current_iter > 0 and self._current_iter % self._save_step == 0
+        ):
+            self._save_weights(weights)
+        if self._current_iter >= self._max_iter:
+            self._distilled = True
+            self._plan = {n: msc_utils.inspect_array(d, False) for n, d in weights.items()}
+        self._logger.info(
+            "Distill[%d] loss(%d batch) %f", self._current_iter, self._forward_cnt, self._total_loss
+        )
+        self._current_iter += 1
+        self._total_loss, self._forward_cnt = 0, 0
+        return weights
+
+    def _distill(self) -> Dict[str, Any]:
+        """Distill the knowledge
+
+        Returns
+        -------
+        weights: dict<str, Any>
+            The distilled weights.
+        """
+
+        raise NotImplementedError("_distill is not implemented in BaseDistiller")
+
+    def _save_weights(self, weights: Dict[str, Any]):
+        """Save the distilled weights
+
+        Parameters
+        ----------
+        weights: dict<str, Any>
+            The distilled weights.
+        """
+
+        weights = {n: tvm.nd.array(msc_utils.cast_array(d)) for n, d in weights.items()}
+        weights_path = self._weights_folder.relpath("distill_{}.bin".format(self._current_iter))
+        with open(weights_path, "wb") as f_params:
+            f_params.write(tvm.runtime.save_param_dict(weights))
+        if self.on_debug(2, in_forward=False):
+            self._logger.debug("Save weights[%d] to %s", self._current_iter, weights_path)
 
     def _support_scope(self, scope: str) -> bool:
         """Check if the scope si supported
@@ -65,6 +214,8 @@ class BaseDistiller(BaseTool):
             The processed tensor.
         """
 
+        if self._distilled:
+            return tensor
         return self._distill_tensor(tensor, name, consumer, scope, strategys)
 
     def _distill_tensor(
@@ -98,6 +249,10 @@ class BaseDistiller(BaseTool):
             plan.update(strategy(self, tensor, name, consumer, scope))
         self._plan[name][scope] = plan
         return tensor
+
+    @property
+    def distilled(self):
+        return self._distilled
 
     @classmethod
     def tool_type(cls):

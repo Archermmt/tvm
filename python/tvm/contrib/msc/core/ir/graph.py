@@ -536,6 +536,19 @@ class MSCGraph(BaseGraph):
 
         return _ffi_api.MSCGraphFindTensor(self, name)
 
+    def set_tensor_alias(self, tensor: MSCTensor, alias: str):
+        """Set alis for the tensor
+
+        Parameters
+        -------
+        tensor: MSCTensor
+            The tensor.
+        alias: str
+            The alias.
+        """
+
+        _ffi_api.MSCGraphSetTensorAlias(self, tensor, alias)
+
     def find_producer(self, ref: Union[str, MSCTensor]) -> MSCJoint:
         """Find producer by tensor_name or tensor.
 

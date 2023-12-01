@@ -22,6 +22,11 @@ from tvm.contrib.msc.core.tools.tool import ToolType, BaseTool, Strategy
 from tvm.contrib.msc.core import utils as msc_utils
 
 
+class QuantizeStage:
+    GATHER = "gather"
+    CALIBRATE = "calibrate"
+
+
 class BaseQuantizer(BaseTool):
     """Base quantizer for all"""
 
@@ -40,7 +45,7 @@ class BaseQuantizer(BaseTool):
         else:
             self._calibrated = False
             self._calibrate_plan = {}
-            self.change_stage("gather")
+            self.change_stage(QuantizeStage.GATHER)
         return super().setup()
 
     def calibrate(self) -> dict:
@@ -53,7 +58,7 @@ class BaseQuantizer(BaseTool):
         """
 
         new_plan = {}
-        self.change_stage("calibrate")
+        self.change_stage(QuantizeStage.CALIBRATE)
         for tensor_id, plan in self._calibrate_plan.items():
             if plan.get("calibrated", False):
                 new_plan[tensor_id] = plan
@@ -63,7 +68,7 @@ class BaseQuantizer(BaseTool):
             new_plan[tensor_id] = strategy(self, name, consumer, plan)
         if any(not plan.get("calibrated", False) for plan in new_plan.values()):
             self._calibrate_plan = new_plan
-            self.change_stage("gather")
+            self.change_stage(QuantizeStage.GATHER)
         else:
             self._calibrated = True
             for name, plan in new_plan.items():

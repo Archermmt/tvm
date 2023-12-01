@@ -16,13 +16,48 @@
 # under the License.
 """tvm.contrib.msc.core.tools.distill.method"""
 
-from tvm.contrib.msc.core.tools.tool import ToolType
+from typing import List
+import numpy as np
+
+from tvm.contrib.msc.core.tools.tool import ToolType, BaseTool
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 
 
 class DistillMethod(object):
     """Default distill method"""
+
+    @classmethod
+    def loss_lp_norm(
+        cls,
+        distiller: BaseTool,
+        t_outputs: List[np.ndarray],
+        s_outputs: List[np.ndarray],
+        pow: int = 2,
+    ):
+        """Calculate loss with mse
+
+        Parameters
+        ----------
+        distiller: BaseDistiller
+            The distiller
+        t_outputs: list<np.ndarray>
+            The teacher outputs.
+        s_outputs: list<np.ndarray>
+            The student outputs.
+        pow: int
+            The power factor.
+
+        Returns
+        -------
+        loss: float
+            The loss.
+        """
+
+        loss = 0
+        for t_out, s_out in zip(t_outputs, s_outputs):
+            loss += (t_out - s_out).abs().pow(pow).mean()
+        return loss
 
     @classmethod
     def framework(cls):

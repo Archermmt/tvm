@@ -114,15 +114,6 @@ class BaseManager(object):
             config = self._update_runner_config(config, stage)
         config = self._update_tool_config(config)
 
-        def _get_tool_stage(tool_type: str) -> str:
-            if tool_type == ToolType.PRUNER:
-                return MSCStage.PRUNE
-            if tool_type == ToolType.QUANTIZER:
-                return MSCStage.QUANTIZE
-            if tool_type == ToolType.DISTILLER:
-                return MSCStage.DISTILL
-            return tool_type
-
         def _set_debug_level(stage: str, stage_config: dict, default: int = None) -> dict:
             if "debug_level" in stage_config:
                 debug_levels[stage] = stage_config["debug_level"]
@@ -141,7 +132,7 @@ class BaseManager(object):
                 if t_type not in config["optimize"]:
                     continue
                 debug_levels = _set_debug_level(
-                    _get_tool_stage(t_type), config["optimize"][t_type], debug_level
+                    self._get_tool_stage(t_type), config["optimize"][t_type], debug_level
                 )
         ordered_keys = [
             "model_type",
@@ -379,27 +370,21 @@ class BaseManager(object):
         """
 
         runner_cls = self._get_runner_cls(stage_config["run_type"])
+
+        def _tool_enabled(tool_type: str) -> bool:
+            return tool_type in stage_config and runner_cls.support_tool(tool_type)
+
         # run prune
-        if ToolType.PRUNER in stage_config and runner_cls.support_tool(ToolType.PRUNER):
-            self._tools_config[ToolType.PRUNER] = stage_config[ToolType.PRUNER]
-            plan_file = stage_config[ToolType.PRUNER]["plan_file"]
-            if os.path.isfile(plan_file):
-                self._logger.info("Skip %s with plan_file %s", ToolType.PRUNER, plan_file)
-            else:
-                msc_utils.time_stamp(MSCStage.PRUNE)
-                runner = self._create_tool_runner(MSCStage.PRUNE, stage_config)
-                runner.apply_tool(ToolType.PRUNER, self._data_loader)
+        if _tool_enabled(ToolType.PRUNER):
+            self._apply_tool(ToolType.PRUNER, stage_config)
 
         # run quantize
-        if ToolType.QUANTIZER in stage_config and runner_cls.support_tool(ToolType.PRUNER):
-            self._tools_config[ToolType.QUANTIZER] = stage_config[ToolType.QUANTIZER]
-            plan_file = stage_config[ToolType.QUANTIZER]["plan_file"]
-            if os.path.isfile(plan_file):
-                self._logger.info("Skip %s with plan_file %s", ToolType.QUANTIZER, plan_file)
-            else:
-                msc_utils.time_stamp(MSCStage.QUANTIZE)
-                runner = self._create_tool_runner(MSCStage.QUANTIZE, stage_config)
-                runner.apply_tool(ToolType.QUANTIZER, self._data_loader)
+        if _tool_enabled(ToolType.QUANTIZER):
+            self._apply_tool(ToolType.QUANTIZER, stage_config)
+
+        # run distill
+        if _tool_enabled(ToolType.DISTILLER):
+            self._apply_tool(ToolType.DISTILLER, stage_config)
 
         # optimize and get the runner
         msc_utils.time_stamp(MSCStage.OPTIMIZE)
@@ -500,7 +485,6 @@ class BaseManager(object):
 
         if self._runner:
             self._runner.destory()
-        debug_level = self._debug_levels.get(stage, 0)
         cache_dir = msc_utils.get_cache_dir().create_dir(stage) if use_cache else None
         tools_config = tools_config or {}
         msc_utils.time_stamp(stage + ".build", False)
@@ -508,23 +492,14 @@ class BaseManager(object):
         run_config = msc_utils.copy_dict(stage_config.get("run_config"))
         if "generate_config" not in run_config:
             run_config["generate_config"] = {}
-        run_config["generate_config"].update(
-            {
-                "build_folder": msc_utils.get_build_dir().create_dir(
-                    stage, cleanup=(debug_level == 0)
-                ),
-            }
+        cleanup = self._debug_levels.get(stage, 0) == 0
+        run_config["generate_config"]["build_folder"] = msc_utils.get_build_dir().create_dir(
+            stage, cleanup=cleanup
         )
-        self._logger.debug("Create runner(%s) by %s(%s)", stage, runner_cls.__name__, run_config)
-        # save baseline data for debug
-        if ToolType.TRACKER in self._config.get("optimize", {}):
-            tools_config = {
-                **tools_config,
-                ToolType.TRACKER: self._config["optimize"][ToolType.TRACKER],
-            }
-        tools_config = {
-            t_type: info for t_type, info in tools_config.items() if runner_cls.support_tool(t_type)
-        }
+        opt_config = self._config.get("optimize", {})
+        if ToolType.TRACKER in opt_config and runner_cls.support_tool(ToolType.TRACKER):
+            tools_config = {**tools_config, ToolType.TRACKER: opt_config[ToolType.TRACKER]}
+        # Build runner
         runner = runner_cls(
             self._relax_mod,
             tools_config=tools_config,
@@ -544,8 +519,8 @@ class BaseManager(object):
             runner.apply_tool(ToolType.TRACKER)
         return runner
 
-    def _create_tool_runner(self, tool_type: str, stage_config: dict) -> BaseRunner:
-        """Create runner with tool.
+    def _apply_tool(self, tool_type: str, stage_config: dict, add_tool: bool = True) -> str:
+        """Apply tool with runner
 
         Parameters
         ----------
@@ -553,24 +528,35 @@ class BaseManager(object):
             The tool type.
         stage_config: dict
             The config of this stage.
+        add_tool: bool
+            Whether to add tool in self._tools.
 
         Returns
         -------
-        runner: BaseRunner
-            The runner.
+        plan_file: str
+            The plan_file path.
         """
 
+        assert tool_type in stage_config, "Can not find config for tool " + str(tool_type)
+        tool_stage = self._get_tool_stage(tool_type)
+        if add_tool:
+            self._tools_config[tool_type] = stage_config[tool_type]
+            tools_config = self._tools_config
+        else:
+            tools_config = {**self._tools_config, tool_type: stage_config[tool_type]}
+        plan_file = stage_config[tool_type]["plan_file"]
+        if os.path.isfile(plan_file):
+            self._logger.info("Skip %s with plan %s", tool_type, plan_file)
+            return plan_file
+        msc_utils.time_stamp(tool_stage)
         t_stage_config = {
             "run_type": stage_config["run_type"],
             "run_config": stage_config["run_config"],
         }
-        return self._create_runner(
-            tool_type,
-            t_stage_config,
-            tools_config=self._tools_config,
-            profile=False,
-            use_cache=False,
+        runner = self._create_runner(
+            tool_stage, t_stage_config, tools_config=tools_config, profile=False, use_cache=False
         )
+        return runner.apply_tool(tool_type, self._data_loader)
 
     def _profile_runner(self, runner: BaseRunner, stage_config: str) -> dict:
         """Profile the runner.
@@ -791,6 +777,28 @@ class BaseManager(object):
                 tool_config["plan_file"], msc_utils.get_config_dir()
             )
         return config
+
+    def _get_tool_stage(self, tool_type: str) -> str:
+        """Map the stage according to tool_type
+
+        Parameters
+        ----------
+        tool_type: str
+            The tool type.
+
+        Returns
+        -------
+        stage: str
+            The stage.
+        """
+
+        if tool_type == ToolType.PRUNER:
+            return MSCStage.PRUNE
+        if tool_type == ToolType.QUANTIZER:
+            return MSCStage.QUANTIZE
+        if tool_type == ToolType.DISTILLER:
+            return MSCStage.DISTILL
+        return tool_type
 
     def get_runnable(self, ret_type: str = "runner") -> Any:
         """Return object by type.

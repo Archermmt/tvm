@@ -81,7 +81,7 @@ class TrackMethod(object):
                     )
                     if report["passed"] == 0:
                         tracker._logger.info(diff_msg)
-                    elif tracker.on_debug(2):
+                    elif tracker.on_debug(3):
                         tracker._logger.debug(diff_msg)
                     diffs[stage] = {
                         "pass": report["passed"] == 1,

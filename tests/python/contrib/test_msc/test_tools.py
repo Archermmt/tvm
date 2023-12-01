@@ -49,7 +49,7 @@ def _get_config(
         "model_type": model_type,
         "inputs": inputs,
         "outputs": outputs,
-        "debug_level": 0,
+        "debug_level": 2,
         "dataset": {"loader": "from_random", "max_iter": 5},
         "prepare": {"profile": {"benchmark": {"repeat": 10}}},
         "baseline": {
@@ -76,6 +76,8 @@ def get_tool_config(tool_type, use_distill):
             "strategys": [{"method": "per_channel", "density": 0.8}],
         }
     elif tool_type == ToolType.QUANTIZER:
+        from tvm.contrib.msc.core.tools.quantize import QuantizeStage
+
         config = {
             "plan_file": "msc_quantizer.json",
             "strategys": [
@@ -83,19 +85,19 @@ def get_tool_config(tool_type, use_distill):
                     "method": "gather_maxmin",
                     "op_types": ["nn.conv2d", "msc.linear"],
                     "tensor_types": ["input", "output"],
-                    "stages": ["gather"],
+                    "stages": [QuantizeStage.GATHER],
                 },
                 {
                     "method": "gather_max_per_channel",
                     "op_types": ["nn.conv2d", "msc.linear"],
                     "tensor_types": ["weight"],
-                    "stages": ["gather"],
+                    "stages": [QuantizeStage.GATHER],
                 },
                 {
                     "method": "calibrate_maxmin",
                     "op_types": ["nn.conv2d", "msc.linear"],
                     "tensor_types": ["input", "output"],
-                    "stages": ["calibrate"],
+                    "stages": [QuantizeStage.CALIBRATE],
                 },
                 {
                     "method": "quantize_normal",
@@ -125,7 +127,15 @@ def get_tool_config(tool_type, use_distill):
             ],
         }
     if use_distill:
-        distill_config = {"plan_file": "msc_distiller.json", "strategys": []}
+        distill_config = {
+            "plan_file": "msc_distiller.json",
+            "strategys": [
+                {
+                    "method": "loss_lp_norm",
+                    "op_types": ["loss"],
+                },
+            ],
+        }
         return {tool_type: config, ToolType.DISTILLER: distill_config}
     return {tool_type: config}
 
@@ -181,7 +191,7 @@ def _test_from_torch(
         assert msc_utils.dict_equal(
             model_info, expected_info
         ), "Model info {} mismatch with expected {}".format(model_info, expected_info)
-        manager.destory()
+        # manager.destory()
 
 
 @pytest.mark.parametrize(
@@ -255,4 +265,4 @@ def test_tensorrt_tools(tool_type, use_distill, use_native):
 
 if __name__ == "__main__":
     # tvm.testing.main()
-    test_tvm_tools(ToolType.PRUNER, False)
+    test_tvm_tools(ToolType.PRUNER, True)
