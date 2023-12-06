@@ -69,6 +69,7 @@ def _get_config(
 
 
 def get_tool_config(tool_type, use_distill=False, use_gym=False):
+    """Get config for the tool"""
     config = {}
     if tool_type == ToolType.PRUNER:
         config = {
@@ -93,6 +94,7 @@ def get_tool_config(tool_type, use_distill=False, use_gym=False):
                 }
             ]
     elif tool_type == ToolType.QUANTIZER:
+        # pylint: disable=import-outside-toplevel
         from tvm.contrib.msc.core.tools.quantize import QuantizeStage
 
         config = {
@@ -212,6 +214,7 @@ def _test_from_torch(
 
 
 def get_model_info(compile_type):
+    """Get the model info"""
     if compile_type == MSCFramework.TVM:
         return {
             "inputs": [
@@ -308,5 +311,4 @@ def test_tensorrt_distill(tool_type):
 
 
 if __name__ == "__main__":
-    # tvm.testing.main()
-    test_tvm_gym(ToolType.PRUNER)
+    tvm.testing.main()

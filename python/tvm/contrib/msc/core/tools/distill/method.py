@@ -14,6 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+# pylint: disable=unused-argument
 """tvm.contrib.msc.core.tools.distill.method"""
 
 from typing import List
@@ -33,7 +34,7 @@ class DistillMethod(object):
         distiller: BaseTool,
         t_outputs: List[np.ndarray],
         s_outputs: List[np.ndarray],
-        pow: int = 2,
+        power: int = 2,
     ):
         """Calculate loss with mse
 
@@ -45,7 +46,7 @@ class DistillMethod(object):
             The teacher outputs.
         s_outputs: list<np.ndarray>
             The student outputs.
-        pow: int
+        power: int
             The power factor.
 
         Returns
@@ -56,7 +57,7 @@ class DistillMethod(object):
 
         loss = 0
         for t_out, s_out in zip(t_outputs, s_outputs):
-            loss += (t_out - s_out).abs().pow(pow).mean()
+            loss += np.mean(np.power(np.abs(t_out - s_out), power))
         return loss
 
     @classmethod

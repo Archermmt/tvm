@@ -16,7 +16,7 @@
 # under the License.
 """tvm.contrib.msc.core.gym.search_agent"""
 
-from typing import Any, List, Tuple
+from typing import Any, List
 from tvm.contrib.msc.core import utils as msc_utils
 from .base_agent import BaseAgent
 
@@ -131,15 +131,18 @@ class BinarySearchAgent(BaseSearchAgent):
         pos = (self._ranges[task_id]["start"] + self._ranges[task_id]["end"]) / 2
         return [action_space[pos]]
 
-    def _store(self, task_id: int, rewards: List[dict]):
+    def _store(self, task_id: int):
         """Store rewards
 
         Parameters
         ----------
         task_id: int
             The current task id.
-        rewards: list<dict>
-            The rewards for each action
+
+        Returns
+        -------
+        next_task: int
+            The next task id.
         """
 
         rewards = self._knowledge["rewards"][task_id]

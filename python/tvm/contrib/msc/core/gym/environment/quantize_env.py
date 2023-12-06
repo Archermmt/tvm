@@ -23,6 +23,8 @@ from .base_env import BaseEnv
 
 
 class QuantizeEnv(BaseEnv):
+    """Environment for quantize"""
+
     def _get_main_tool(self) -> BaseTool:
         """Get the main tool"""
 

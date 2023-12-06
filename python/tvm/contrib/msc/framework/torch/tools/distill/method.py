@@ -82,7 +82,7 @@ class TorchDistillMethod(DistillMethod):
         distiller: BaseDistiller,
         t_outputs: List[torch.Tensor],
         s_outputs: List[torch.Tensor],
-        pow: int = 2,
+        power: int = 2,
     ):
         """Calculate loss with mse
 
@@ -94,7 +94,7 @@ class TorchDistillMethod(DistillMethod):
             The teacher outputs.
         s_outputs: list<torch.Tensor>
             The student outputs.
-        pow: int
+        power: int
             The power factor.
 
         Returns
@@ -105,7 +105,7 @@ class TorchDistillMethod(DistillMethod):
 
         loss = 0
         for t_out, s_out in zip(t_outputs, s_outputs):
-            loss += torch.pow((t_out - s_out).abs(), pow).mean()
+            loss += torch.pow((t_out - s_out).abs(), power).mean()
         return loss
 
     @classmethod

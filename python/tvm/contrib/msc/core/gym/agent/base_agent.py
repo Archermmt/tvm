@@ -213,17 +213,20 @@ class BaseAgent(object):
                     len(self._knowledge["rewards"]), task_id
                 )
             )
-        return self._store(task_id, rewards)
+        return self._store(task_id)
 
-    def _store(self, task_id: int, rewards: List[dict]):
+    def _store(self, task_id: int):
         """Store rewards
 
         Parameters
         ----------
         task_id: int
             The current task id.
-        rewards: list<dict>
-            The rewards for each action
+
+        Returns
+        -------
+        next_task: int
+            The next task id.
         """
 
         return task_id + 1

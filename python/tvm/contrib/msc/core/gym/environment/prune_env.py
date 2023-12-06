@@ -23,6 +23,8 @@ from .base_env import BaseEnv
 
 
 class PruneEnv(BaseEnv):
+    """Environment for prune"""
+
     def _init_tool(self) -> BaseTool:
         """Get the main tool"""
 

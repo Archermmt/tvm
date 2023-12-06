@@ -386,10 +386,10 @@ class BasePruner(WeightTool):
                             out, pruned_tensors[ref_input.name].dim_at("C")
                         )
 
-            def _is_pruned(tensor: MSCTensor):
+            def _is_pruned(tensor: MSCTensor, graph: MSCGraph) -> bool:
                 return tensor.get_shape() != graph.find_tensor(tensor.name).get_shape()
 
-            pruned_tensors = {k: v for k, v in pruned_tensors.items() if _is_pruned(v)}
+            pruned_tensors = {k: v for k, v in pruned_tensors.items() if _is_pruned(v, graph)}
             if self.on_debug(3, in_forward=False):
                 self._logger.debug(msc_utils.msg_block("Pruned Tensors", pruned_tensors))
 

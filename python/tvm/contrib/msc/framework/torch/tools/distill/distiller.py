@@ -16,11 +16,10 @@
 # under the License.
 """tvm.contrib.msc.framework.torch.tools.distill.distiller"""
 
-from functools import partial
 from typing import Any, Dict
 
 import torch
-import torch.optim as optim
+from torch import optim
 from tvm.contrib.msc.core.tools.tool import ToolType
 from tvm.contrib.msc.core.tools.distill import BaseDistiller
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
@@ -88,15 +87,17 @@ class TorchDistillerFactory(object):
 
                 # Build model
                 class DistillModel(torch.nn.Module):
+                    """Common distill model class"""
+
                     def __init__(self):
                         super(DistillModel, self).__init__()
                         self.teacher = teacher
                         self.student = student
 
-                    def forward(self, *input):
+                    def forward(self, *inputs):
                         with torch.no_grad():
-                            teacher_outputs = self.teacher.forward(*input)
-                        student_outputs = self.student.forward(*input)
+                            teacher_outputs = self.teacher.forward(*inputs)
+                        student_outputs = self.student.forward(*inputs)
                         return get_loss(teacher_outputs, student_outputs)
 
                 self._model = DistillModel()

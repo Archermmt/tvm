@@ -565,7 +565,7 @@ class BaseManager(object):
         if gym_configs:
             knowledge = None
             for idx, config in enumerate(gym_configs):
-                self._logger.info("GYM[{}/{}].CREATE({})".format(idx, len(gym_configs), tool_stage))
+                self._logger.info("GYM[%d/%d].CREATE(%s)", idx, len(gym_configs), tool_stage)
                 extra_config = {
                     "env": {
                         "runner": runner,

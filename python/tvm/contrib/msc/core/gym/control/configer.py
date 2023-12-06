@@ -49,6 +49,8 @@ class BaseConfiger(object):
 
 
 class DefaultConfiger(BaseConfiger):
+    """Default configer for gym"""
+
     def update(self, raw_config: dict) -> dict:
         """Config the raw config
 

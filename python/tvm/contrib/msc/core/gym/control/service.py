@@ -30,12 +30,12 @@ from .worker import BaseWorker, WorkerFactory
 from .namespace import GYMObject, GYMAction
 
 
-def _send_message(queue: queue.Queue, header: str, body: dict, header_type: str = "message"):
+def _send_message(msg_queue: queue.Queue, header: str, body: dict, header_type: str = "message"):
     """Send the message to queue
 
     Parameters
     ----------
-    queue: Queue
+    msg_queue: Queue
         The message queue.
     header: str
         The header of message.
@@ -45,11 +45,11 @@ def _send_message(queue: queue.Queue, header: str, body: dict, header_type: str 
         The header type
     """
 
-    queue.put(json.dumps({header_type: header, "body": body}))
+    msg_queue.put(json.dumps({header_type: header, "body": body}))
 
 
 def _wait_message(
-    queue: queue.Queue,
+    msg_queue: queue.Queue,
     header: str,
     checker: callable = None,
     wait_time: int = 2,
@@ -60,7 +60,7 @@ def _wait_message(
 
     Parameters
     ----------
-    queue: Queue
+    msg_queue: Queue
         The message queue.
     header: str
         The header of message.
@@ -105,12 +105,12 @@ def _wait_message(
     while True:
         if try_cnt >= max_retry > 0:
             break
-        info = queue.get()
+        info = msg_queue.get()
         message = json.loads(info)
         if message.get(header_type, "") == header and _check_message(message, checker):
             return message["body"]
         try_cnt += 1
-        queue.put(info)
+        msg_queue.put(info)
         time.sleep(wait_time)
     return None
 
@@ -728,12 +728,12 @@ class MainService(BaseService):
             return values
         if gather_mode in (GatherMode.REDUCE_MEAN, GatherMode.REDUCE_SUM):
             if all(msc_utils.MSCArray.is_array(v) for v in values):
-                sum = np.array([msc_utils.cast_array(v) for v in values]).sum(axis=1)
+                value_sum = np.array([msc_utils.cast_array(v) for v in values]).sum(axis=1)
             else:
-                sum = reduce(lambda x, y: x + y, values)
+                value_sum = reduce(lambda x, y: x + y, values)
             if gather_mode == GatherMode.REDUCE_SUM:
-                return sum
-            return sum / len(values)
+                return value_sum
+            return value_sum / len(values)
         raise NotImplementedError("Gather mode {} is not supported")
 
     @property
@@ -779,7 +779,7 @@ class NodeService(BaseService):
 
         response = self._wait_request(msg_key, _check_feedback)
         self._send_response(msg_key, {"feedback_receive": True})
-        response = self._process_response(response)
+        response = self._process_response(msg_key, response)
         return response
 
     def _execute(self, obj_type: str, act_type: str) -> dict:
