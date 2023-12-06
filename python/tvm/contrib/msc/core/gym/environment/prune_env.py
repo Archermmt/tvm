@@ -65,12 +65,8 @@ class PruneEnv(BaseEnv):
             The final plan.
         """
 
-        print("actions {} with rewards {}".format(actions, rewards))
-
         strategys = [self._get_strategy(act, idx) for idx, act in enumerate(actions)]
-        plan = self._tool.apply_strategys(self._meta_strategys + strategys)
-        print("plan " + str(plan))
-        raise NotImplementedError("_summary is not implemented in BaseEnv")
+        return self._tool.apply_strategys(self._meta_strategys + strategys)
 
     def _get_strategy(self, action: float, task_id: int) -> dict:
         """Get strategy from task_id

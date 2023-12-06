@@ -249,7 +249,7 @@ class BaseService(object):
     def summary(self):
         self._logger.info("SERVICE Summary after %d iters", self._max_iter)
         self.execute(GYMObject.ENV, GYMAction.SUMMARY)
-        plan = self._states[-1]["response"]
+        plan = self._states[-1]["response"]["plan"]
         self.execute(GYMObject.ENV, GYMAction.CLEANUP)
         self.execute(GYMObject.AGENT, GYMAction.CLEANUP)
         return plan

@@ -232,15 +232,6 @@ class BaseEnv(object):
         for idx, action in enumerate(actions):
             self._update_tool(action, task_id)
             self._runner.build(self._cache_dir, force_build=True)
-
-            print(
-                "\naction[{}.{}] {} -> plan\n  {}".format(
-                    task_id,
-                    idx,
-                    action,
-                    "\n  ".join(["{}:{}".format(k, v) for k, v in self._tool._plan.items()]),
-                )
-            )
             rewards.append(self._reward_runner(task_id))
             self._logger.info(
                 "Task[%d/%d] Action[%d/%d] %s -> reward %s",

@@ -125,7 +125,8 @@ class EnvWorker(BaseWorker):
             rewards = self._worker_impl.step(**kwargs)
             response.update({"rewards": rewards})
         elif act_type == GYMAction.SUMMARY:
-            self._worker_impl.summary(**kwargs)
+            plan = self._worker_impl.summary(**kwargs)
+            response.update({"plan": plan})
         elif act_type == GYMAction.CLEANUP:
             self._worker_impl.destory()
         return response
