@@ -445,8 +445,8 @@ class BaseTool(object):
             cache_info = {}
         if self.tool_type() in cache_info:
             self.load_cache(cache_dir, cache_info[self.tool_type()])
-        graphs, weights = self._reset(graphs, weights)
-        self._graphs, self._weights = graphs, {}
+        self._graphs, weights = self._reset(graphs, weights)
+        self._weights = {}
         for sub_weights in weights:
             self._weights.update(sub_weights)
         self._logger.debug(

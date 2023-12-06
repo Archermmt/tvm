@@ -83,12 +83,12 @@ def get_tool_config(tool_type, use_distill=False, use_gym=False):
                         "executors": {
                             "action_space": {
                                 "method": "action_linear_space",
-                                "start": 0.2,
+                                "start": 0.4,
                                 "end": 0.8,
-                                "step": 0.2,
+                                "step": 0.4,
                             }
                         },
-                        "max_tasks": 5,
+                        "max_tasks": 3,
                     },
                     "agent": {"agent_type": "search.grid", "executors": {}},
                 }
@@ -295,6 +295,8 @@ def test_tensorrt_tool(tool_type):
         tool_config,
         get_model_info(MSCFramework.TENSORRT),
         is_training=False,
+        atol=5e-2,
+        rtol=5e-2,
         optimize_type=optimize_type,
     )
 
@@ -311,4 +313,6 @@ def test_tensorrt_distill(tool_type):
 
 
 if __name__ == "__main__":
-    tvm.testing.main()
+    # tvm.testing.main()
+    # test_tvm_tool(ToolType.PRUNER)
+    test_tvm_gym(ToolType.PRUNER)

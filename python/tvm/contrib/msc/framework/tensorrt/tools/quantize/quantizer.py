@@ -263,7 +263,7 @@ class TensorRTQuantizerFactory(object):
                         saver.finalize()
                         self._logger.debug(
                             "%ssave %d datas to %s",
-                            self.msg_mark(),
+                            self.msg_mark(in_forward=False),
                             self._forward_cnt,
                             saver.folder,
                         )

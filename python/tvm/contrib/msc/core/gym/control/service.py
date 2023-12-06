@@ -243,6 +243,8 @@ class BaseService(object):
         self.execute(GYMObject.AGENT, GYMAction.LEARN)
         if self._iter_done:
             self._iter_id += 1
+        if self._iter_id >= self._max_iter:
+            self._done = True
 
     def summary(self):
         self._logger.info("SERVICE Summary after %d iters", self._max_iter)

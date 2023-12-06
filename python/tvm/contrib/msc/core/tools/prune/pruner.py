@@ -17,6 +17,7 @@
 """tvm.contrib.msc.core.tools.prune.pruner"""
 
 from typing import List, Dict, Tuple, Any
+import numpy as np
 
 import tvm
 from tvm.contrib.msc.core.ir import MSCGraph, WeightJoint, MSCTensor
@@ -105,6 +106,9 @@ class BasePruner(WeightTool):
             The weights
         """
 
+        self._meta_weights = {}
+        for sub_weights in weights:
+            self._meta_weights.update(sub_weights)
         graphs, weights = super()._reset(graphs, weights)
         if self._plan and self._enabled:
             return self.prune_graphs(graphs, weights)
@@ -248,6 +252,8 @@ class BasePruner(WeightTool):
 
         def _prunable(w_node: WeightJoint) -> bool:
             """Check if weight node is prunable"""
+            if strategy.get_config().get("density", 1) == 1:
+                return False
             if w_node.get_attr("weight_strategy") != "main":
                 return False
             if not w_node.children:
@@ -281,7 +287,7 @@ class BasePruner(WeightTool):
         elif _prunable(w_node):
             self._plan[w_node.name] = strategy(
                 self,
-                self.get_data(w_node.name),
+                self.get_meta_data(w_node.name),
                 w_node.name,
                 consumer,
                 in_axis=in_axis,
@@ -421,6 +427,26 @@ class BasePruner(WeightTool):
         else:
             self._logger.info("No weights pruned, size %.4f M", raw_size)
         return new_graphs, new_weights
+
+    def get_meta_data(self, name: str) -> np.ndarray:
+        """Get meta weight as np.ndarray
+
+        Parameters
+        ----------
+        name: str
+            The name of data.
+
+        Returns
+        -------
+        data: np.ndarray
+            The data in np.ndarray format.
+        """
+
+        if name in self._meta_weights:
+            return msc_utils.cast_array(self._meta_weights[name])
+        raise Exception(
+            "Can not find data {} from {} weights".format(name, len(self._meta_weights))
+        )
 
     def create_tasks(self) -> List[dict]:
         """Create tasks for gym

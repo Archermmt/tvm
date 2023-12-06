@@ -46,15 +46,7 @@ class PruneEnv(BaseEnv):
             The current task id.
         """
 
-        task = self._get_task(task_id)
-        strategy = self._tool._get_tensor_strategy(task["name"], task["consumer"])
-        task_strategy = msc_utils.copy_dict(strategy.meta)
-        task_strategy.update(
-            {
-                "density": action,
-                "tensor_names": [self._tool.to_tensor_id(task["name"], task["consumer"])],
-            }
-        )
+        task_strategy = self._get_strategy(action, task_id)
         self._tool.apply_strategys(self._meta_strategys + [task_strategy])
 
     def _summary(self, actions: List[float], rewards: List[dict]) -> dict:
@@ -73,7 +65,39 @@ class PruneEnv(BaseEnv):
             The final plan.
         """
 
+        print("actions {} with rewards {}".format(actions, rewards))
+
+        strategys = [self._get_strategy(act, idx) for idx, act in enumerate(actions)]
+        plan = self._tool.apply_strategys(self._meta_strategys + strategys)
+        print("plan " + str(plan))
         raise NotImplementedError("_summary is not implemented in BaseEnv")
+
+    def _get_strategy(self, action: float, task_id: int) -> dict:
+        """Get strategy from task_id
+
+        Parameters
+        ----------
+        action: float
+            The current action.
+        task_id: int
+            The current task id.
+
+        Returns
+        -------
+        strategy: dict
+            The strategy.
+        """
+
+        task = self._get_task(task_id)
+        strategy = self._tool._get_tensor_strategy(task["name"], task["consumer"])
+        task_strategy = msc_utils.copy_dict(strategy.meta)
+        task_strategy.update(
+            {
+                "density": action,
+                "tensor_names": [self._tool.to_tensor_id(task["name"], task["consumer"])],
+            }
+        )
+        return task_strategy
 
     @classmethod
     def env_type(cls):
