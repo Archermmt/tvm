@@ -26,7 +26,7 @@ import numpy as np
 import tvm
 from tvm.contrib.msc.core.ir import MSCGraph
 from tvm.contrib.msc.core.frontend import from_relax
-from tvm.contrib.msc.core.tools import BaseTool, ToolType, ToolScope, create_tool
+from tvm.contrib.msc.core.tools import BaseTool, ToolType, ToolScope, create_tool, remove_tools
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core.utils.message import MSCStage
 from tvm.contrib.msc.core import utils as msc_utils
@@ -102,14 +102,19 @@ class BaseRunner(object):
 
         if "build_folder" not in self._generate_config:
             self._generate_config["build_folder"] = msc_utils.get_build_dir()
-        if self._tools_config:
-            self._update_codegen({"use_tools": True, "tools_tag": self._name})
         self._graphs, self._weights = [], []
         self._model, self._model_info = None, {}
         self._runnable = None
+        # Setup tools
         self._tools = {}
+        if self._tools_config:
+            self._update_codegen({"use_tools": True, "tools_tag": self._name})
+            for t_type, config in self._tools_config.items():
+                self._tools[t_type] = create_tool(
+                    self.framework, t_type, self._name, stage=self._stage, **config
+                )
         return {
-            "tools_config": self._tools_config,
+            "tools": {k: v.tool_style() for k, v in self._tools.items()},
             "translate_config": self._translate_config,
             "generate_config": self._generate_config,
             "name": self._name,
@@ -119,11 +124,18 @@ class BaseRunner(object):
         }
 
     def change_stage(self, stage: str):
-        """Change the stage of tools and strategy"""
+        """Change the stage of runner and tools"""
 
         self._stage = stage
         for tool in self._tools.values():
             tool.change_stage(stage)
+
+    def change_logger(self, logger: logging.Logger):
+        """Change the logger of runner and tools"""
+
+        self._logger = logger
+        for tool in self._tools.values():
+            tool.change_logger(logger)
 
     def build(self, cache_dir: msc_utils.MSCDirectory = None, force_build: bool = False) -> Any:
         """Build the runnable object
@@ -145,23 +157,13 @@ class BaseRunner(object):
             self._graphs, self._weights = [], []
             self._model, self._model_info = None, {}
             self._runnable = None
-            cache_info = {}
-        elif cache_dir and os.path.isfile(cache_dir.relpath("cache_info.json")):
+        if cache_dir and os.path.isfile(cache_dir.relpath("cache_info.json")):
             cache_info = msc_utils.load_dict(cache_dir.relpath("cache_info.json"))
         else:
             cache_info = {}
 
-        # Create tools
-        if self._tools_config:
-            for t_type, config in self._tools_config.items():
-                if t_type in self._tools:
-                    continue
-                self._tools[t_type] = create_tool(
-                    self.framework, t_type, self._name, stage=self._stage, **config
-                )
-
         # Load graphs from cache
-        if cache_info.get("graphs"):
+        if not self._graphs and cache_info.get("graphs"):
             self._graphs, self._weights = self._load_graphs(cache_dir, cache_info["graphs"])
             self._logger.info("Load %d graphs from %s", len(self._graphs), cache_dir)
 
@@ -171,7 +173,7 @@ class BaseRunner(object):
             self._logger.info("Translate %d graphs from module", len(self._graphs))
 
         # Load model from cache
-        if cache_info.get("model"):
+        if not self._model and cache_info.get("model"):
             self._graphs, self._weights = self.reset_tools(cache_dir=cache_dir)
             self._model = self._load_model(cache_dir, cache_info["model"])
             self._logger.info("Load model(%s) from %s", self.framework, cache_dir)
@@ -218,7 +220,7 @@ class BaseRunner(object):
         )
 
         # Load runnable from cache
-        if cache_info.get("runnable"):
+        if not self._runnable and cache_info.get("runnable"):
             self._runnable = self._load_runnable(cache_dir, cache_info["runnable"])
             self._logger.info("Load %s from %s", runnable_msg, cache_dir)
 
@@ -356,6 +358,22 @@ class BaseRunner(object):
             outputs = [msc_utils.cast_array(data) for data in outputs]
         return outputs
 
+    def get_tool_config(self, tool_type: str) -> dict:
+        """Get tool by type
+
+        Parameters
+        -------
+        tool_type: str
+            The type of the tool prune| quantize| distill...
+
+        Returns
+        -------
+        config: dict
+            The tool config.
+        """
+
+        return self._tools_config.get(tool_type)
+
     def get_tool(self, tool_type: str) -> BaseTool:
         """Get tool by type
 
@@ -386,7 +404,7 @@ class BaseRunner(object):
             if tool:
                 yield tool
 
-    def apply_tool(self, tool_type: str, data_loader: Any = None) -> dict:
+    def apply_tool(self, tool_type: str, data_loader: Any = None) -> str:
         """Execute tool and get plan
 
         Parameters
@@ -395,6 +413,11 @@ class BaseRunner(object):
             The tool type, should be in ToolType
         data_loader:
             The data loader
+
+        Returns
+        -------
+        plan_file: str
+            The saved plan file.
         """
 
         assert tool_type in self._tools, "Can not find tool " + str(tool_type)
@@ -497,6 +520,7 @@ class BaseRunner(object):
             self._runnable = None
         for tool in self.get_tools():
             tool.destory()
+        remove_tools(self._name)
 
     def _translate(self) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:
         """Translate IRModule to MSCgraphs
@@ -710,6 +734,10 @@ class BaseRunner(object):
     @property
     def stage(self):
         return self._stage
+
+    @property
+    def debug_level(self):
+        return self._debug_level
 
     @property
     def model(self):

@@ -22,7 +22,7 @@ from typing import List, Dict, Any, Tuple
 
 import tvm
 from tvm.contrib.msc.core.ir import MSCGraph
-from tvm.contrib.msc.core.tools.tool import ToolType, Strategy
+from tvm.contrib.msc.core.tools.tool import ToolType, ToolStrategy
 from tvm.contrib.msc.core.tools.quantize import BaseQuantizer, QuantizeStage
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
@@ -65,17 +65,33 @@ class TensorRTQuantizerFactory(object):
                     self._use_range = True
                 return super().setup()
 
-            def _reset(self):
-                """Extra reset for tool"""
+            def _reset(
+                self, graphs: List[MSCGraph], weights: List[Dict[str, tvm.nd.array]]
+            ) -> Tuple[List[MSCGraph], List[Dict[str, tvm.nd.array]]]:
+                """Reset the tool
 
-                super()._reset()
+                Parameters
+                ----------
+                graphs: list<MSCgraph>
+                    The msc graphs.
+                weights: list<dict<str, tvm.nd.array>>
+                    The weights
+
+                Returns
+                -------
+                graphs: list<MSCgraph>
+                    The msc graphs.
+                weights: list<dict<str, tvm.nd.array>>
+                    The weights
+                """
+
                 config_folder = msc_utils.get_config_dir()
-                self._range_files = [config_folder.relpath(g.name + ".range") for g in self._graphs]
+                self._range_files = [config_folder.relpath(g.name + ".range") for g in graphs]
                 calibrate_root = msc_utils.get_dataset_dir().create_dir("Calibrate")
-                self._calibrate_folders = [calibrate_root.relpath(g.name) for g in self._graphs]
+                self._calibrate_folders = [calibrate_root.relpath(g.name) for g in graphs]
                 if self._calibrated:
                     if self._use_range:
-                        for r_file, graph in zip(self._range_files, self._graphs):
+                        for r_file, graph in zip(self._range_files, graphs):
                             if not os.path.isfile(r_file):
                                 self._plan_to_range(graph, r_file)
                             self._logger.debug(
@@ -88,7 +104,7 @@ class TensorRTQuantizerFactory(object):
                         self._quantized_tensors = set()
                 elif self._stage == QuantizeStage.GATHER:
                     self._calibrate_savers = []
-                    for folder, graph in zip(self._calibrate_folders, self._graphs):
+                    for folder, graph in zip(self._calibrate_folders, graphs):
                         saver_options = {"input_names": [i.name for i in graph.get_inputs()]}
                         saver = msc_utils.IODataSaver(folder, saver_options)
                         self._calibrate_savers.append(saver)
@@ -102,6 +118,7 @@ class TensorRTQuantizerFactory(object):
                     assert all(
                         msc_utils.is_io_dataset(f) for f in self._calibrate_folders
                     ), "Some IODataset missing: " + str(self._calibrate_folders)
+                return super()._reset(graphs, weights)
 
             def _execute_after_build(self, codegen_context: dict) -> dict:
                 """Execute after model build
@@ -179,7 +196,7 @@ class TensorRTQuantizerFactory(object):
                 tensor_ctx: Dict[str, str],
                 name: str,
                 consumer: str,
-                strategys: List[Strategy],
+                strategys: List[ToolStrategy],
             ) -> Dict[str, str]:
                 """Quantize tensor
 
@@ -191,7 +208,7 @@ class TensorRTQuantizerFactory(object):
                     The name of the tensor.
                 consumer: str
                     The name of the consumer.
-                strategys: list<Strategy>
+                strategys: list<ToolStrategy>
                     The strategys for the tensor.
 
                 Returns

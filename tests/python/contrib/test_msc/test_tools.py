@@ -49,7 +49,7 @@ def _get_config(
         "model_type": model_type,
         "inputs": inputs,
         "outputs": outputs,
-        "debug_level": 2,
+        "debug_level": 0,
         "dataset": {"loader": "from_random", "max_iter": 5},
         "prepare": {"profile": {"benchmark": {"repeat": 10}}},
         "baseline": {
@@ -68,13 +68,30 @@ def _get_config(
     }
 
 
-def get_tool_config(tool_type, use_distill):
+def get_tool_config(tool_type, use_distill=False, use_gym=False):
     config = {}
     if tool_type == ToolType.PRUNER:
         config = {
             "plan_file": "msc_pruner.json",
             "strategys": [{"method": "per_channel", "density": 0.8}],
         }
+        if use_gym:
+            config["gym_configs"] = [
+                {
+                    "env": {
+                        "executors": {
+                            "action_space": {
+                                "method": "action_linear_space",
+                                "start": 0.2,
+                                "end": 0.8,
+                                "step": 0.2,
+                            }
+                        },
+                        "max_tasks": 5,
+                    },
+                    "agent": {"agent_type": "search.grid", "executors": {}},
+                }
+            ]
     elif tool_type == ToolType.QUANTIZER:
         from tvm.contrib.msc.core.tools.quantize import QuantizeStage
 
@@ -191,78 +208,105 @@ def _test_from_torch(
         assert msc_utils.dict_equal(
             model_info, expected_info
         ), "Model info {} mismatch with expected {}".format(model_info, expected_info)
-        # manager.destory()
+        manager.destory()
 
 
-@pytest.mark.parametrize(
-    "tool_type,use_distill",
-    [
-        (ToolType.PRUNER, False),
-        (ToolType.PRUNER, True),
-        (ToolType.QUANTIZER, False),
-        (ToolType.QUANTIZER, True),
-        (ToolType.TRACKER, False),
-    ],
-)
-def test_tvm_tools(tool_type, use_distill):
+def get_model_info(compile_type):
+    if compile_type == MSCFramework.TVM:
+        return {
+            "inputs": [
+                {"name": "input_0", "shape": [1, 3, 224, 224], "dtype": "float32", "layout": "NCHW"}
+            ],
+            "outputs": [{"name": "output", "shape": [1, 1000], "dtype": "float32", "layout": "NC"}],
+            "nodes": {
+                "total": 229,
+                "input": 1,
+                "nn.conv2d": 53,
+                "nn.batch_norm": 53,
+                "get_item": 53,
+                "nn.relu": 49,
+                "nn.max_pool2d": 1,
+                "add": 16,
+                "nn.adaptive_avg_pool2d": 1,
+                "reshape": 1,
+                "msc.linear_bias": 1,
+            },
+        }
+    if compile_type == MSCFramework.TENSORRT:
+        return {
+            "inputs": [
+                {"name": "input_0", "shape": [1, 3, 224, 224], "dtype": "float32", "layout": "NCHW"}
+            ],
+            "outputs": [{"name": "output", "shape": [1, 1000], "dtype": "float32", "layout": ""}],
+            "nodes": {"total": 2, "input": 1, "msc_tensorrt": 1},
+        }
+    raise TypeError("Unexpected compile_type " + str(compile_type))
+
+
+@pytest.mark.parametrize("tool_type", [ToolType.PRUNER, ToolType.QUANTIZER, ToolType.TRACKER])
+def test_tvm_tool(tool_type):
     """Test tools for tvm"""
 
-    model_info = {
-        "inputs": [
-            {"name": "input_0", "shape": [1, 3, 224, 224], "dtype": "float32", "layout": "NCHW"}
-        ],
-        "outputs": [{"name": "output", "shape": [1, 1000], "dtype": "float32", "layout": "NC"}],
-        "nodes": {
-            "total": 229,
-            "input": 1,
-            "nn.conv2d": 53,
-            "nn.batch_norm": 53,
-            "get_item": 53,
-            "nn.relu": 49,
-            "nn.max_pool2d": 1,
-            "add": 16,
-            "nn.adaptive_avg_pool2d": 1,
-            "reshape": 1,
-            "msc.linear_bias": 1,
-        },
-    }
-    tool_config = get_tool_config(tool_type, use_distill)
-    _test_from_torch(MSCFramework.TVM, tool_config, model_info, is_training=True)
+    tool_config = get_tool_config(tool_type)
+    _test_from_torch(
+        MSCFramework.TVM, tool_config, get_model_info(MSCFramework.TVM), is_training=True
+    )
+
+
+@pytest.mark.parametrize("tool_type", [ToolType.PRUNER, ToolType.QUANTIZER])
+def test_tvm_distill(tool_type):
+    """Test tools for tvm with distiller"""
+
+    tool_config = get_tool_config(tool_type, use_distill=True)
+    _test_from_torch(
+        MSCFramework.TVM, tool_config, get_model_info(MSCFramework.TVM), is_training=True
+    )
+
+
+@pytest.mark.parametrize("tool_type", [ToolType.PRUNER, ToolType.QUANTIZER])
+def test_tvm_gym(tool_type):
+    """Test tools for tvm with distiller"""
+
+    tool_config = get_tool_config(tool_type, use_gym=True)
+    _test_from_torch(
+        MSCFramework.TVM, tool_config, get_model_info(MSCFramework.TVM), is_training=True
+    )
 
 
 @requires_tensorrt
 @pytest.mark.parametrize(
-    "tool_type,use_distill,use_native",
-    [
-        (ToolType.PRUNER, False, False),
-        (ToolType.PRUNER, True, False),
-        (ToolType.QUANTIZER, False, True),
-        (ToolType.TRACKER, False, False),
-    ],
+    "tool_type",
+    [ToolType.PRUNER, ToolType.QUANTIZER, ToolType.TRACKER],
 )
-def test_tensorrt_tools(tool_type, use_distill, use_native):
+def test_tensorrt_tool(tool_type):
     """Test tools for tensorrt"""
 
-    model_info = {
-        "inputs": [
-            {"name": "input_0", "shape": [1, 3, 224, 224], "dtype": "float32", "layout": "NCHW"}
-        ],
-        "outputs": [{"name": "output", "shape": [1, 1000], "dtype": "float32", "layout": ""}],
-        "nodes": {"total": 2, "input": 1, "msc_tensorrt": 1},
-    }
-    tool_config = get_tool_config(tool_type, use_distill)
-    if tool_type == ToolType.QUANTIZER and use_native:
+    tool_config = get_tool_config(tool_type)
+    if tool_type == ToolType.QUANTIZER:
         tool_config[ToolType.QUANTIZER]["strategys"] = []
-    optimize_type = MSCFramework.TENSORRT if use_native else None
+        optimize_type = MSCFramework.TENSORRT
+    else:
+        optimize_type = None
     _test_from_torch(
         MSCFramework.TENSORRT,
         tool_config,
-        model_info,
+        get_model_info(MSCFramework.TENSORRT),
         is_training=False,
         optimize_type=optimize_type,
     )
 
 
+@requires_tensorrt
+@pytest.mark.parametrize("tool_type", [ToolType.PRUNER])
+def test_tensorrt_distill(tool_type):
+    """Test tools for tensorrt with distiller"""
+
+    tool_config = get_tool_config(tool_type, use_distill=True)
+    _test_from_torch(
+        MSCFramework.TENSORRT, tool_config, get_model_info(MSCFramework.TENSORRT), is_training=False
+    )
+
+
 if __name__ == "__main__":
     # tvm.testing.main()
-    test_tvm_tools(ToolType.PRUNER, True)
+    test_tvm_gym(ToolType.PRUNER)

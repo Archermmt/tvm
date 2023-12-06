@@ -18,7 +18,7 @@
 
 from typing import List, Dict, Any
 
-from tvm.contrib.msc.core.tools.tool import ToolType, BaseTool, Strategy
+from tvm.contrib.msc.core.tools.tool import ToolType, BaseTool, ToolStrategy
 from tvm.contrib.msc.core import utils as msc_utils
 
 
@@ -77,7 +77,7 @@ class BaseQuantizer(BaseTool):
         self._forward_cnt = 0
         return new_plan
 
-    def _parse_strategys(self, strategy_list: dict) -> Dict[str, Strategy]:
+    def _parse_strategys(self, strategy_list: dict) -> Dict[str, ToolStrategy]:
         """Parse the strategy to get valid strategy
 
         Parameters
@@ -87,7 +87,7 @@ class BaseQuantizer(BaseTool):
 
         Returns
         -------
-        strategys: dict<str, Strategy>
+        strategys: dict<str, ToolStrategy>
             The parsed strategy.
         """
 
@@ -117,12 +117,12 @@ class BaseQuantizer(BaseTool):
         strategys = self._get_tensor_strategys(name, consumer)
         if not strategys:
             return False
-        if any(s.get_config("nbits", 8) for s in strategys) == -1:
+        if any(s.get_config().get("nbits", 8) == -1 for s in strategys):
             return False
         return True
 
     def _process_tensor(
-        self, tensor: Any, name: str, consumer: str, scope: str, strategys: List[Strategy]
+        self, tensor: Any, name: str, consumer: str, scope: str, strategys: List[ToolStrategy]
     ) -> Any:
         """Process tensor
 
@@ -136,7 +136,7 @@ class BaseQuantizer(BaseTool):
             The name of the consumer.
         scope: str
             The scope mark teacher| student| null.
-        strategys: list<Strategy>
+        strategys: list<ToolStrategy>
             The strategys for the tensor.
 
         Returns
@@ -150,7 +150,7 @@ class BaseQuantizer(BaseTool):
         return self._quantize_tensor(tensor, name, consumer, strategys)
 
     def _gather_tensor(
-        self, tensor: Any, name: str, consumer: str, strategys: List[Strategy]
+        self, tensor: Any, name: str, consumer: str, strategys: List[ToolStrategy]
     ) -> Any:
         """Gather tensor datas
 
@@ -162,7 +162,7 @@ class BaseQuantizer(BaseTool):
             The name of the tensor.
         consumer: str
             The name of the consumer.
-        strategys: list<Strategy>
+        strategys: list<ToolStrategy>
             The strategys for the tensor.
 
         Returns
@@ -180,7 +180,7 @@ class BaseQuantizer(BaseTool):
         return tensor
 
     def _quantize_tensor(
-        self, tensor: Any, name: str, consumer: str, strategys: List[Strategy]
+        self, tensor: Any, name: str, consumer: str, strategys: List[ToolStrategy]
     ) -> Any:
         """Quantize tensor
 
@@ -192,7 +192,7 @@ class BaseQuantizer(BaseTool):
             The name of the tensor.
         consumer: str
             The name of the consumer.
-        strategys: list<Strategy>
+        strategys: list<ToolStrategy>
             The strategys for the tensor.
 
         Returns

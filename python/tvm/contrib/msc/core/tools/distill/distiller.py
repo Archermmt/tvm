@@ -21,7 +21,7 @@ from typing import List, Any, Dict, Tuple
 
 import tvm
 from tvm.contrib.msc.core.ir import MSCGraph
-from tvm.contrib.msc.core.tools.tool import ToolType, BaseTool, Strategy
+from tvm.contrib.msc.core.tools.tool import ToolType, BaseTool, ToolStrategy
 from tvm.contrib.msc.core import utils as msc_utils
 
 
@@ -44,17 +44,10 @@ class BaseDistiller(BaseTool):
         self._distilled = os.path.isfile(self._weights_path)
         return super().setup()
 
-    def _reset(self):
-        """Extra reset for tool"""
-
-        super()._reset()
-        self._current_iter = 0
-        self._total_loss = 0
-
-    def load_graphs(
+    def _reset(
         self, graphs: List[MSCGraph], weights: List[Dict[str, tvm.nd.array]]
     ) -> Tuple[List[MSCGraph], List[Dict[str, tvm.nd.array]]]:
-        """Load the graphs and weights
+        """Reset the tool
 
         Parameters
         ----------
@@ -71,15 +64,15 @@ class BaseDistiller(BaseTool):
             The weights
         """
 
-        graphs, weights = super().load_graphs(graphs, weights)
-        if not self._distilled:
-            return graphs, weights
-        with open(self._weights_path, "rb") as f:
-            distilled_weights = tvm.runtime.load_param_dict(f.read())
-        for sub_weights in weights:
-            sub_weights.update({k: v for k, v in distilled_weights.items() if k in sub_weights})
-        self._logger.info("Update %d distilled weights", len(distilled_weights))
-        return graphs, weights
+        self._current_iter = 0
+        self._total_loss = 0
+        if self._distilled:
+            with open(self._weights_path, "rb") as f:
+                distilled_weights = tvm.runtime.load_param_dict(f.read())
+            for sub_weights in weights:
+                sub_weights.update({k: v for k, v in distilled_weights.items() if k in sub_weights})
+            self._logger.info("Update %d distilled weights", len(distilled_weights))
+        return super()._reset(graphs, weights)
 
     def build_model(self, teacher: Any, student: Any) -> Any:
         """Build the model with teacher and student
@@ -191,7 +184,7 @@ class BaseDistiller(BaseTool):
         return True
 
     def _process_tensor(
-        self, tensor: Any, name: str, consumer: str, scope: str, strategys: List[Strategy]
+        self, tensor: Any, name: str, consumer: str, scope: str, strategys: List[ToolStrategy]
     ) -> Any:
         """Process tensor
 
@@ -205,7 +198,7 @@ class BaseDistiller(BaseTool):
             The name of the consumer.
         scope: str
             The scope mark teacher| student| null.
-        strategys: list<Strategy>
+        strategys: list<ToolStrategy>
             The strategys for the tensor.
 
         Returns
@@ -219,7 +212,7 @@ class BaseDistiller(BaseTool):
         return self._distill_tensor(tensor, name, consumer, scope, strategys)
 
     def _distill_tensor(
-        self, tensor: Any, name: str, consumer: str, scope: str, strategys: List[Strategy]
+        self, tensor: Any, name: str, consumer: str, scope: str, strategys: List[ToolStrategy]
     ) -> Any:
         """Process tensor
 
@@ -233,7 +226,7 @@ class BaseDistiller(BaseTool):
             The name of the consumer.
         scope: str
             The scope mark teacher| student| null.
-        strategys: list<Strategy>
+        strategys: list<ToolStrategy>
             The strategys for the tensor.
 
         Returns

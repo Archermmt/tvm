@@ -17,7 +17,7 @@
 """tvm.contrib.msc.core.tools.track.tracker"""
 
 from typing import Any, List
-from tvm.contrib.msc.core.tools.tool import ToolType, BaseTool, Strategy
+from tvm.contrib.msc.core.tools.tool import ToolType, BaseTool, ToolStrategy
 from tvm.contrib.msc.core import utils as msc_utils
 
 
@@ -105,7 +105,7 @@ class BaseTracker(BaseTool):
         strategy = self._get_tensor_strategy(name, consumer)
         if not strategy:
             return False
-        compare_to = strategy.get_config("compare_to", {})
+        compare_to = strategy.get_config().get("compare_to", {})
         if self._stage in compare_to:
             return True
         for stages in compare_to.values():
@@ -114,7 +114,7 @@ class BaseTracker(BaseTool):
         return False
 
     def _process_tensor(
-        self, tensor: Any, name: str, consumer: str, scope: str, strategys: List[Strategy]
+        self, tensor: Any, name: str, consumer: str, scope: str, strategys: List[ToolStrategy]
     ) -> Any:
         """Process tensor
 
@@ -128,7 +128,7 @@ class BaseTracker(BaseTool):
             The name of the consumer.
         scope: str
             The scope mark teacher| student| null.
-        strategys: list<Strategy>
+        strategys: list<ToolStrategy>
             The strategys for the tensor.
 
         Returns
@@ -140,7 +140,7 @@ class BaseTracker(BaseTool):
         return self._track_tensor(tensor, name, consumer, strategys)
 
     def _track_tensor(
-        self, tensor: Any, name: str, consumer: str, strategys: List[Strategy]
+        self, tensor: Any, name: str, consumer: str, strategys: List[ToolStrategy]
     ) -> Any:
         """Process tensor
 
@@ -152,7 +152,7 @@ class BaseTracker(BaseTool):
             The name of the tensor.
         consumer: str
             The name of the consumer.
-        strategys: list<Strategy>
+        strategys: list<ToolStrategy>
             The strategys for the tensor.
 
         Returns

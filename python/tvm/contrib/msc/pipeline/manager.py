@@ -19,6 +19,7 @@
 
 import os
 import time
+import json
 from typing import Dict, Any
 import traceback
 import numpy as np
@@ -29,6 +30,7 @@ from tvm.contrib.msc.core.tools import ToolType
 from tvm.contrib.msc.core.utils.namespace import MSCFramework, MSCMap
 from tvm.contrib.msc.core.utils.message import MSCStage
 from tvm.contrib.msc.core import utils as msc_utils
+from tvm.contrib.msc.core.gym.control import create_controller
 
 
 class BaseManager(object):
@@ -538,13 +540,17 @@ class BaseManager(object):
         """
 
         assert tool_type in stage_config, "Can not find config for tool " + str(tool_type)
-        tool_stage = self._get_tool_stage(tool_type)
+        tool_stage, tool_config = self._get_tool_stage(tool_type), stage_config[tool_type]
+        plan_file = tool_config["plan_file"]
+        if "gym_configs" in tool_config:
+            gym_configs = tool_config.pop("gym_configs")
+        else:
+            gym_configs = None
         if add_tool:
-            self._tools_config[tool_type] = stage_config[tool_type]
+            self._tools_config[tool_type] = tool_config
             tools_config = self._tools_config
         else:
-            tools_config = {**self._tools_config, tool_type: stage_config[tool_type]}
-        plan_file = stage_config[tool_type]["plan_file"]
+            tools_config = {**self._tools_config, tool_type: tool_config}
         if os.path.isfile(plan_file):
             self._logger.info("Skip %s with plan %s", tool_type, plan_file)
             return plan_file
@@ -556,6 +562,26 @@ class BaseManager(object):
         runner = self._create_runner(
             tool_stage, t_stage_config, tools_config=tools_config, profile=False, use_cache=False
         )
+        if gym_configs:
+            knowledge = None
+            for idx, config in enumerate(gym_configs):
+                self._logger.info("GYM[{}/{}].CREATE({})".format(idx, len(gym_configs), tool_stage))
+                extra_config = {
+                    "env": {
+                        "runner": runner,
+                        "data_loader": self._data_loader,
+                        "knowledge": knowledge,
+                    },
+                    "debug_level": runner.debug_level,
+                }
+                controller = create_controller(runner.stage, config, extra_config)
+                knowledge = controller.run()
+            with open(plan_file, "w") as f:
+                f.write(json.dumps(knowledge, indent=2))
+            self._logger.info(
+                "Gym save %d knowledge(%s) -> %s", len(knowledge), tool_type, plan_file
+            )
+            return plan_file
         return runner.apply_tool(tool_type, self._data_loader)
 
     def _profile_runner(self, runner: BaseRunner, stage_config: str) -> dict:

@@ -72,6 +72,8 @@ class MSCDirectory(object):
         return "{}(Cleanup: {}): {} Files".format(self._path, self._cleanup, len(self.listdir()))
 
     def __enter__(self):
+        if not os.path.isdir(self._path):
+            os.mkdir(self._path)
         os.chdir(self._path)
         return self
 
@@ -350,6 +352,7 @@ get_build_dir = partial(get_workspace_subdir, name="Build")
 get_cache_dir = partial(get_workspace_subdir, name="Cache")
 get_config_dir = partial(get_workspace_subdir, name="Config")
 get_dataset_dir = partial(get_workspace_subdir, name="Dataset")
+get_gym_dir = partial(get_workspace_subdir, name="Gym")
 get_output_dir = partial(get_workspace_subdir, name="Output")
 get_visual_dir = partial(get_workspace_subdir, name="Visual")
 get_weights_dir = partial(get_workspace_subdir, name="Weights")

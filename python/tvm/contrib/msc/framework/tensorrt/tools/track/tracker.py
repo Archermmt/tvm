@@ -19,7 +19,7 @@
 
 from typing import Dict, List
 
-from tvm.contrib.msc.core.tools.tool import ToolType, Strategy
+from tvm.contrib.msc.core.tools.tool import ToolType, ToolStrategy
 from tvm.contrib.msc.core.tools.track import BaseTracker
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
@@ -112,7 +112,7 @@ class TensorRTTrackerFactory(object):
                 name: str,
                 consumer: str,
                 scope: str,
-                strategys: List[Strategy],
+                strategys: List[ToolStrategy],
             ) -> Dict[str, str]:
                 """Process tensor
 
@@ -126,7 +126,7 @@ class TensorRTTrackerFactory(object):
                     The name of the consumer.
                 scope: str
                     The scope mark teacher| student| null.
-                strategys: list<Strategy>
+                strategys: list<ToolStrategy>
                     The strategys for the tensor.
 
                 Returns
