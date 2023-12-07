@@ -203,8 +203,33 @@ class BaseQuantizer(BaseTool):
 
         tensor_id = self.to_tensor_id(name, consumer)
         for strategy in strategys:
-            tensor = strategy(self, tensor, name, consumer, **self.get_plan(tensor_id))
+            tensor = strategy(self, tensor, name, consumer, **self._plan[tensor_id])
         return tensor
+
+    def create_tasks(self, **kwargs) -> List[dict]:
+        """Create tasks for gym
+
+        Parameters
+        ----------
+        kwargs: dict
+           The kwargs for create tasks.
+
+        Returns
+        -------
+        tasks: list<dict>
+            The tasks.
+        """
+
+        tasks, recorded = [], set()
+        for tensor_id, plan in self._plan.items():
+            name, _ = self.from_tensor_id(tensor_id)
+            if self.is_weight(name) and not kwargs.get("quantize_weights", False):
+                continue
+            if name not in recorded:
+                tasks.append({"name": tensor_id, **plan})
+                if self._cache_processed:
+                    recorded.add(name)
+        return tasks
 
     @property
     def calibrated(self):

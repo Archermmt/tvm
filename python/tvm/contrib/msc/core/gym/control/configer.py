@@ -74,7 +74,10 @@ class DefaultConfiger(BaseConfiger):
         if "executors" not in config["env"]:
             config["env"]["executors"] = {}
         # update executors
-        env_executors = {"reward_runner": {"method": "reward_compare_baseline"}}
+        env_executors = {
+            "reward_runner": {"method": "reward_compare_baseline"},
+            "create_tasks": {"method": "tasks_tool_extract"},
+        }
         config["env"]["executors"].update(
             {k: v for k, v in env_executors.items() if k not in config["env"]["executors"]}
         )

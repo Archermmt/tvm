@@ -21,11 +21,33 @@ from typing import Any, List
 import numpy as np
 
 from tvm.contrib.msc.core.runtime import BaseRunner
+from tvm.contrib.msc.core.tools import BaseTool
 from tvm.contrib.msc.core import utils as msc_utils
 
 
 class EnvMethod(object):
     """Default prune method"""
+
+    @classmethod
+    def tasks_tool_extract(cls, env: Any, tool: BaseTool, **kwargs) -> List[dict]:
+        """Extract tasks from tool
+
+        Parameters
+        ----------
+        env: BaseEnv
+            The evironment.
+        tool: BaseTool
+            The main tool
+        kwargs: dict
+           The kwargs for create tasks.
+
+        Returns
+        -------
+        tasks: list<dict>
+            The tasks for environment.
+        """
+
+        return tool.create_tasks(**kwargs)
 
     @classmethod
     def reward_compare_baseline(
@@ -113,6 +135,64 @@ class EnvMethod(object):
         while actions[-1] < end:
             actions.append(actions[-1] + step)
         return actions
+
+    @classmethod
+    def action_prune_density(
+        cls, env: Any, task_id: int, start: float = 0.1, end: float = 0.9, step: float = 0.1
+    ) -> List[dict]:
+        """Get linear density
+
+        Parameters
+        ----------
+        env: BaseEnv
+            The evironment.
+        task_id: int
+            The task id.
+        start: float
+            The start value.
+        end: float
+            The end value.
+        step: float
+            The step value.
+
+        Returns
+        -------
+        actions: list<dict>
+            The actions.
+        """
+
+        return [{"density": a} for a in cls.action_linear_space(env, task_id, start, end, step)]
+
+    @classmethod
+    def action_quantize_scale(
+        cls, env: Any, task_id: int, start: float = 0.1, end: float = 0.9, step: float = 0.1
+    ) -> List[dict]:
+        """Get linear density
+
+        Parameters
+        ----------
+        env: BaseEnv
+            The evironment.
+        task_id: int
+            The task id.
+        start: float
+            The start value.
+        end: float
+            The end value.
+        step: float
+            The step value.
+
+        Returns
+        -------
+        actions: list<dict>
+            The actions.
+        """
+
+        task = env.get_task(task_id)
+        return [
+            {"scale": task["scale"] * a}
+            for a in cls.action_linear_space(env, task_id, start, end, step)
+        ]
 
     @classmethod
     def method_type(cls):

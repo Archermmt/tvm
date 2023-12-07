@@ -32,29 +32,28 @@ class PruneEnv(BaseEnv):
         self._meta_strategys = config["strategys"]
         for s in self._meta_strategys:
             s.update({"density": 1})
-        self._current_plan = {}
         return self._runner.get_tool(ToolType.PRUNER)
 
-    def _update_tool(self, action: float, task_id: int):
+    def _update_tool(self, action: dict, task_id: int):
         """Update the tool
 
         Parameters
         ----------
-        action: float
+        action: dict
             The current action.
         task_id: int
             The current task id.
         """
 
         task_strategy = self._get_strategy(action, task_id)
-        self._tool.apply_strategys(self._meta_strategys + [task_strategy])
+        self._tool.plan_by_strategys(self._meta_strategys + [task_strategy])
 
-    def _summary(self, actions: List[float], rewards: List[dict]) -> dict:
+    def _summary(self, actions: List[dict], rewards: List[dict]) -> dict:
         """Summary the final plan
 
         Parameters
         ----------
-        actions: list<float>
+        actions: list<dict>
             The final actions.
         rewards: list<dict>
             The final rewards.
@@ -66,9 +65,9 @@ class PruneEnv(BaseEnv):
         """
 
         strategys = [self._get_strategy(act, idx) for idx, act in enumerate(actions)]
-        return self._tool.apply_strategys(self._meta_strategys + strategys)
+        return self._tool.plan_by_strategys(self._meta_strategys + strategys)
 
-    def _get_strategy(self, action: float, task_id: int) -> dict:
+    def _get_strategy(self, action: dict, task_id: int) -> dict:
         """Get strategy from task_id
 
         Parameters
@@ -84,16 +83,9 @@ class PruneEnv(BaseEnv):
             The strategy.
         """
 
-        task = self._get_task(task_id)
-        strategy = self._tool._get_tensor_strategy(task["name"], task["consumer"])
-        task_strategy = msc_utils.copy_dict(strategy.meta)
-        task_strategy.update(
-            {
-                "density": action,
-                "tensor_names": [self._tool.to_tensor_id(task["name"], task["consumer"])],
-            }
-        )
-        return task_strategy
+        strategy = msc_utils.copy_dict(self.get_task(task_id))
+        strategy.update(**action)
+        return strategy
 
     @classmethod
     def env_type(cls):

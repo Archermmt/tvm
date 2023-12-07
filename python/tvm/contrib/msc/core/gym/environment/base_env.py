@@ -148,10 +148,7 @@ class BaseEnv(object):
         self._runner.save_cache(self._cache_dir)
         self._tool = self._init_tool()
         # create tasks
-        if "create_tasks" in self._executors:
-            self._tasks = self._execute("create_tasks", self._runner, self._tool)
-        else:
-            self._tasks = self._tool.create_tasks()
+        self._tasks = self._execute("create_tasks", self._tool)
         if self._max_tasks > 0:
             self._tasks = self._tasks[: self._max_tasks]
         # get baseline
@@ -159,9 +156,8 @@ class BaseEnv(object):
         self._runner.build(self._cache_dir, force_build=True)
         baseline = self._reward_runner(-1)
         self._tool.enable()
-        self._logger.info("Env init(%d tasks) with baseline: %s", self._max_tasks, baseline)
         tasks_info = {"tasks_num": len(self._tasks), "tasks": self._tasks}
-        self._logger.debug(msc_utils.msg_block("ENV.TASKS", tasks_info, width=0))
+        self._logger.info(msc_utils.msg_block("ENV.TASKS", tasks_info, width=0))
         return len(self._tasks), baseline
 
     def _init_tool(self) -> BaseTool:
@@ -294,7 +290,7 @@ class BaseEnv(object):
 
         raise NotImplementedError("_summary is not implemented in BaseEnv")
 
-    def _get_task(self, task_id: int) -> dict:
+    def get_task(self, task_id: int) -> dict:
         """Get task according to task_id
 
         Parameters

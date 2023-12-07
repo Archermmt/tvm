@@ -82,7 +82,7 @@ def get_tool_config(tool_type, use_distill=False, use_gym=False):
                     "env": {
                         "executors": {
                             "action_space": {
-                                "method": "action_linear_space",
+                                "method": "action_prune_density",
                                 "start": 0.4,
                                 "end": 0.8,
                                 "step": 0.4,
@@ -130,6 +130,23 @@ def get_tool_config(tool_type, use_distill=False, use_gym=False):
                 },
             ],
         }
+        if use_gym:
+            config["gym_configs"] = [
+                {
+                    "env": {
+                        "executors": {
+                            "action_space": {
+                                "method": "action_quantize_scale",
+                                "start": 0.8,
+                                "end": 1.2,
+                                "step": 0.2,
+                            }
+                        },
+                        "max_tasks": 3,
+                    },
+                    "agent": {"agent_type": "search.grid", "executors": {}},
+                }
+            ]
     elif tool_type == ToolType.TRACKER:
         config = {
             "plan_file": "msc_tracker.json",
@@ -315,4 +332,4 @@ def test_tensorrt_distill(tool_type):
 if __name__ == "__main__":
     # tvm.testing.main()
     # test_tvm_tool(ToolType.PRUNER)
-    test_tvm_gym(ToolType.PRUNER)
+    test_tvm_gym(ToolType.QUANTIZER)

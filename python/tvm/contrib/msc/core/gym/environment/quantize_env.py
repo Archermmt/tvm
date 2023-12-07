@@ -16,6 +16,7 @@
 # under the License.
 """tvm.contrib.msc.core.gym.quantize_env"""
 
+import os
 from typing import List
 from tvm.contrib.msc.core.tools import BaseTool, ToolType
 from tvm.contrib.msc.core import utils as msc_utils
@@ -25,30 +26,35 @@ from .base_env import BaseEnv
 class QuantizeEnv(BaseEnv):
     """Environment for quantize"""
 
-    def _get_main_tool(self) -> BaseTool:
+    def _init_tool(self) -> BaseTool:
         """Get the main tool"""
 
+        plan_file = self._runner.apply_tool(ToolType.QUANTIZER, self._data_loader)
+        self._meta_plan = msc_utils.load_dict(plan_file)
+        os.remove(plan_file)
         return self._runner.get_tool(ToolType.QUANTIZER)
 
-    def _update_runner(self, action: float, task_id: int):
-        """Update the runner
+    def _update_tool(self, action: dict, task_id: int):
+        """Update the tool
 
         Parameters
         ----------
-        action: float
+        action: dict
             The current action.
         task_id: int
             The current task id.
         """
 
-        raise NotImplementedError("_update_runner is not implemented in BaseEnv")
+        plan = msc_utils.copy_dict(self._meta_plan)
+        plan.update(self._get_plan(action, task_id))
+        self._tool.set_plan(plan)
 
-    def _summary(self, actions: List[float], rewards: List[dict]) -> dict:
+    def _summary(self, actions: List[dict], rewards: List[dict]) -> dict:
         """Summary the final plan
 
         Parameters
         ----------
-        actions: list<float>
+        actions: list<dict>
             The final actions.
         rewards: list<dict>
             The final rewards.
@@ -59,7 +65,31 @@ class QuantizeEnv(BaseEnv):
             The final plan.
         """
 
-        raise NotImplementedError("_summary is not implemented in BaseEnv")
+        plan = msc_utils.copy_dict(self._meta_plan)
+        for idx, act in enumerate(actions):
+            plan.update(self._get_plan(act, idx))
+        return plan
+
+    def _get_plan(self, action: dict, task_id: int) -> dict:
+        """Get plan from task_id
+
+        Parameters
+        ----------
+        action: float
+            The current action.
+        task_id: int
+            The current task id.
+
+        Returns
+        -------
+        plan: dict
+            The plan.
+        """
+
+        plan = msc_utils.copy_dict(self.get_task(task_id))
+        plan.update(**action)
+        name = plan.pop("name")
+        return {name: plan}
 
     @classmethod
     def env_type(cls):
