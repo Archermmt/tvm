@@ -207,6 +207,18 @@ const String StringUtils::GetClosureOnce(const String& src_string, const String&
   return val;
 }
 
+const String StringUtils::Upper(const String& src_string) {
+  std::string str = std::string(src_string);
+  std::transform(str.begin(), str.end(), str.begin(), ::toupper);
+  return str;
+}
+
+const String StringUtils::Lower(const String& src_string) {
+  std::string str = std::string(src_string);
+  std::transform(str.begin(), str.end(), str.begin(), ::tolower);
+  return str;
+}
+
 const String StringUtils::ToString(const runtime::ObjectRef& obj) {
   String obj_string;
   if (!obj.defined()) {

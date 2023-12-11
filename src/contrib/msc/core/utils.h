@@ -128,6 +128,18 @@ class StringUtils {
                                              const String& right, bool from_left = true);
 
   /*!
+   * \brief Change string to upper.
+   * \return The String.
+   */
+  TVM_DLL static const String Upper(const String& src_string);
+
+  /*!
+   * \brief Change string to lower.
+   * \return The String.
+   */
+  TVM_DLL static const String Lower(const String& src_string);
+
+  /*!
    * \brief Change Object to String.
    * \return The String.
    */

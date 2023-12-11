@@ -290,7 +290,7 @@ class TFV1EinsumCodeGen : public TFV1OpCode {
     const auto& producer = node()->ProducerOf(0);
     stack_.op_call().op_str_arg("subscripts", "");
     if (node()->inputs.size() == 1 && producer->optype == "tuple") {
-      stack_.call_arg(DocUtils::ToIndexDoc(IdxInput(), std::vector<int>{0}));
+      stack_.call_arg(DocUtils::ToIndexDoc(IdxInput(), 0));
     } else {
       stack_.op_inputs_arg(false);
     }

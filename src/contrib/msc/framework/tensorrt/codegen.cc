@@ -551,7 +551,7 @@ const Map<String, String> TensorRTCodeGen::GetStepCtx() {
 
 TVM_REGISTER_GLOBAL("msc.framework.tensorrt.GetTensorRTSources")
     .set_body_typed([](const MSCGraph& graph, const String& codegen_config,
-                       const String print_config) -> Map<String, String> {
+                       const String& print_config) -> Map<String, String> {
       TensorRTCodeGen codegen = TensorRTCodeGen(graph, codegen_config);
       return codegen.GetSources(print_config);
     });

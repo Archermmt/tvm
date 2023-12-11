@@ -132,6 +132,18 @@ void BaseStack::ClassEnd() {
   PushDoc(ClassDoc(class_doc->name, class_doc->decorators, body));
 }
 
+void BaseStack::StructStart(const String& struct_name) {
+  PushDoc(StructDoc(IdDoc(struct_name), Array<ExprDoc>(), Array<StmtDoc>()));
+  BlockStart();
+}
+
+void BaseStack::StructEnd() {
+  const auto& block = PopBlock();
+  const auto& struct_doc = PopCheckedDoc<StructDoc, StructDocNode>();
+  const auto& body = DocUtils::ToStmts(block);
+  PushDoc(StructDoc(struct_doc->name, struct_doc->decorators, body));
+}
+
 void BaseStack::FuncCall(const String& callee, Optional<DeclareDoc> assign_to,
                          Optional<ExprDoc> caller) {
   if (!caller.defined()) {
@@ -174,6 +186,41 @@ void BaseStack::MethodCall(const String& callee) {
   } else {
     LOG(FATAL) << "Unexpected host type for inplace " << host->GetTypeKey();
   }
+}
+
+void BaseStack::ConstructorDef(const String& constructor_name) {
+  PushDoc(ConstructorDoc(IdDoc(constructor_name), Array<AssignDoc>(), Array<StmtDoc>()));
+}
+
+void BaseStack::ConstructorArg(const String& arg, const String& annotation, const String& value) {
+  const auto& func = PopCheckedDoc<ConstructorDoc, ConstructorDocNode>();
+  Optional<ExprDoc> value_doc;
+  if (value.size() > 0) {
+    value_doc = IdDoc(value);
+  } else {
+    value_doc = NullOpt;
+  }
+  Optional<ExprDoc> annotation_doc;
+  if (annotation.size() > 0) {
+    annotation_doc = IdDoc(annotation);
+  } else {
+    annotation_doc = NullOpt;
+  }
+  Array<AssignDoc> args = func->args;
+  args.push_back(AssignDoc(IdDoc(arg), value_doc, annotation_doc));
+  PushDoc(ConstructorDoc(func->name, args, func->body));
+}
+
+void BaseStack::ConstructorStart() {
+  ICHECK(TopDoc()->IsInstance<ConstructorDocNode>()) << "ConstructorDoc is not saved";
+  BlockStart();
+}
+
+void BaseStack::ConstructorEnd() {
+  const auto& block = PopBlock();
+  const auto& func = PopCheckedDoc<ConstructorDoc, ConstructorDocNode>();
+  const auto& body = DocUtils::ToStmts(block);
+  PushDoc(ConstructorDoc(func->name, func->args, body));
 }
 
 void BaseStack::PopNest(const String& key) {

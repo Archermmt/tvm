@@ -591,7 +591,7 @@ class TorchStridedSliceCodeGen : public TorchOpCode {
         slice.push_back(":");
       }
     }
-    stack_.assign(IdxNode(), DocUtils::ToIndexDoc(IdxInput(), slice));
+    stack_.assign(IdxNode(), DocUtils::ToIndicesDoc(IdxInput(), slice));
   }
 };
 

@@ -107,6 +107,9 @@ class MSCDirectory(object):
         """
 
         file_path = self.relpath(name)
+        base_dir = os.path.dirname(name)
+        if base_dir and not os.path.isdir(base_dir):
+            os.makedirs(base_dir)
         with open(file_path, "w") as f:
             f.write(contains)
         return file_path

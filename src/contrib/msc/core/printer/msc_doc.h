@@ -153,6 +153,96 @@ class PointerDoc : public ExprDoc {
   TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(PointerDoc, ExprDoc, PointerDocNode);
 };
 
+/*!
+ * \brief Doc that represents struct definition.
+ *
+ * \sa StructDoc
+ */
+class StructDocNode : public StmtDocNode {
+ public:
+  /*! \brief The name of class. */
+  IdDoc name{nullptr};
+  /*! \brief Decorators of class. */
+  Array<ExprDoc> decorators;
+  /*! \brief The body of class. */
+  Array<StmtDoc> body;
+
+  void VisitAttrs(AttrVisitor* v) {
+    StmtDocNode::VisitAttrs(v);
+    v->Visit("name", &name);
+    v->Visit("decorators", &decorators);
+    v->Visit("body", &body);
+  }
+
+  static constexpr const char* _type_key = "script.printer.StructDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(StructDocNode, StmtDocNode);
+};
+
+/*!
+ * \brief Reference type of StructDocNode.
+ *
+ * \sa StructDocNode
+ */
+class StructDoc : public StmtDoc {
+ public:
+  /*!
+   * \brief Constructor of StructDoc.
+   * \param name The name of class.
+   * \param decorators The decorator of class.
+   * \param body The body of class.
+   */
+  explicit StructDoc(IdDoc name, Array<ExprDoc> decorators, Array<StmtDoc> body);
+  TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(StructDoc, StmtDoc, StructDocNode);
+};
+
+/*!
+ * \brief Doc that represents constructor definition.
+ *
+ * \sa ConstructorDoc
+ */
+class ConstructorDocNode : public StmtDocNode {
+ public:
+  /*! \brief The name of function. */
+  IdDoc name{nullptr};
+  /*!
+   * \brief The arguments of function.
+   *
+   * The `lhs` means argument name,
+   * `annotation` means argument type,
+   * and `rhs` means default value.
+   */
+  Array<AssignDoc> args;
+  /*! \brief The body of function. */
+  Array<StmtDoc> body;
+
+  void VisitAttrs(AttrVisitor* v) {
+    StmtDocNode::VisitAttrs(v);
+    v->Visit("name", &name);
+    v->Visit("args", &args);
+    v->Visit("body", &body);
+  }
+
+  static constexpr const char* _type_key = "script.printer.ConstructorDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(ConstructorDocNode, StmtDocNode);
+};
+
+/*!
+ * \brief Reference type of ConstructorDocNode.
+ *
+ * \sa ConstructorDocNode
+ */
+class ConstructorDoc : public StmtDoc {
+ public:
+  /*!
+   * \brief Constructor of ConstructorDoc.
+   * \param name The name of function..
+   * \param args The arguments of function.
+   * \param body The body of function.
+   */
+  explicit ConstructorDoc(IdDoc name, Array<AssignDoc> args, Array<StmtDoc> body);
+  TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(ConstructorDoc, StmtDoc, ConstructorDocNode);
+};
+
 }  // namespace msc
 }  // namespace contrib
 }  // namespace tvm

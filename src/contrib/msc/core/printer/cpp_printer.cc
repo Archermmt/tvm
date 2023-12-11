@@ -148,7 +148,7 @@ void CppPrinter::PrintTypedDoc(const ForDoc& doc) {
 void CppPrinter::PrintTypedDoc(const ScopeDoc& doc) {
   MaybePrintComment(doc, true);
   ICHECK(doc->rhs.defined()) << "rhs should be given for scope";
-  PrintDoc(doc->rhs);
+  PrintDoc(doc->rhs, false);
   PrintIndentedBlock(doc->body);
 }
 
@@ -228,6 +228,41 @@ void CppPrinter::PrintTypedDoc(const StrictListDoc& doc) {
   } else {
     output_ << "{}";
   }
+}
+
+void CppPrinter::PrintTypedDoc(const StructDoc& doc) {
+  MaybePrintComment(doc, true);
+  output_ << "struct ";
+  PrintDoc(doc->name, false);
+  output_ << " {";
+  IncreaseIndent();
+  for (const StmtDoc& d : doc->body) {
+    PrintDoc(d);
+  }
+  DecreaseIndent();
+  NewLine(false);
+  output_ << "}";
+  Endline();
+}
+
+void CppPrinter::PrintTypedDoc(const ConstructorDoc& doc) {
+  MaybePrintComment(doc, true);
+  for (const AssignDoc& arg_doc : doc->args) {
+    ICHECK(arg_doc->comment == nullptr) << "Constructor arg cannot have comment attached to them.";
+  }
+  PrintDoc(doc->name, false);
+  output_ << "(";
+  PrintJoinedDocs(doc->args, ", ");
+  output_ << ")";
+  if (doc->body.size() > 0) {
+    output_ << " {";
+    PrintIndentedBlock(doc->body);
+    NewLine();
+    output_ << "}";
+  } else {
+    Endline();
+  }
+  NewLine(false);
 }
 
 void CppPrinter::PrintIndentedBlock(const Array<StmtDoc>& docs) {

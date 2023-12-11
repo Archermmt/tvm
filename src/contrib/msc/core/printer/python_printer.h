@@ -78,7 +78,7 @@ class PythonPrinter : public MSCBasePrinter {
   /*! * \brief Print a CommentDoc to python format*/
   void PrintTypedDoc(const CommentDoc& doc) final;
 
-  /*! \brief Virtual method to print a StrictListDoc*/
+  /*! * \brief Print a StrictListDoc to python format*/
   void PrintTypedDoc(const StrictListDoc& doc) final;
 
  private:

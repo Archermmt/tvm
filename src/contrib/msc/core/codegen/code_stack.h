@@ -107,6 +107,12 @@ class BaseStack {
   /*! \brief End class body block*/
   void ClassEnd();
 
+  /*! \brief Start struct body block*/
+  void StructStart(const String& struct_name);
+
+  /*! \brief End struct body block*/
+  void StructEnd();
+
   /*! \brief Cache function Doc*/
   void FuncDef(const String& func_name, const String& ret_type = "");
 
@@ -131,6 +137,18 @@ class BaseStack {
 
   /*! \brief Push method call Doc*/
   void MethodCall(const String& callee);
+
+  /*! \brief Cache constructor Doc*/
+  void ConstructorDef(const String& constructor_name);
+
+  /*! \brief Cache constructor argument*/
+  void ConstructorArg(const String& arg, const String& annotation = "", const String& value = "");
+
+  /*! \brief Start constructor body block*/
+  void ConstructorStart();
+
+  /*! \brief End constructor body block*/
+  void ConstructorEnd();
 
   /*! \brief Push nested expr to last Doc*/
   void PopNest(const String& key = "");
@@ -185,7 +203,7 @@ class BaseStack {
   void BlockEnd(bool block_docs = true);
 
   /*! \brief Start a new scope*/
-  void ScopeStart(const String& scope_def, const String& scope_ref = "");
+  void ScopeStart(const String& scope_def = "", const String& scope_ref = "");
 
   /*! \brief End a scope*/
   void ScopeEnd();
@@ -264,6 +282,14 @@ class BaseStack {
     ClassEnd();                                                                                 \
     return *this;                                                                               \
   }                                                                                             \
+  Stack& struct_start(const String& struct_name) {                                              \
+    StructStart(struct_name);                                                                   \
+    return *this;                                                                               \
+  }                                                                                             \
+  Stack& struct_end() {                                                                         \
+    StructEnd();                                                                                \
+    return *this;                                                                               \
+  }                                                                                             \
   Stack& func_def(const String& func_name, const String& ret_type = "") {                       \
     FuncDef(func_name, ret_type);                                                               \
     return *this;                                                                               \
@@ -296,6 +322,23 @@ class BaseStack {
   }                                                                                             \
   Stack& method_call(const String& callee) {                                                    \
     MethodCall(callee);                                                                         \
+    return *this;                                                                               \
+  }                                                                                             \
+  Stack& constructor_def(const String& func_name) {                                             \
+    ConstructorDef(func_name);                                                                  \
+    return *this;                                                                               \
+  }                                                                                             \
+  Stack& constructor_arg(const String& arg, const String& annotation = "",                      \
+                         const String& value = "") {                                            \
+    ConstructorArg(arg, annotation, value);                                                     \
+    return *this;                                                                               \
+  }                                                                                             \
+  Stack& constructor_start() {                                                                  \
+    ConstructorStart();                                                                         \
+    return *this;                                                                               \
+  }                                                                                             \
+  Stack& constructor_end() {                                                                    \
+    ConstructorEnd();                                                                           \
     return *this;                                                                               \
   }                                                                                             \
   Stack& pop_nest(const String& key = "") {                                                     \
@@ -355,7 +398,7 @@ class BaseStack {
     BlockEnd(block_docs);                                                                       \
     return *this;                                                                               \
   }                                                                                             \
-  Stack& scope_start(const String& scope_def, const String& scope_ref = "") {                   \
+  Stack& scope_start(const String& scope_def = "", const String& scope_ref = "") {              \
     ScopeStart(scope_def, scope_ref);                                                           \
     return *this;                                                                               \
   }                                                                                             \

@@ -329,7 +329,16 @@ def test_tensorrt_distill(tool_type):
     )
 
 
+@requires_tensorrt
+@pytest.mark.parametrize("tool_type", [ToolType.PRUNER])
+def test_tensorrt_gym(tool_type):
+    """Test tools for tensorrt with gym"""
+
+    tool_config = get_tool_config(tool_type, use_gym=True)
+    _test_from_torch(
+        MSCFramework.TENSORRT, tool_config, get_model_info(MSCFramework.TENSORRT), is_training=False
+    )
+
+
 if __name__ == "__main__":
-    # tvm.testing.main()
-    # test_tvm_tool(ToolType.PRUNER)
-    test_tvm_gym(ToolType.QUANTIZER)
+    tvm.testing.main()

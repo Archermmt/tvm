@@ -72,6 +72,7 @@ class DocUtils {
    * \return The AttrAccessDoc.
    */
   TVM_DLL static const AttrAccessDoc ToAttrAccessDoc(const String& value, const String& name);
+  TVM_DLL static const AttrAccessDoc ToAttrAccessDoc(const ExprDoc& value, const String& name);
 
   /*!
    * \brief Change object to List of Docs.
@@ -116,10 +117,16 @@ class DocUtils {
 
   /*!
    * \brief Change object to IndexDoc.
-   * \return The ListDoc.
+   * \return The IndexDoc.
    */
   template <typename T>
-  TVM_DLL static const IndexDoc ToIndexDoc(const String& value, const std::vector<T>& indices) {
+  TVM_DLL static const IndexDoc ToIndexDoc(const String& value, T index) {
+    Array<Doc> doc_indices;
+    doc_indices.push_back(ToDoc(index));
+    return IndexDoc(IdDoc(value), doc_indices);
+  }
+  template <typename T>
+  TVM_DLL static const IndexDoc ToIndicesDoc(const String& value, const std::vector<T>& indices) {
     Array<Doc> doc_indices;
     for (const auto& i : indices) {
       doc_indices.push_back(ToDoc(i));
@@ -127,7 +134,7 @@ class DocUtils {
     return IndexDoc(IdDoc(value), doc_indices);
   }
   template <typename T>
-  TVM_DLL static const IndexDoc ToIndexDoc(const String& value, const Array<T>& indices) {
+  TVM_DLL static const IndexDoc ToIndicesDoc(const String& value, const Array<T>& indices) {
     Array<Doc> doc_indices;
     for (const auto& i : indices) {
       doc_indices.push_back(ToDoc(i));

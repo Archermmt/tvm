@@ -183,6 +183,14 @@ class MSCBasePrinter {
     LOG(FATAL) << "PointerDoc is not implemented";
   }
 
+  /*! \brief Virtual method to print a StructDoc*/
+  virtual void PrintTypedDoc(const StructDoc& doc) { LOG(FATAL) << "StructDoc is not implemented"; }
+
+  /*! \brief Virtual method to print a ConstructorDoc*/
+  virtual void PrintTypedDoc(const ConstructorDoc& doc) {
+    LOG(FATAL) << "ConstructorDoc is not implemented";
+  }
+
   /*! \brief Print docs to joined doc */
   template <typename DocType>
   void PrintJoinedDocs(const Array<DocType>& docs, const String& separator = ", ") {

@@ -52,6 +52,22 @@ PointerDoc::PointerDoc(String name) {
   this->data_ = std::move(n);
 }
 
+StructDoc::StructDoc(IdDoc name, Array<ExprDoc> decorators, Array<StmtDoc> body) {
+  ObjectPtr<StructDocNode> n = make_object<StructDocNode>();
+  n->name = name;
+  n->decorators = decorators;
+  n->body = body;
+  this->data_ = std::move(n);
+}
+
+ConstructorDoc::ConstructorDoc(IdDoc name, Array<AssignDoc> args, Array<StmtDoc> body) {
+  ObjectPtr<ConstructorDocNode> n = make_object<ConstructorDocNode>();
+  n->name = name;
+  n->args = args;
+  n->body = body;
+  this->data_ = std::move(n);
+}
+
 }  // namespace msc
 }  // namespace contrib
 }  // namespace tvm

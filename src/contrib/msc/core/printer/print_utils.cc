@@ -76,6 +76,10 @@ const AttrAccessDoc DocUtils::ToAttrAccessDoc(const String& value, const String&
   return AttrAccessDoc(IdDoc(value), name);
 }
 
+const AttrAccessDoc DocUtils::ToAttrAccessDoc(const ExprDoc& value, const String& name) {
+  return AttrAccessDoc(value, name);
+}
+
 const Array<StmtDoc> DocUtils::ToStmts(const Array<Doc>& docs) {
   Array<StmtDoc> stmts;
   for (const auto& d : docs) {
