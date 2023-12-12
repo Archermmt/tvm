@@ -124,9 +124,6 @@ void TorchPluginCodeGen::CodeGenRegister(const Plugin& plugin) {
   for (const auto& input : plugin->inputs) {
     stack_.func_arg(input->name, "const torch::Tensor&");
   }
-  for (const auto& attr : plugin->attrs) {
-    stack_.func_arg(attr->name, attr->type);
-  }
   stack_.func_start().declare("std::vector<torch::Tensor>", "inputs", 0, false);
   for (const auto& input : plugin->inputs) {
     stack_.declare_arg(input->name);
@@ -134,22 +131,22 @@ void TorchPluginCodeGen::CodeGenRegister(const Plugin& plugin) {
   const auto& outputs_doc = DocUtils::ToDeclareDoc("std::vector<torch::Tensor>", "outputs");
   stack_.func_call("compute", outputs_doc, DocUtils::ToPtrDoc("instance")).call_arg("inputs");
   stack_.func_end("outputs");
-  const String& op_doc = plugin->name + "_op";
+  const String& op_name = plugin->name + "_op";
   stack_.comment("Bind plugin " + plugin->name + " to python")
-      .scope_start("TORCH_LIBRARY(" + op_doc + ", m) {")
-      .scope_start("m.class_<" + op_doc + ">(\"" + plugin->name + "_op\")")
+      .scope_start("TORCH_LIBRARY(" + op_name + ", m) {")
+      .scope_start("m.class_<" + op_name + ">(\"" + op_name + "\")")
       .line(".def(torch::init<const std::vector<std::string>>())")
-      .line(".def(\"compute\", " + op_doc + "::compute)")
+      .line(".def(\"compute\", &" + op_name + "::compute)")
       .scope_start(".def_pickle(")
-      .scope_start("[](const c10::intrusive_ptr<" + op_doc + ">& self)")
+      .scope_start("[](const c10::intrusive_ptr<" + op_name + ">& self)")
       .scope_start("-> std::vector<std::string> {")
       .line("return self->serialize();")
       .scope_end()
       .line("},")
       .scope_end()
       .scope_start("[](std::vector<std::string> state)")
-      .scope_start("-> c10::intrusive_ptr<" + op_doc + "> {")
-      .line("return c10::make_intrusive<" + op_doc + ">(std::move(state));")
+      .scope_start("-> c10::intrusive_ptr<" + op_name + "> {")
+      .line("return c10::make_intrusive<" + op_name + ">(std::move(state));")
       .scope_end()
       .line("}")
       .scope_end()
@@ -167,7 +164,7 @@ void TorchPluginCodeGen::CodeGenCmake(const std::set<String>& devices) {
   stack_.line("cmake_minimum_required(VERSION " + config()->cmake_version + " FATAL_ERROR)")
       .line("project(msc_torch_plugin)");
   if (devices.count("cuda")) {
-    stack_.line("find_package(CUDA)").line("add_definitions(-DPLUGIN_SUPPORT_CUDA)");
+    stack_.line("find_package(CUDA)").line("add_definitions(-DPLUGIN_ENABLE_CUDA)");
   }
   stack_.line("set(CMAKE_CXX_STANDARD 14)")
       .line("list(APPEND CMAKE_PREFIX_PATH \"" + config()->torch_prefix + "\")")

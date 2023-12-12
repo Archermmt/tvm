@@ -313,7 +313,7 @@ def get_plugin_utils_h_code() -> str:
 
 #include "plugin_base.h"
 
-#ifdef PLUGIN_SUPPORT_CUDA
+#ifdef PLUGIN_ENABLE_CUDA
 #include <cuda.h>
 #include <cuda_runtime.h>
 #endif
@@ -324,7 +324,11 @@ def get_plugin_utils_h_code() -> str:
 #endif
 
 #ifdef PLUGIN_SUPPORT_TORCH
+#include <torch/custom_class.h>
 #include <torch/script.h>
+#ifdef PLUGIN_ENABLE_CUDA
+#include <c10/cuda/CUDAStream.h>
+#endif
 #endif
 
 #ifdef PLUGIN_SUPPORT_TENSORRT
@@ -706,8 +710,8 @@ class TorchUtils {
 #ifdef PLUGIN_SUPPORT_TENSORRT
 
 #ifndef TRT_VERSION_GE
-#define TRT_VERSION_GE(major, minor, patch)                            \\
-  ((TRT_MAJOR > major) || (TRT_MAJOR == major && TRT_MINOR > minor) || \\
+#define TRT_VERSION_GE(major, minor, patch)                            \
+  ((TRT_MAJOR > major) || (TRT_MAJOR == major && TRT_MINOR > minor) || \
    (TRT_MAJOR == major && TRT_MINOR == minor && TRT_PATCH >= patch))
 #endif
 

@@ -68,11 +68,11 @@ void my_relu_cpu_compute(const DataTensor<T>& input, DataTensor<T>& output, cons
 #ifdef PLUGIN_ENABLE_CUDA
 template <typename T>
 void my_relu_cuda_kernel(const DataTensor<T>& input, DataTensor<T>& output, T max_val,
-                         const rtStream_t& stream);
+                         const cudaStream_t& stream);
 
 template <typename T, typename TAttr>
 void my_relu_cuda_compute(const DataTensor<T>& input, DataTensor<T>& output, const TAttr& attrs,
-                          const rtStream_t& stream) {
+                          const cudaStream_t& stream) {
   my_relu_cuda_kernel(input, output, T(attrs.max_val), stream);
 }
 #endif
@@ -122,7 +122,7 @@ def _get_externs_cu():
 
 #define CU1DBLOCK 256
 #define KERNEL_LOOP(i, n) \
-  for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < n; i += blockDims.x * gridDim.x)
+  for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < n; i += blockDim.x * gridDim.x)
 
 namespace tvm {
 namespace contrib {
@@ -133,7 +133,7 @@ inline int n_blocks(int size, int block_size) {
 }
 
 template <typename T>
-__global__ static void _my_relu(const T* src, const T* dst, T max_val, int n) {
+__global__ static void _my_relu(const T* src, T* dst, T max_val, int n) {
   KERNEL_LOOP(i, n) {
     if (src[i] >= max_val) {
       dst[i] = max_val;
@@ -147,16 +147,16 @@ __global__ static void _my_relu(const T* src, const T* dst, T max_val, int n) {
 
 template <typename T>
 void my_relu_cuda_kernel(const DataTensor<T>& input, DataTensor<T>& output, T max_val,
-                         const rtStream_t& stream) {
+                         const cudaStream_t& stream) {
   const T* input_data = input.const_data();
   T* output_data = output.data();
   dim3 Bl(CU1DBLOCK);
-  dim3 Gr(n_blocks(output.static_size(), CU1DBLOCK));
-  _my_relu<<<Gr, Bl, 0, stream>>>(input_data, output_data, max_val, output.static_size());
+  dim3 Gr(n_blocks(output.size(), CU1DBLOCK));
+  _my_relu<<<Gr, Bl, 0, stream>>>(input_data, output_data, max_val, output.size());
 }
 
 template void my_relu_cuda_kernel<float>(const DataTensor<float>& input, DataTensor<float>& output,
-                                         float max_val, const rtStream_t& stream);
+                                         float max_val, const cudaStream_t& stream);
 }  // namespace msc
 }  // namespace contrib
 }  // namespace tvm
