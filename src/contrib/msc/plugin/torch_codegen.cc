@@ -81,16 +81,18 @@ void TorchPluginCodeGen::CodeGenDefine(const Plugin& plugin) {
   // malloc outputs/buffers
   stack_.comment("main compute")
       .func_def("compute", "std::vector<torch::Tensor>")
-      .func_arg("inputs", "const std::vector<torch::Tensor>&")
+      .func_arg("input_tensors", "const std::vector<torch::Tensor>&")
       .func_start()
-      .declare("std::vector<torch::Tensor>", "output_tensors")
-      .declare("std::vector<torch::Tensor>", "buffer_tensors")
-      .line()
+      .declare("std::vector<torch::Tensor>", "output_tensors");
+  if (plugin->externs.count("infer_buffer")) {
+    stack_.declare("std::vector<torch::Tensor>", "buffer_tensors");
+  }
+  stack_.line()
       .comment("extract meta inputs")
       .declare("std::vector<MetaTensor>", "input_metas")
       .for_start("i", 0, plugin->inputs.size())
       .func_call("TorchUtils::ToMetaTensor", "MetaTensor m_input")
-      .call_arg(DocUtils::ToIndexDoc("inputs", "i"))
+      .call_arg(DocUtils::ToIndexDoc("input_tensors", "i"))
       .call_arg(DocUtils::ToIndexDoc("layouts_", "i"))
       .func_call("push_back", "", "input_metas")
       .call_arg("m_input")
@@ -101,38 +103,11 @@ void TorchPluginCodeGen::CodeGenDefine(const Plugin& plugin) {
   if (plugin->externs.count("infer_buffer")) {
     CodeGenMalloc(plugin, plugin->buffers, "buffer");
   }
-  // prepare compute datas
-  stack_.line()
-      .comment("prepare compute datas")
-      .func_call("TorchUtils::ToDataTensors", "input_datas")
-      .call_arg("inputs")
-      .call_arg("input_metas")
-      .call_arg("true")
-      .func_call("TorchUtils::ToDataTensors", "output_datas")
-      .call_arg("output_tensors")
-      .call_arg("output_metas")
-      .call_arg("false")
-      .func_call("TorchUtils::ToDataTensors", "buffer_datas")
-      .call_arg("buffer_tensors")
-      .call_arg("buffer_metas")
-      .call_arg("false");
   // do the compute
-  stack_.line().comment("do the compute").cond_if("inputs[0].is_cuda()");
-  if (plugin->externs.count("cuda_compute")) {
-    stack_.declare("cudaStream_t", "stream").assign("stream", "at::cuda::getCurrentCUDAStream()");
-    Array<String> compute_args{"input_datas", "output_datas", "buffer_datas", "meta_attrs_",
-                               "stream"};
-    CodeGenSafeCall(plugin->externs["cuda_compute"], compute_args);
-  } else {
-    stack_.comment("skip cuda compute");
-  }
+  stack_.line().comment("do the compute").cond_if("input_tensors[0].is_cuda()");
+  CodeGenCompute(plugin, "cuda");
   stack_.cond_else();
-  if (plugin->externs.count("cpu_compute")) {
-    Array<String> compute_args{"input_datas", "output_datas", "buffer_datas", "meta_attrs_"};
-    CodeGenSafeCall(plugin->externs["cpu_compute"], compute_args);
-  } else {
-    stack_.comment("skip cpu compute");
-  }
+  CodeGenCompute(plugin, "cpu");
   stack_.cond_end();
   stack_.func_end("output_tensors").line();
   stack_.comment("define members")
@@ -168,13 +143,13 @@ void TorchPluginCodeGen::CodeGenRegister(const Plugin& plugin) {
       .scope_start(".def_pickle(")
       .scope_start("[](const c10::intrusive_ptr<" + op_doc + ">& self)")
       .scope_start("-> std::vector<std::string> {")
-      .line("return self->serialize()")
+      .line("return self->serialize();")
       .scope_end()
       .line("},")
       .scope_end()
       .scope_start("[](std::vector<std::string> state)")
       .scope_start("-> c10::intrusive_ptr<" + op_doc + "> {")
-      .line("return c10::make_intrusive<" + op_doc + ">(std::move(state))")
+      .line("return c10::make_intrusive<" + op_doc + ">(std::move(state));")
       .scope_end()
       .line("}")
       .scope_end()
@@ -194,7 +169,8 @@ void TorchPluginCodeGen::CodeGenCmake(const std::set<String>& devices) {
   if (devices.count("cuda")) {
     stack_.line("find_package(CUDA)").line("add_definitions(-DPLUGIN_SUPPORT_CUDA)");
   }
-  stack_.line("list(APPEND CMAKE_PREFIX_PATH \"" + config()->torch_prefix + "\")")
+  stack_.line("set(CMAKE_CXX_STANDARD 14)")
+      .line("list(APPEND CMAKE_PREFIX_PATH \"" + config()->torch_prefix + "\")")
       .line("find_package(Torch REQUIRED)");
   stack_.line("add_definitions(-DPLUGIN_SUPPORT_TORCH)");
   for (const auto& pair : config()->flags) {
@@ -231,24 +207,6 @@ void TorchPluginCodeGen::CodeGenCmake(const std::set<String>& devices) {
       stack_.line("file(COPY " + libs + " DESTINATION " + config()->install_dir + ")");
     }
   }
-
-  /*
-  .line("find_path(TENSORRT_INCLUDE_DIR NvInfer.h HINTS " + config()->tensorrt_root +
-        " PATH_SUFFIXES include)")
-      .line("find_library(TENSORRT_LIB_DIR nvinfer HINTS " + config()->tensorrt_root +
-            " PATH_SUFFIXES lib)")
-      .line(
-          "message(STATUS \"Build project with TENSORRT_INCLUDE_DIR ${TENSORRT_INCLUDE_DIR} and "
-          "TENSORRT_LIB_DIR "
-          "${TENSORRT_LIB_DIR}\")")
-      .line("add_definitions(-DTRT_MAJOR=" + std::to_string(config()->version[0]) + ")")
-      .line("add_definitions(-DTRT_MINOR=" + std::to_string(config()->version[1]) + ")")
-      .line("add_definitions(-DTRT_PATCH=" + std::to_string(config()->version[2]) + ")")
-      .line("file(GLOB_RECURSE TRT_SRCS *.cc)")
-      .line("cuda_add_executable(" + graph()->name + " ${TRT_SRCS})")
-      .line("target_include_directories(" + graph()->name + " PUBLIC ${TENSORRT_INCLUDE_DIR})")
-      .line("target_link_libraries(" + graph()->name + " ${TENSORRT_LIB_DIR})");
-      */
 }
 
 void TorchPluginCodeGen::CodeGenPluginManager(const Plugin& plugin) {}
@@ -261,13 +219,13 @@ void TorchPluginCodeGen::CodeGenMalloc(const Plugin& plugin, const Array<PluginT
   stack_.line().comment("malloc " + collect).declare("std::vector<MetaTensor>", collect + "_metas");
   CodeGenSafeCall(plugin->externs["infer_" + collect], call_args, collect + "_metas");
   for (size_t i = 0; i < tensors.size(); i++) {
-    const String& assign_name = "t_" + tensors[i]->name;
+    const String& var_name = "t_" + tensors[i]->name;
+    const String& opt_name = "opt_" + tensors[i]->name;
     const auto& idx_meta = DocUtils::ToIndexDoc(collect + "_metas", i);
-    stack_.func_call("torch::zeros", "torch::Tensor " + assign_name)
-        .call_arg(DocUtils::ToAttrAccessDoc(idx_meta, "meta_shape()"));
+    stack_.func_call("torch::TensorOptions", "auto " + opt_name).method_call("dtype");
     int dtype_idx = plugin->FindDtypeRefIdx(tensors[i]);
     if (dtype_idx >= 0) {
-      const auto& input_doc = DocUtils::ToIndexDoc("inputs", dtype_idx);
+      const auto& input_doc = DocUtils::ToIndexDoc("input_tensors", dtype_idx);
       stack_.call_arg(DocUtils::ToAttrAccessDoc(input_doc, "dtype()"));
     } else {
       stack_.call_arg("TorchUtils::ToTorchType(\"" + tensors[i]->dtype + "\")");
@@ -275,12 +233,90 @@ void TorchPluginCodeGen::CodeGenMalloc(const Plugin& plugin, const Array<PluginT
     stack_.method_call("device");
     int device_idx = plugin->FindDeviceRefIdx(tensors[i]);
     if (device_idx >= 0) {
-      const auto& input_doc = DocUtils::ToIndexDoc("inputs", device_idx);
+      const auto& input_doc = DocUtils::ToIndexDoc("input_tensors", device_idx);
       stack_.call_arg(DocUtils::ToAttrAccessDoc(input_doc, "device()"));
     } else {
       stack_.call_arg("TorchUtils::ToTorchDevice(\"" + tensors[i]->device + "\")");
     }
-    stack_.func_call("push_back", "", collect + "_tensors").call_arg(assign_name);
+    stack_.func_call("torch::zeros", "torch::Tensor " + var_name)
+        .call_arg(DocUtils::ToAttrAccessDoc(idx_meta, "meta_shape()"))
+        .call_arg(opt_name);
+    stack_.func_call("push_back", "", collect + "_tensors").call_arg(var_name);
+  }
+}
+
+void TorchPluginCodeGen::CodeGenCompute(const Plugin& plugin, const String& device) {
+  auto prepare_tensor = [this](const PluginTensor& tensor, const Map<String, String>& dtypes,
+                               size_t idx, const String& collect) {
+    const String& t_name = "d_" + tensor->name;
+    const String& t_dtype = dtypes.count(tensor->name) ? dtypes[tensor->name] : tensor->dtype;
+    String assign_to = "DataTensor<" + t_dtype + "> " + t_name;
+    if (collect == "input") {
+      assign_to = "const " + assign_to;
+    }
+    stack_.func_call("TorchUtils::ToDataTensor<" + t_dtype + ">", assign_to)
+        .call_arg(DocUtils::ToIndexDoc(collect + "_tensors", idx))
+        .call_arg(DocUtils::ToIndexDoc(collect + "_metas", idx))
+        .call_arg(collect == "input" ? "true" : "false");
+    return t_name;
+  };
+
+  if (plugin->externs.count(device + "_compute")) {
+    if (device == "cuda") {
+      stack_.declare("cudaStream_t", "stream").assign("stream", "at::cuda::getCurrentCUDAStream()");
+    }
+    for (const auto& dtypes : plugin->GetDtypeMatrix()) {
+      Array<String> compute_args;
+      Map<String, String> tensor_dtypes;
+      for (const auto& pair : dtypes) {
+        const String& ref_dtype = plugin->inputs[pair.first->value]->dtype;
+        for (const auto& t : plugin->inputs) {
+          if (t->dtype == ref_dtype) {
+            tensor_dtypes.Set(t->name, pair.second);
+          }
+        }
+        for (const auto& t : plugin->outputs) {
+          if (t->dtype == ref_dtype) {
+            tensor_dtypes.Set(t->name, pair.second);
+          }
+        }
+        for (const auto& t : plugin->buffers) {
+          if (t->dtype == ref_dtype) {
+            tensor_dtypes.Set(t->name, pair.second);
+          }
+        }
+      }
+      String dtype_cond = "";
+      size_t cnt = 0;
+      for (const auto& pair : dtypes) {
+        dtype_cond = dtype_cond + "TorchUtils::TypeName(input_tensors[" +
+                     std::to_string(pair.first->value) + "].dtype())==\"" + pair.second + "\"";
+        dtype_cond = dtype_cond + (cnt == dtypes.size() - 1 ? "" : " && ");
+        cnt++;
+      }
+      // prepare compute datas
+      stack_.cond_if(dtype_cond).comment("prepare compute datas");
+      for (size_t i = 0; i < plugin->inputs.size(); i++) {
+        const String& t_name = prepare_tensor(plugin->inputs[i], tensor_dtypes, i, "input");
+        compute_args.push_back(t_name);
+      }
+      for (size_t i = 0; i < plugin->outputs.size(); i++) {
+        const String& t_name = prepare_tensor(plugin->outputs[i], tensor_dtypes, i, "output");
+        compute_args.push_back(t_name);
+      }
+      for (size_t i = 0; i < plugin->buffers.size(); i++) {
+        const String& t_name = prepare_tensor(plugin->buffers[i], tensor_dtypes, i, "buffer");
+        compute_args.push_back(t_name);
+      }
+      compute_args.push_back("meta_attrs_");
+      if (device == "cuda") {
+        compute_args.push_back("stream");
+      }
+      CodeGenSafeCall(plugin->externs[device + "_compute"], compute_args);
+      stack_.cond_end();
+    }
+  } else {
+    stack_.comment("skip " + device + " compute");
   }
 }
 

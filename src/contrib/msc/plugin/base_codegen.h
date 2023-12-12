@@ -116,7 +116,7 @@ class BasePluginCodeGen {
     std::set<String> include_headers;
     for (const auto& pair : plugin->externs) {
       if (pair.second->header.size() > 0 && !include_headers.count(pair.second->header)) {
-        this->stack_.line("#include \"externs/" + pair.second->header + "\"");
+        this->stack_.line("#include \"" + pair.second->header + "\"");
         include_headers.insert(pair.second->header);
       }
     }
@@ -146,8 +146,8 @@ class BasePluginCodeGen {
     this->stack_.scope_end()
         .scope_start("} catch (const std::exception& exc) {")
         .line("std::cerr << \"Failed to run extern " + extern_func->name +
-              " : \" << exc.what() << std::endl")
-        .line("throw std::runtime_error(\"Failed to run extern " + extern_func->name + "\")")
+              " : \" << exc.what() << std::endl;")
+        .line("throw std::runtime_error(\"Failed to run extern " + extern_func->name + "\");")
         .scope_end()
         .line("}");
   }

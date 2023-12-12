@@ -63,12 +63,6 @@ class MetaShape {
     }
   }
 
-  MetaShape(std::initializer_list<int64_t> shape) {
-    for (auto d : shape) {
-      shape_.push_back(d);
-    }
-  }
-
   template <typename T>
   void SetShape(const std::vector<T>& shape) {
     for (auto d : shape) {
@@ -177,16 +171,8 @@ class MetaLayout {
         assert(factor >= 0 && "Factor number should between 0 and 9");
         factor = factor * 10 + c - '0';
       } else {
-        throw std::runtime_error("Unexpected layout axis " + c);
+        throw std::runtime_error("Unexpected layout axis " + name);
       }
-    }
-    CheckValid();
-  }
-
-  MetaLayout(std::initializer_list<MetaLayoutAxis> axes) : axes_(axes) {
-    name_ = "";
-    for (auto a : axes_) {
-      name_ += (a.factor() == 0 ? "" : std::to_string(a.factor())) + a.name();
     }
     CheckValid();
   }
@@ -243,6 +229,8 @@ class MetaTensor {
   inline void set_layout(const MetaLayout& layout) { layout_ = layout; }
 
   inline const MetaShape shape() const { return shape_; }
+
+  inline const std::vector<int64_t> meta_shape() const { return shape_.shape(); }
 
   inline const MetaLayout layout() const { return layout_; }
 
@@ -698,15 +686,30 @@ class TorchUtils {
     return MetaShape(shape_data);
   }
 
+  static MetaTensor ToMetaTensor(const torch::Tensor& tensor,
+                                 const MetaLayout& layout = MetaLayout()) {
+    return MetaTensor(TorchUtils::ToMetaShape(tensor), layout);
+  }
+
   template <typename T>
-  static DataTensor<T> ToDataTensor(const torch::Tensor& tensor, bool read_only,
-                                    const MetaLayout& layout = MetaLayout()) {
+  static DataTensor<T> ToDataTensor(const torch::Tensor& tensor, const MetaLayout& layout,
+                                    bool read_only) {
     if (read_only) {
-      return DataTensor<T>(TorchUtils::to_meta_shape(tensor), layout,
-                           (const T*)(tensor.data_ptr()));
+      return DataTensor<T>(TorchUtils::ToMetaShape(tensor), layout, (const T*)(tensor.data_ptr()));
     } else {
-      return DataTensor<T>(TorchUtils::to_meta_shape(tensor), layout, (T*)(tensor.data_ptr()));
+      return DataTensor<T>(TorchUtils::ToMetaShape(tensor), layout, (T*)(tensor.data_ptr()));
     }
+  }
+
+  template <typename T>
+  static std::vector<DataTensor<T>> ToDataTensors(const std::vector<torch::Tensor>& tensors,
+                                                  const std::vector<MetaLayout>& layouts,
+                                                  bool read_only) {
+    std::vector<DataTensor<T>> data_tensors;
+    for (size_t i = 0; i < tensors.size(); i++) {
+      data_tensors.push_back(TorchUtils::ToDataTensor<T>(tensors[i], layouts[i], read_only));
+    }
+    return data_tensors;
   }
 };
 #endif  // PLUGIN_SUPPORT_TORCH
@@ -714,9 +717,9 @@ class TorchUtils {
 #ifdef PLUGIN_SUPPORT_TENSORRT
 
 #ifndef TRT_VERSION_GE
-#define TRT_VERSION_GE(major, minor, patch)                                  \
-  \ ((TRT_MAJOR > major) || (TRT_MAJOR == major && TRT_MINOR > minor) || \ ( \
-                                TRT_MAJOR == major && TRT_MINOR == minor && TRT_PATCH >= patch))
+#define TRT_VERSION_GE(major, minor, patch)                            \\
+  ((TRT_MAJOR > major) || (TRT_MAJOR == major && TRT_MINOR > minor) || \\
+   (TRT_MAJOR == major && TRT_MINOR == minor && TRT_PATCH >= patch))
 #endif
 
 using namespace nvinfer1;

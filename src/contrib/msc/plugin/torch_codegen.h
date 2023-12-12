@@ -87,6 +87,9 @@ class TorchPluginCodeGen : public BasePluginCodeGen<TorchPluginCodeGenConfig> {
   /*! \brief Codegen malloc for outputs/buffers*/
   void CodeGenMalloc(const Plugin& plugin, const Array<PluginTensor>& tensors,
                      const String& collect);
+
+  /*! \brief Codegen compute*/
+  void CodeGenCompute(const Plugin& plugin, const String& device);
 };
 
 }  // namespace msc

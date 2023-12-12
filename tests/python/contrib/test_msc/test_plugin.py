@@ -17,7 +17,6 @@
 
 """ Test Plugin in MSC. """
 
-import os
 import pytest
 
 import torch
@@ -50,7 +49,7 @@ namespace tvm {
 namespace contrib {
 namespace msc {
 
-template <typenema TAttr>
+template <typename TAttr>
 std::vector<MetaTensor> my_relu_infer(const std::vector<MetaTensor>& inputs, const TAttr& attrs,
                                       bool is_runtime) {
   std::vector<MetaTensor> outputs;
@@ -58,26 +57,23 @@ std::vector<MetaTensor> my_relu_infer(const std::vector<MetaTensor>& inputs, con
   return outputs;
 }
 
-template <typenema T>
+template <typename T>
 void my_relu_cpu_kernel(const DataTensor<T>& input, DataTensor<T>& output, T max_val);
 
-template <typenema T, typenema TAttr>
-void my_relu_cpu_compute(const std::vector<DataTensor<T>>& inputs,
-                         std::vector<DataTensor<T>>& outputs, std::vector<DataTensor<T>>& buffers,
-                         const TAttr& attrs) {
-  my_relu_cpu_kernel(inputs[0], outputs[0], T(attrs.max_val));
+template <typename T, typename TAttr>
+void my_relu_cpu_compute(const DataTensor<T>& input, DataTensor<T>& output, const TAttr& attrs) {
+  my_relu_cpu_kernel(input, output, T(attrs.max_val));
 }
 
 #ifdef PLUGIN_ENABLE_CUDA
-template <typenema T>
+template <typename T>
 void my_relu_cuda_kernel(const DataTensor<T>& input, DataTensor<T>& output, T max_val,
                          const rtStream_t& stream);
 
-template <typenema T, typenema TAttr>
-void my_relu_cuda_compute(const std::vector<DataTensor<T>>& inputs,
-                          std::vector<DataTensor<T>>& outputs, std::vector<DataTensor<T>>& buffers,
-                          const TAttr& attrs, const rtStream_t& stream) {
-  my_relu_cuda_kernel(inputs[0], outputs[0], T(attrs.max_val), stream);
+template <typename T, typename TAttr>
+void my_relu_cuda_compute(const DataTensor<T>& input, DataTensor<T>& output, const TAttr& attrs,
+                          const rtStream_t& stream) {
+  my_relu_cuda_kernel(input, output, T(attrs.max_val), stream);
 }
 #endif
 
@@ -96,17 +92,17 @@ namespace tvm {
 namespace contrib {
 namespace msc {
 
-template <typenema T>
+template <typename T>
 void my_relu_cpu_kernel(const DataTensor<T>& input, DataTensor<T>& output, T max_val) {
   const T* input_data = input.const_data();
   T* output_data = output.data();
-  for (size_t i = 0; i < output.static_size(); i++) {
+  for (size_t i = 0; i < output.size(); i++) {
     if (input_data[i] >= max_val) {
-      output[i] = max_val;
+      output_data[i] = max_val;
     } else if (input_data[i] <= 0) {
-      output[i] = 0;
+      output_data[i] = 0;
     } else {
-      output[i] = input_data[i];
+      output_data[i] = input_data[i];
     }
   }
 }
@@ -136,7 +132,7 @@ inline int n_blocks(int size, int block_size) {
   return size / block_size + (size % block_size == 0 ? 0 : 1);
 }
 
-template <typenema T>
+template <typename T>
 __global__ static void _my_relu(const T* src, const T* dst, T max_val, int n) {
   KERNEL_LOOP(i, n) {
     if (src[i] >= max_val) {
@@ -149,7 +145,7 @@ __global__ static void _my_relu(const T* src, const T* dst, T max_val, int n) {
   }
 }
 
-template <typenema T>
+template <typename T>
 void my_relu_cuda_kernel(const DataTensor<T>& input, DataTensor<T>& output, T max_val,
                          const rtStream_t& stream) {
   const T* input_data = input.const_data();

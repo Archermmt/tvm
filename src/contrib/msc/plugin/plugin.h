@@ -518,6 +518,9 @@ class PluginNode : public Object {
   /*! \brief Find input ref index for device. */
   int FindDeviceRefIdx(const PluginTensor& tensor) const;
 
+  /*! \brief flatten support dtypes. */
+  Array<Map<Integer, String>> GetDtypeMatrix() const;
+
   void VisitAttrs(AttrVisitor* v) {
     v->Visit("name", &name);
     v->Visit("version", &version);

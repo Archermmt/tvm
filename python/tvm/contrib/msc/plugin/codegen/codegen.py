@@ -82,12 +82,11 @@ class BasePluginCodeGen(object):
         with self._build_folder as folder:
             # add depends
             with folder.create_dir("src") as src_folder:
+                for name, file in self._extern_sources.items():
+                    src_folder.copy(file, name)
                 with src_folder.create_dir("utils") as utils_folder:
                     for name, source in get_plugin_sources().items():
                         utils_folder.add_file(name, source)
-                with src_folder.create_dir("externs") as externs_folder:
-                    for name, file in self._extern_sources.items():
-                        externs_folder.copy(file, name)
             for name, source in sources.items():
                 if name == "CMakeLists.txt":
                     folder.add_file(name, source)
