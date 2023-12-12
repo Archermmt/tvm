@@ -290,7 +290,8 @@ void TorchPluginCodeGen::CodeGenCompute(const Plugin& plugin, const String& devi
       size_t cnt = 0;
       for (const auto& pair : dtypes) {
         dtype_cond = dtype_cond + "TorchUtils::TypeName(input_tensors[" +
-                     std::to_string(pair.first->value) + "].dtype())==\"" + pair.second + "\"";
+                     std::to_string(pair.first->value) + "].scalar_type())==\"" + pair.second +
+                     "\"";
         dtype_cond = dtype_cond + (cnt == dtypes.size() - 1 ? "" : " && ");
         cnt++;
       }

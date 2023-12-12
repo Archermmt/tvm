@@ -692,24 +692,13 @@ class TorchUtils {
   }
 
   template <typename T>
-  static DataTensor<T> ToDataTensor(const torch::Tensor& tensor, const MetaLayout& layout,
+  static DataTensor<T> ToDataTensor(const torch::Tensor& tensor, const MetaTensor& meta,
                                     bool read_only) {
     if (read_only) {
-      return DataTensor<T>(TorchUtils::ToMetaShape(tensor), layout, (const T*)(tensor.data_ptr()));
+      return DataTensor<T>(meta.shape(), meta.layout(), (const T*)(tensor.data_ptr()));
     } else {
-      return DataTensor<T>(TorchUtils::ToMetaShape(tensor), layout, (T*)(tensor.data_ptr()));
+      return DataTensor<T>(meta.shape(), meta.layout(), (T*)(tensor.data_ptr()));
     }
-  }
-
-  template <typename T>
-  static std::vector<DataTensor<T>> ToDataTensors(const std::vector<torch::Tensor>& tensors,
-                                                  const std::vector<MetaLayout>& layouts,
-                                                  bool read_only) {
-    std::vector<DataTensor<T>> data_tensors;
-    for (size_t i = 0; i < tensors.size(); i++) {
-      data_tensors.push_back(TorchUtils::ToDataTensor<T>(tensors[i], layouts[i], read_only));
-    }
-    return data_tensors;
   }
 };
 #endif  // PLUGIN_SUPPORT_TORCH
