@@ -25,9 +25,10 @@ from .register import register_plugin
 def build_plugins(
     plugins: Dict[str, dict],
     frameworks: List[str],
-    install_dir: msc_utils.MSCDirectory,
+    output_folder: msc_utils.MSCDirectory,
     codegen_config: Optional[Dict[str, str]] = None,
-    print_config: Optional[Dict[str, str]] = None,
+    cpp_print_config: Optional[Dict[str, str]] = None,
+    py_print_config: Optional[Dict[str, str]] = None,
     externs_dir: msc_utils.MSCDirectory = None,
     workspace: msc_utils.MSCDirectory = None,
 ):
@@ -39,12 +40,14 @@ def build_plugins(
         The plugins define.
     frameworks: list<str>
         The frameworks for plugin.
-    install_dir: MSCDirectory:
-        The install folder.
+    output_folder: MSCDirectory:
+        The output folder.
     codegen_config: dict<string, string>
         The config to generate code.
-    print_config: dict<string, string>
-        The config to print code.
+    cpp_print_config: dict<string, string>
+        The config to print cpp code.
+    py_print_config: dict<string, string>
+        The config to print python code.
     externs_dir: MSCDirectory
         The extern sources folder.
     workspace: MSCDirectory
@@ -59,34 +62,35 @@ def build_plugins(
         extern_sources.update(sources)
         extern_libs.update(libs)
     # build plugins for frameworks
+    codegens = {}
     for framework in frameworks:
         codegen = get_codegen(
             framework,
             codegen_config,
-            print_config,
+            cpp_print_config=cpp_print_config,
+            py_print_config=py_print_config,
             build_folder=workspace.create_dir(framework),
-            output_folder=install_dir.create_dir(framework),
+            output_folder=output_folder,
             extern_sources=extern_sources,
             extern_libs=extern_libs,
         )
         libs_file = codegen.build_libs()
         print("libs_file " + str(libs_file))
-        raise Exception("stop here!!")
         if codegen.need_manager:
             files = codegen.build_manager()
             print("manager files " + str(files))
-        if codegen.need_convert:
-            files = codegen.build_convert()
-            print("convert files " + str(files))
         raise Exception("stop here!!")
+        codegens[framework] = codegen
+    return codegens
 
 
 def build_plugins_manager(
     plugins: Dict[str, dict],
     frameworks: List[str],
-    install_dir: msc_utils.MSCDirectory,
+    output_folder: msc_utils.MSCDirectory,
     codegen_config: Optional[Dict[str, str]] = None,
-    print_config: Optional[Dict[str, str]] = None,
+    cpp_print_config: Optional[Dict[str, str]] = None,
+    py_print_config: Optional[Dict[str, str]] = None,
     externs_dir: msc_utils.MSCDirectory = None,
     workspace: msc_utils.MSCDirectory = None,
 ) -> Dict[str, Any]:
@@ -98,12 +102,14 @@ def build_plugins_manager(
         The plugins define.
     frameworks: list<str>
         The frameworks for plugin.
-    install_dir: MSCDirectory:
-        The install folder.
+    output_folder: MSCDirectory:
+        The output folder.
     codegen_config: dict<string, string>
         The config to generate code.
-    print_config: dict<string, string>
-        The config to print code.
+    cpp_print_config: dict<string, string>
+        The config to print cpp code.
+    py_print_config: dict<string, string>
+        The config to print python code.
     externs_dir: MSCDirectory
         The extern sources folder.
     workspace: MSCDirectory
@@ -115,8 +121,15 @@ def build_plugins_manager(
         The plugin managers for each framework.
     """
 
-    install_dir = build_plugins(
-        plugins, frameworks, install_dir, codegen_config, print_config, externs_dir, workspace
+    codegens = build_plugins(
+        plugins,
+        frameworks,
+        output_folder,
+        codegen_config=codegen_config,
+        cpp_print_config=cpp_print_config,
+        py_print_config=py_print_config,
+        externs_dir=externs_dir,
+        workspace=workspace,
     )
 
 
@@ -126,7 +139,8 @@ def build_plugins_wheel(
     frameworks: List[str],
     install_dir: msc_utils.MSCDirectory,
     codegen_config: Optional[Dict[str, str]] = None,
-    print_config: Optional[Dict[str, str]] = None,
+    cpp_print_config: Optional[Dict[str, str]] = None,
+    py_print_config: Optional[Dict[str, str]] = None,
     externs_dir: msc_utils.MSCDirectory = None,
     workspace: msc_utils.MSCDirectory = None,
 ) -> str:
@@ -144,8 +158,10 @@ def build_plugins_wheel(
         The install folder.
     codegen_config: dict<string, string>
         The config to generate code.
-    print_config: dict<string, string>
-        The config to print code.
+    cpp_print_config: dict<string, string>
+        The config to print cpp code.
+    py_print_config: dict<string, string>
+        The config to print python code.
     externs_dir: MSCDirectory
         The extern sources folder.
     workspace: MSCDirectory
@@ -157,6 +173,13 @@ def build_plugins_wheel(
         The file path of wheel.
     """
 
-    install_dir = build_plugins(
-        plugins, frameworks, install_dir, codegen_config, print_config, externs_dir, workspace
+    codegens = build_plugins(
+        plugins,
+        frameworks,
+        install_dir,
+        codegen_config=codegen_config,
+        cpp_print_config=cpp_print_config,
+        py_print_config=py_print_config,
+        externs_dir=externs_dir,
+        workspace=workspace,
     )

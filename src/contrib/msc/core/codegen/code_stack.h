@@ -196,6 +196,15 @@ class BaseStack {
   /*! \brief End a while block*/
   void WhileEnd();
 
+  /*! \brief Push switch to cache and start switch block*/
+  void SwitchStart(const String& predicate);
+
+  /*! \brief Add new case to switch*/
+  void SwitchCase(const String& predicate = "");
+
+  /*! \brief Push switch to cached*/
+  void SwitchEnd();
+
   /*! \brief Start a new block*/
   void BlockStart();
 
@@ -388,6 +397,18 @@ class BaseStack {
   }                                                                                             \
   Stack& while_end() {                                                                          \
     WhileEnd();                                                                                 \
+    return *this;                                                                               \
+  }                                                                                             \
+  Stack& switch_start(const String& predicate) {                                                \
+    SwitchStart(predicate);                                                                     \
+    return *this;                                                                               \
+  }                                                                                             \
+  Stack& switch_case(const String& predicate = "") {                                            \
+    SwitchCase(predicate);                                                                      \
+    return *this;                                                                               \
+  }                                                                                             \
+  Stack& switch_end() {                                                                         \
+    SwitchEnd();                                                                                \
     return *this;                                                                               \
   }                                                                                             \
   Stack& block_start() {                                                                        \

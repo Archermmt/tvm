@@ -81,6 +81,9 @@ class PythonPrinter : public MSCBasePrinter {
   /*! * \brief Print a StrictListDoc to python format*/
   void PrintTypedDoc(const StrictListDoc& doc) final;
 
+  /*! * \brief Print a SwitchDoc to python format*/
+  void PrintTypedDoc(const SwitchDoc& doc) final;
+
  private:
   /*! \brief Print block with indent*/
   void PrintIndentedBlock(const Array<StmtDoc>& docs);

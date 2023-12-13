@@ -324,6 +324,41 @@ void BaseStack::WhileEnd() {
   PushDoc(WhileDoc(while_doc->predicate, body));
 }
 
+void BaseStack::SwitchStart(const String& predicate) {
+  Array<ExprDoc> predicates;
+  predicates.push_back(IdDoc(predicate));
+  PushDoc(SwitchDoc(predicates, Array<Array<StmtDoc>>(), Array<StmtDoc>()));
+  BlockStart();
+}
+
+void BaseStack::SwitchCase(const String& predicate) {
+  const auto& block = PopBlock();
+  const auto& switch_doc = PopCheckedDoc<SwitchDoc, SwitchDocNode>();
+  auto branchs = switch_doc->branchs;
+  branchs.push_back(DocUtils::ToStmts(block));
+  if (predicate.size() == 0) {
+    Array<StmtDoc> default_branch{ExprStmtDoc(IdDoc("pass"))};
+    PushDoc(SwitchDoc(switch_doc->predicates, branchs, default_branch));
+  } else {
+    auto predicates = switch_doc->predicates;
+    predicates.push_back(IdDoc(predicate));
+    PushDoc(SwitchDoc(predicates, branchs, switch_doc->default_branch));
+  }
+  BlockStart();
+}
+
+void BaseStack::SwitchEnd() {
+  const auto& block = PopBlock();
+  const auto& switch_doc = PopCheckedDoc<SwitchDoc, SwitchDocNode>();
+  if (switch_doc->default_branch.size() > 0) {
+    PushDoc(SwitchDoc(switch_doc->predicates, switch_doc->branchs, DocUtils::ToStmts(block)));
+  } else {
+    auto branchs = switch_doc->branchs;
+    branchs.push_back(DocUtils::ToStmts(block));
+    PushDoc(SwitchDoc(switch_doc->predicates, branchs, switch_doc->default_branch));
+  }
+}
+
 void BaseStack::BlockStart() {
   Array<Doc> block;
   blocks_.push(block);

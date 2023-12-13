@@ -182,6 +182,29 @@ void PythonPrinter::PrintTypedDoc(const StrictListDoc& doc) {
   }
 }
 
+void PythonPrinter::PrintTypedDoc(const SwitchDoc& doc) {
+  MaybePrintComment(doc, true);
+  ICHECK_EQ(doc->predicates.size(), doc->branchs.size())
+      << "predicates " << doc->predicates.size() << " mismatch with branchs "
+      << doc->branchs.size();
+  for (size_t i = 0; i < doc->predicates.size(); i++) {
+    if (i == 0) {
+      output_ << "if ";
+    } else {
+      NewLine();
+      output_ << "elif ";
+    }
+    PrintDoc(doc->predicates[i], false);
+    output_ << ":";
+    PrintIndentedBlock(doc->branchs[i]);
+  }
+  if (!doc->default_branch.empty()) {
+    NewLine();
+    output_ << "else:";
+    PrintIndentedBlock(doc->default_branch);
+  }
+}
+
 void PythonPrinter::PrintIndentedBlock(const Array<StmtDoc>& docs) {
   IncreaseIndent();
   for (const StmtDoc& d : docs) {

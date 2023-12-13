@@ -68,6 +68,15 @@ ConstructorDoc::ConstructorDoc(IdDoc name, Array<AssignDoc> args, Array<StmtDoc>
   this->data_ = std::move(n);
 }
 
+SwitchDoc::SwitchDoc(Array<ExprDoc> predicates, Array<Array<StmtDoc>> branchs,
+                     Array<StmtDoc> default_branch) {
+  ObjectPtr<SwitchDocNode> n = make_object<SwitchDocNode>();
+  n->predicates = predicates;
+  n->branchs = branchs;
+  n->default_branch = default_branch;
+  this->data_ = std::move(n);
+}
+
 }  // namespace msc
 }  // namespace contrib
 }  // namespace tvm

@@ -32,6 +32,7 @@
 
 #include "../core/codegen/code_stack.h"
 #include "../core/printer/cpp_printer.h"
+#include "../core/printer/python_printer.h"
 #include "plugin.h"
 
 namespace tvm {
@@ -68,9 +69,9 @@ class BasePluginCodeGen {
     for (const auto& name : ListPluginNames()) {
       const auto& plugin = GetPlugin(name);
       CodeGenPluginAttr(plugin);
-      sources.Set(plugin->name + "_attr.h", ToSource(print_options));
+      sources.Set(plugin->name + "_attr.h", ToCppSource(print_options));
       CodeGenPluginSource(plugin);
-      sources.Set(plugin->name + "_op.cc", ToSource(print_options));
+      sources.Set(plugin->name + "_op.cc", ToCppSource(print_options));
     }
     // cmakelists
     std::set<String> devices;
@@ -83,29 +84,31 @@ class BasePluginCodeGen {
       }
     }
     CodeGenCmake(devices);
-    sources.Set("CMakeLists.txt", ToSource(print_options));
+    sources.Set("CMakeLists.txt", ToCppSource(print_options));
     return sources;
   }
 
   /*! \brief Get manager sources*/
   virtual const Map<String, String> GetManagerSources(const std::string& print_options = "") {
+    std::cout << "SB GetManagerSources" << std::endl;
     Map<String, String> sources;
+    CodeGenManagerUtils();
+    sources.Set("utils.py", ToPySource(print_options));
+    /*
+    this->stack_.line("from .utils import *").class_def("PluginManager").class_start();
     for (const auto& name : ListPluginNames()) {
       const auto& plugin = GetPlugin(name);
       CodeGenPluginManager(plugin);
     }
-    sources.Set("manager.py", ToSource(print_options));
-    return sources;
-  }
-
-  /*! \brief Get convert sources*/
-  virtual const Map<String, String> GetConvertSources(const std::string& print_options = "") {
-    Map<String, String> sources;
-    for (const auto& name : ListPluginNames()) {
-      const auto& plugin = GetPlugin(name);
-      CodeGenPluginConvert(plugin);
+    if (this->config()->need_convert) {
+      for (const auto& name : ListPluginNames()) {
+        const auto& plugin = GetPlugin(name);
+        CodeGenPluginConvert(plugin);
+      }
     }
-    sources.Set("convert.py", ToSource(print_options));
+    this->stack_.class_end();
+    sources.Set("manager.py", ToPySource(print_options));
+    */
     return sources;
   }
 
@@ -154,7 +157,7 @@ class BasePluginCodeGen {
 
   /*! \brief Get plugin attr*/
   virtual void CodeGenPluginAttr(const Plugin& plugin) {
-    const String& macro = "TVM_CONTRIB_MSC_" + StringUtils::Upper(plugin->name + "_attr") + "_H_";
+    const String& macro = "TVM_CONTRIB_MSC_" + StringUtils::Upper(AttrClsName(plugin)) + "_H_";
     this->stack_.line("#ifndef " + macro)
         .line("#define " + macro)
         .line()
@@ -168,7 +171,7 @@ class BasePluginCodeGen {
 
   /*! \brief Codegen attr struct for plugin*/
   virtual void CodeGenAttrStruct(const Plugin& plugin) {
-    this->stack_.struct_start(plugin->name + "_attr").comment("define attributes");
+    this->stack_.struct_start(AttrClsName(plugin)).comment("define attributes");
     for (const auto& attr : plugin->attrs) {
       this->stack_.declare(attr->type, attr->name);
       if (attr->default_value.size() > 0) {
@@ -179,9 +182,9 @@ class BasePluginCodeGen {
         .comment("print method")
         .func_def("operator<<", "friend std::ostream&")
         .func_arg("out", "std::ostream&")
-        .func_arg("attrs", plugin->name + "_attr&")
+        .func_arg("attrs", AttrClsName(plugin) + "&")
         .func_start()
-        .line("out << \"[" + plugin->name + "_attr] : \";");
+        .line("out << \"[" + AttrClsName(plugin) + "] : \";");
     for (const auto& attr : plugin->attrs) {
       this->stack_.line("out << \"| " + attr->name + "(" + attr->type + ")=\" << attrs." +
                         attr->name + ";");
@@ -212,13 +215,31 @@ class BasePluginCodeGen {
   /*! \brief Codegen cmake file*/
   virtual void CodeGenCmake(const std::set<String>& devices) {}
 
+  /*! \brief Codegen manager utils*/
+  virtual void CodeGenManagerUtils() {
+    this->stack_.line("form typing import Any")
+        .line()
+        .func_def("_to_string", "str")
+        .func_arg("value", "Any")
+        .func_start()
+        .switch_start("isinstance(value, (list, tuple))")
+        .assign("str_value", "\",\".join([str(len(value))] + [_str_string(v) for v in value])")
+        .switch_case("isinstance(value, bool)")
+        .assign("str_value", "\"1\" if value else \"0\"")
+        .switch_case()
+        .assign("str_value", "value")
+        .switch_end()
+        .func_end("str_value");
+  }
+
   /*! \brief Codegen manager member for plugin*/
   virtual void CodeGenPluginManager(const Plugin& plugin) = 0;
 
   /*! \brief Codegen convert function for plugin*/
   virtual void CodeGenPluginConvert(const Plugin& plugin) = 0;
 
-  const String ToSource(const std::string& print_options = "") {
+  /*! \brief Change code stack to cpp source*/
+  const String ToCppSource(const std::string& print_options = "") {
     CppPrinter printer(print_options);
     for (const auto& d : this->stack_.GetDocs()) {
       printer.Append(d);
@@ -226,6 +247,22 @@ class BasePluginCodeGen {
     this->stack_.Reset();
     return printer.GetString();
   };
+
+  /*! \brief Change code stack to python source*/
+  const String ToPySource(const std::string& print_options = "") {
+    PythonPrinter printer(print_options);
+    for (const auto& d : this->stack_.GetDocs()) {
+      printer.Append(d);
+    }
+    this->stack_.Reset();
+    return printer.GetString();
+  };
+
+  /*! \brief Get class name for attr*/
+  const String AttrClsName(const Plugin& plugin) const { return plugin->name + "_attr"; }
+
+  /*! \brief Get class name for op define*/
+  const String OpClsName(const Plugin& plugin) const { return plugin->name + "_op"; }
 
   /*!
    * \brief Compare version with version in config

@@ -29,6 +29,7 @@ namespace contrib {
 namespace msc {
 
 #define PLUGIN_CODEGEN_CONFIG_MEMBERS   \
+  bool need_convert{false};             \
   std::string cmake_version{"3.5"};     \
   std::string install_dir;              \
   std::vector<size_t> version{0, 0, 0}; \
@@ -37,7 +38,9 @@ namespace msc {
   std::unordered_map<std::string, std::string> flags;
 
 #define PLUGIN_CODEGEN_CONFIG_PARSE             \
-  if (key == "cmake_version") {                 \
+  if (key == "need_convert") {                  \
+    reader->Read(&need_convert);                \
+  } else if (key == "cmake_version") {          \
     reader->Read(&cmake_version);               \
   } else if (key == "install_dir") {            \
     reader->Read(&install_dir);                 \

@@ -243,6 +243,48 @@ class ConstructorDoc : public StmtDoc {
   TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(ConstructorDoc, StmtDoc, ConstructorDocNode);
 };
 
+/*!
+ * \brief Doc that represent switch statement.
+ *
+ * \sa SwitchDoc
+ */
+class SwitchDocNode : public StmtDocNode {
+ public:
+  /*! \brief The predicates of the switch statement. */
+  Array<ExprDoc> predicates;
+  /*! \brief The branchs of the switch statement. */
+  Array<Array<StmtDoc>> branchs;
+  /*! \brief The default_branch of the switch statement. */
+  Array<StmtDoc> default_branch;
+
+  void VisitAttrs(AttrVisitor* v) {
+    StmtDocNode::VisitAttrs(v);
+    v->Visit("predicates", &predicates);
+    v->Visit("branchs", &branchs);
+    v->Visit("default_branch", &default_branch);
+  }
+
+  static constexpr const char* _type_key = "script.printer.SwitchDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(SwitchDocNode, StmtDocNode);
+};
+
+/*!
+ * \brief Reference type of SwitchDocNode.
+ *
+ * \sa SwitchDocNode
+ */
+class SwitchDoc : public StmtDoc {
+ public:
+  /*!
+   * \brief Constructor of SwitchDoc.
+   * \param predicates The predicates of the switch statement.
+   * \param branchs The branchs of the switch statement.
+   * \param default_branch The default_branch of the switch statement.
+   */
+  explicit SwitchDoc(Array<ExprDoc> predicates, Array<Array<StmtDoc>> branchs,
+                     Array<StmtDoc> default_branch);
+  TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(SwitchDoc, StmtDoc, SwitchDocNode);
+};
 }  // namespace msc
 }  // namespace contrib
 }  // namespace tvm

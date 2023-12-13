@@ -33,8 +33,10 @@ class BasePluginCodeGen(object):
     ----------
     codegen_config: dict<string, string>
         The config to generate code.
-    print_config: dict<string, string>
-        The config to print code.
+    cpp_print_config: dict<string, string>
+        The config to print cpp code.
+    py_print_config: dict<string, string>
+        The config to print python code.
     build_folder: MSCDirectory
         The codegen folder.
     output_folder: MSCDirectory
@@ -48,14 +50,16 @@ class BasePluginCodeGen(object):
     def __init__(
         self,
         codegen_config: Optional[Dict[str, str]] = None,
-        print_config: Optional[Dict[str, str]] = None,
+        cpp_print_config: Optional[Dict[str, str]] = None,
+        py_print_config: Optional[Dict[str, str]] = None,
         build_folder: msc_utils.MSCDirectory = None,
         output_folder: msc_utils.MSCDirectory = None,
         extern_sources: Dict[str, str] = None,
         extern_libs: Dict[str, str] = None,
     ):
         self._codegen_config = msc_utils.copy_dict(codegen_config)
-        self._print_config = msc_utils.copy_dict(print_config)
+        self._cpp_print_config = msc_utils.dump_dict(cpp_print_config)
+        self._py_print_config = msc_utils.dump_dict(py_print_config)
         self._build_folder = build_folder or msc_utils.msc_dir(keep_history=False, cleanup=True)
         self._output_folder = output_folder or msc_utils.msc_dir("msc_plugins")
         self._extern_sources = extern_sources or {}
@@ -65,8 +69,12 @@ class BasePluginCodeGen(object):
     def setup(self):
         """Set up the codegen"""
 
-        self._codegen_config = msc_utils.dump_dict(self._codegen_config)
-        self._print_config = msc_utils.dump_dict(self._print_config)
+        self._libs_dir = self._output_folder.create_dir("libs")
+        self._manager_dir = self._output_folder.create_dir(self.framework)
+        self._libs = [os.path.basename(l) for l in self._extern_libs.values()]
+        self._codegen_config.update(
+            {"need_convert": self.need_convert, "install_dir": self._libs_dir.path}
+        )
 
     def build_libs(self) -> List[str]:
         """Generate source and build the lib
@@ -77,8 +85,8 @@ class BasePluginCodeGen(object):
             The lib file paths.
         """
 
-        sources = self.source_getter(self._codegen_config, self._print_config, "sources")
-        lib_dir, lib_files = self._output_folder.create_dir("libs"), []
+        codegen_config = msc_utils.dump_dict(self._codegen_config)
+        sources = self.source_getter(codegen_config, self._cpp_print_config, "sources")
         with self._build_folder as folder:
             # add depends
             with folder.create_dir("src") as src_folder:
@@ -102,11 +110,8 @@ class BasePluginCodeGen(object):
                 ), "Failed to build plugin under {}, check codegen.log for detail".format(
                     os.getcwd()
                 )
-                for f in build_folder.listdir():
-                    if not f.endswith(".so"):
-                        continue
-                    lib_files.append(folder.copy(f, lib_dir.relpath(f)))
-        return lib_files
+            self._libs.extend([os.path.basename(l) for l in self._libs_dir.listdir()])
+        return self._libs_dir.listdir(as_abs=True)
 
     def build_manager(self) -> List[str]:
         """Generate manager source for plugin
@@ -117,28 +122,14 @@ class BasePluginCodeGen(object):
             The manager file paths.
         """
 
-        sources = self.source_getter(self._codegen_config, self._print_config, "manager")
+        self._codegen_config["libs"] = self._libs
+        codegen_config = msc_utils.dump_dict(self._codegen_config)
+        sources = self.source_getter(codegen_config, self._py_print_config, "manager")
         manager_files = []
-        with self._output_folder as folder:
+        with self._manager_dir as folder:
             for name, source in sources.items():
                 manager_files.append(folder.add_file(name, source))
         return manager_files
-
-    def build_convert(self) -> List[str]:
-        """Generate manager source for plugin
-
-        Returns
-        -------
-        paths: list<str>
-            The convert file paths.
-        """
-
-        sources = self.source_getter(self._codegen_config, self._print_config, "convert")
-        convert_files = []
-        with self._output_folder as folder:
-            for name, source in sources.items():
-                convert_files.append(folder.add_file(name, source))
-        return convert_files
 
     @property
     def source_getter(self):
@@ -152,6 +143,10 @@ class BasePluginCodeGen(object):
     def need_convert(self):
         return True
 
+    @property
+    def framework(self):
+        return MSCFramework.MSC
+
 
 class TVMPluginCodegen(BasePluginCodeGen):
     @property
@@ -161,6 +156,10 @@ class TVMPluginCodegen(BasePluginCodeGen):
     @property
     def need_convert(self):
         return False
+
+    @property
+    def framework(self):
+        return MSCFramework.TVM
 
 
 class TorchPluginCodegen(BasePluginCodeGen):
@@ -176,6 +175,10 @@ class TorchPluginCodegen(BasePluginCodeGen):
     def source_getter(self):
         return _ffi_api.GetTorchPluginSources
 
+    @property
+    def framework(self):
+        return MSCFramework.TORCH
+
 
 class TensorRTPluginCodegen(BasePluginCodeGen):
     @property
@@ -186,11 +189,16 @@ class TensorRTPluginCodegen(BasePluginCodeGen):
     def need_convert(self):
         return False
 
+    @property
+    def framework(self):
+        return MSCFramework.TENSORRT
+
 
 def get_codegen(
     framework: str,
     codegen_config: Optional[Dict[str, str]] = None,
-    print_config: Optional[Dict[str, str]] = None,
+    cpp_print_config: Optional[Dict[str, str]] = None,
+    py_print_config: Optional[Dict[str, str]] = None,
     build_folder: msc_utils.MSCDirectory = None,
     output_folder: msc_utils.MSCDirectory = None,
     extern_sources: Dict[str, str] = None,
@@ -204,8 +212,10 @@ def get_codegen(
         THe framework for the plugin.
     codegen_config: dict<string, string>
         The config to generate code.
-    print_config: dict<string, string>
-        The config to print code.
+    cpp_print_config: dict<string, string>
+        The config to print cpp code.
+    py_print_config: dict<string, string>
+        The config to print python code.
     build_folder: MSCDirectory
         The codegen folder.
     output_folder: MSCDirectory
@@ -216,16 +226,23 @@ def get_codegen(
         The depend lib files.
     """
 
+    codegen_cls = None
     if framework == MSCFramework.TVM:
-        return TVMPluginCodegen(
-            codegen_config, print_config, build_folder, output_folder, extern_sources, extern_libs
+        codegen_cls = TVMPluginCodegen
+    elif framework == MSCFramework.TORCH:
+        codegen_cls = TorchPluginCodegen
+    elif framework == MSCFramework.TENSORRT:
+        codegen_cls = TensorRTPluginCodegen
+    else:
+        raise NotImplementedError(
+            "framework {} is not support for plugin codegen".format(framework)
         )
-    if framework == MSCFramework.TORCH:
-        return TorchPluginCodegen(
-            codegen_config, print_config, build_folder, output_folder, extern_sources, extern_libs
-        )
-    if framework == MSCFramework.TENSORRT:
-        return TensorRTPluginCodegen(
-            codegen_config, print_config, build_folder, output_folder, extern_sources, extern_libs
-        )
-    raise NotImplementedError("framework {} is not support for plugin codegen".format(framework))
+    return codegen_cls(
+        codegen_config=codegen_config,
+        cpp_print_config=cpp_print_config,
+        py_print_config=py_print_config,
+        build_folder=build_folder,
+        output_folder=output_folder,
+        extern_sources=extern_sources,
+        extern_libs=extern_libs,
+    )

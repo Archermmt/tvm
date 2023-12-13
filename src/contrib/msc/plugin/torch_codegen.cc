@@ -49,9 +49,9 @@ void TorchPluginCodeGen::CodeGenAttrSerialize(const Plugin& plugin) {
 }
 
 void TorchPluginCodeGen::CodeGenDefine(const Plugin& plugin) {
-  stack_.struct_start(plugin->name + "_op : torch::CustomClassHolder");
+  stack_.struct_start(OpClsName(plugin) + " : torch::CustomClassHolder");
   // define constructor
-  stack_.constructor_def(plugin->name + "_op")
+  stack_.constructor_def(OpClsName(plugin))
       .constructor_arg("attrs", "const std::vector<std::string>&")
       .constructor_start()
       .comment("get attributes")
@@ -111,16 +111,18 @@ void TorchPluginCodeGen::CodeGenDefine(const Plugin& plugin) {
   stack_.cond_end();
   stack_.func_end("output_tensors").line();
   stack_.comment("define members")
-      .declare(plugin->name + "_attr", "meta_attrs_")
+      .declare(AttrClsName(plugin), "meta_attrs_")
       .declare("std::vector<MetaLayout>", "layouts_")
       .declare("std::string", "name_");
   stack_.struct_end().line();
 }
 
 void TorchPluginCodeGen::CodeGenRegister(const Plugin& plugin) {
+  const String& op_name = OpClsName(plugin);
+  const String& entry_name = plugin->name + "_entry";
   stack_.comment("Python wrapper for plugin " + plugin->name)
-      .func_def(plugin->name + "_entry", "std::vector<torch::Tensor>")
-      .func_arg("instance", "const c10::intrusive_ptr<" + plugin->name + "_op>&");
+      .func_def(entry_name, "std::vector<torch::Tensor>")
+      .func_arg("instance", "const c10::intrusive_ptr<" + op_name + ">&");
   for (const auto& input : plugin->inputs) {
     stack_.func_arg(input->name, "const torch::Tensor&");
   }
@@ -131,7 +133,6 @@ void TorchPluginCodeGen::CodeGenRegister(const Plugin& plugin) {
   const auto& outputs_doc = DocUtils::ToDeclareDoc("std::vector<torch::Tensor>", "outputs");
   stack_.func_call("compute", outputs_doc, DocUtils::ToPtrDoc("instance")).call_arg("inputs");
   stack_.func_end("outputs");
-  const String& op_name = plugin->name + "_op";
   stack_.comment("Bind plugin " + plugin->name + " to python")
       .scope_start("TORCH_LIBRARY(" + op_name + ", m) {")
       .scope_start("m.class_<" + op_name + ">(\"" + op_name + "\")")
@@ -154,8 +155,8 @@ void TorchPluginCodeGen::CodeGenRegister(const Plugin& plugin) {
       .line(");")
       .scope_end()
       .func_call("def", "", "m")
-      .call_arg(DocUtils::ToStrDoc(plugin->name + "_entry"))
-      .call_arg(plugin->name + "_entry")
+      .call_arg(DocUtils::ToStrDoc(entry_name))
+      .call_arg(entry_name)
       .scope_end()
       .line("}");
 }
@@ -327,9 +328,6 @@ TVM_REGISTER_GLOBAL("msc.plugin.GetTorchPluginSources")
       }
       if (codegen_type == "manager") {
         return codegen.GetManagerSources(print_config);
-      }
-      if (codegen_type == "convert") {
-        return codegen.GetConvertSources(print_config);
       }
       return Map<String, String>();
     });
