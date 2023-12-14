@@ -90,25 +90,35 @@ class BasePluginCodeGen {
 
   /*! \brief Get manager sources*/
   virtual const Map<String, String> GetManagerSources(const std::string& print_options = "") {
-    std::cout << "SB GetManagerSources" << std::endl;
     Map<String, String> sources;
     CodeGenManagerUtils();
     sources.Set("utils.py", ToPySource(print_options));
-    /*
-    this->stack_.line("from .utils import *").class_def("PluginManager").class_start();
+    CodeGenManagerImports();
+    this->stack_.line().class_def("PluginManager(object)").class_start();
+    CodeGenManagerMethods();
     for (const auto& name : ListPluginNames()) {
       const auto& plugin = GetPlugin(name);
       CodeGenPluginManager(plugin);
     }
     if (this->config()->need_convert) {
+      Map<Plugin, String> symbols;
+      this->stack_.func_def("get_converters")
+          .func_decorator("classmethod")
+          .func_arg("cls", "object")
+          .func_start();
       for (const auto& name : ListPluginNames()) {
         const auto& plugin = GetPlugin(name);
-        CodeGenPluginConvert(plugin);
+        const auto& symbol = CodeGenPluginConvert(plugin);
+        symbols.Set(plugin, symbol);
       }
+      this->stack_.assign("converters", "{}");
+      for (const auto& pair : symbols) {
+        this->stack_.assign("converters[\"" + pair.second + "\"]", ConverterName(pair.first));
+      }
+      this->stack_.func_end("converters");
     }
     this->stack_.class_end();
     sources.Set("manager.py", ToPySource(print_options));
-    */
     return sources;
   }
 
@@ -217,9 +227,12 @@ class BasePluginCodeGen {
 
   /*! \brief Codegen manager utils*/
   virtual void CodeGenManagerUtils() {
-    this->stack_.line("form typing import Any")
+    this->stack_.line("import os")
+        .line("import shutil")
+        .line("import ctypes")
+        .line("form typing import Any, List")
         .line()
-        .func_def("_to_string", "str")
+        .func_def("to_string", "str")
         .func_arg("value", "Any")
         .func_start()
         .switch_start("isinstance(value, (list, tuple))")
@@ -232,11 +245,40 @@ class BasePluginCodeGen {
         .func_end("str_value");
   }
 
-  /*! \brief Codegen manager member for plugin*/
+  /*! \brief Codegen manager imports*/
+  virtual void CodeGenManagerImports() { this->stack_.line("from .utils import *"); }
+
+  /*! \brief Codegen manager methods*/
+  virtual void CodeGenManagerMethods() {
+    this->stack_.func_def("op_names", "List[str]")
+        .func_arg("self", "object")
+        .func_start()
+        .assign("names", "[]");
+    for (const auto& name : ListPluginNames()) {
+      this->stack_.func_call("append", "", "names").call_arg(DocUtils::ToStrDoc(name));
+    }
+    this->stack_.func_end("names")
+        .func_def("copy_libs")
+        .func_arg("self", "object")
+        .func_arg("dst", "str")
+        .func_start()
+        .cond_if("not os.path.isdir(dst)")
+        .func_call("makedirs", "", "os")
+        .call_arg("dst")
+        .cond_end()
+        .for_start("lib", "os.listdir(self._lib_folder)")
+        .func_call("shutil.copyfile")
+        .call_arg("os.path.join(self._lib_folder, lib)")
+        .call_arg("os.path.join(dst, lib)")
+        .for_end()
+        .func_end();
+  };
+
+  /*! \brief Codegen manager for plugin*/
   virtual void CodeGenPluginManager(const Plugin& plugin) = 0;
 
   /*! \brief Codegen convert function for plugin*/
-  virtual void CodeGenPluginConvert(const Plugin& plugin) = 0;
+  virtual const String CodeGenPluginConvert(const Plugin& plugin) = 0;
 
   /*! \brief Change code stack to cpp source*/
   const String ToCppSource(const std::string& print_options = "") {
@@ -263,6 +305,9 @@ class BasePluginCodeGen {
 
   /*! \brief Get class name for op define*/
   const String OpClsName(const Plugin& plugin) const { return plugin->name + "_op"; }
+
+  /*! \brief Get converter name for plugin*/
+  const String ConverterName(const Plugin& plugin) const { return plugin->name + "_converter"; }
 
   /*!
    * \brief Compare version with version in config

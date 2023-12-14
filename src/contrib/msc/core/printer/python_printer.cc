@@ -23,6 +23,8 @@
 
 #include "python_printer.h"
 
+#include "../utils.h"
+
 namespace tvm {
 namespace contrib {
 namespace msc {
@@ -118,6 +120,28 @@ void PythonPrinter::PrintTypedDoc(const IfDoc& doc) {
   }
 }
 
+void PythonPrinter::PrintTypedDoc(const ForDoc& doc) {
+  MaybePrintComment(doc, true);
+  if (doc->rhs->IsInstance<TupleDocNode>()) {
+    const auto& tuple = Downcast<TupleDoc>(doc->rhs);
+    ICHECK_EQ(tuple->elements.size(), 2) << "For with tuple should has 2 elements";
+    output_ << "for ";
+    PrintDoc(doc->lhs, false);
+    output_ << " in range(";
+    PrintDoc(tuple->elements[0], false);
+    output_ << ", ";
+    PrintDoc(tuple->elements[1], false);
+    output_ << "):";
+  } else {
+    output_ << "for ";
+    PrintDoc(doc->lhs, false);
+    output_ << " in ";
+    PrintDoc(doc->rhs, false);
+    output_ << ":";
+  }
+  PrintIndentedBlock(doc->body);
+}
+
 void PythonPrinter::PrintTypedDoc(const ScopeDoc& doc) {
   MaybePrintComment(doc, true);
   output_ << "with ";
@@ -152,7 +176,11 @@ void PythonPrinter::PrintTypedDoc(const FunctionDoc& doc) {
 
   output_ << ":";
 
-  MaybePrintComment(doc, true);
+  if (doc->comment.defined()) {
+    IncreaseIndent();
+    MaybePrintComment(doc, true);
+    DecreaseIndent();
+  }
   PrintIndentedBlock(doc->body);
   NewLine(false);
 }
@@ -202,6 +230,20 @@ void PythonPrinter::PrintTypedDoc(const SwitchDoc& doc) {
     NewLine();
     output_ << "else:";
     PrintIndentedBlock(doc->default_branch);
+  }
+}
+
+void PythonPrinter::MaybePrintComment(const StmtDoc& stmt, bool multi_lines) {
+  if (stmt->comment.defined() && multi_lines) {
+    NewLine();
+    output_ << "\"\"\"";
+    for (const auto& l : StringUtils::Split(stmt->comment.value(), "\n")) {
+      PrintDoc(IdDoc(l));
+    }
+    NewLine();
+    output_ << "\"\"\"";
+  } else {
+    MSCBasePrinter::MaybePrintComment(stmt, multi_lines);
   }
 }
 

@@ -67,7 +67,7 @@ class BaseStack {
   void Line(const String& line = "");
 
   /*! \brief Push Comment Doc*/
-  void Comment(const String& comment = "");
+  void Comment(const String& comment, bool attach = false);
 
   /*! \brief Push typed assign Doc*/
   void AssignBase(const String& lhs, const ExprDoc& rhs, const String& annotation = "");
@@ -256,8 +256,8 @@ class BaseStack {
     Line(line);                                                                                 \
     return *this;                                                                               \
   }                                                                                             \
-  Stack& comment(const String& comment) {                                                       \
-    Comment(comment);                                                                           \
+  Stack& comment(const String& comment, bool attach = false) {                                  \
+    Comment(comment, attach);                                                                   \
     return *this;                                                                               \
   }                                                                                             \
   template <typename T>                                                                         \

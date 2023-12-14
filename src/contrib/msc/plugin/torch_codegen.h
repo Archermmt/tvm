@@ -77,11 +77,17 @@ class TorchPluginCodeGen : public BasePluginCodeGen<TorchPluginCodeGenConfig> {
   /*! \brief Codegen cmake file*/
   void CodeGenCmake(const std::set<String>& devices) final;
 
+  /*! \brief Codegen manager imports*/
+  void CodeGenManagerImports() final;
+
+  /*! \brief Codegen manager methods*/
+  void CodeGenManagerMethods() final;
+
   /*! \brief Codegen manager member for plugin*/
   void CodeGenPluginManager(const Plugin& plugin) final;
 
   /*! \brief Codegen convert function for plugin*/
-  void CodeGenPluginConvert(const Plugin& plugin) final;
+  const String CodeGenPluginConvert(const Plugin& plugin) final;
 
  private:
   /*! \brief Codegen malloc for outputs/buffers*/
@@ -90,6 +96,8 @@ class TorchPluginCodeGen : public BasePluginCodeGen<TorchPluginCodeGenConfig> {
 
   /*! \brief Codegen compute*/
   void CodeGenCompute(const Plugin& plugin, const String& device);
+
+  const String EntryName(const Plugin& plugin) { return plugin->name + "_entry"; }
 };
 
 }  // namespace msc

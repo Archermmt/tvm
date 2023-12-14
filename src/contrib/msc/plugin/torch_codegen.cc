@@ -119,7 +119,7 @@ void TorchPluginCodeGen::CodeGenDefine(const Plugin& plugin) {
 
 void TorchPluginCodeGen::CodeGenRegister(const Plugin& plugin) {
   const String& op_name = OpClsName(plugin);
-  const String& entry_name = plugin->name + "_entry";
+  const String& entry_name = EntryName(plugin);
   stack_.comment("Python wrapper for plugin " + plugin->name)
       .func_def(entry_name, "std::vector<torch::Tensor>")
       .func_arg("instance", "const c10::intrusive_ptr<" + op_name + ">&");
@@ -207,9 +207,116 @@ void TorchPluginCodeGen::CodeGenCmake(const std::set<String>& devices) {
   }
 }
 
-void TorchPluginCodeGen::CodeGenPluginManager(const Plugin& plugin) {}
+void TorchPluginCodeGen::CodeGenManagerImports() {
+  stack_.line("import torch");
+  BasePluginCodeGen<TorchPluginCodeGenConfig>::CodeGenManagerImports();
+}
 
-void TorchPluginCodeGen::CodeGenPluginConvert(const Plugin& plugin) {}
+void TorchPluginCodeGen::CodeGenManagerMethods() {
+  stack_.func_def("__init__")
+      .func_arg("self", "object")
+      .func_arg("lib_folder", "str", "None")
+      .func_start()
+      .cond_if("lib_folder is None")
+      .assign("root", "os.path.dirname(__file__)")
+      .assign("self._lib_folder", "os.path.join(root, \"libs\")")
+      .cond_else()
+      .assign("self._lib_folder", "lib_folder")
+      .cond_end()
+      .line("assert os.path.isdir(self._lib_folder), \"lib_folder not exist\"")
+      .for_start("lib", "os.listdir(self._lib_folder)")
+      .assign("lib_file", "os.path.join(self._lib_folder, lib)")
+      .cond_if("\"msc_torch_plugin\" in lib")
+      .func_call("load_library", "", "torch.classes")
+      .call_arg("lib_file")
+      .cond_else()
+      .func_call("CDLL", "", "ctypes")
+      .call_arg("lib_file")
+      .cond_end()
+      .for_end()
+      .func_end();
+  BasePluginCodeGen<TorchPluginCodeGenConfig>::CodeGenManagerMethods();
+}
+
+void TorchPluginCodeGen::CodeGenPluginManager(const Plugin& plugin) {
+  const auto& op_name = OpClsName(plugin);
+  const String& entry_name = EntryName(plugin);
+  String comment = "Python wrapper for " + plugin->name + "\nInputs\n------";
+  for (const auto& t : plugin->inputs) {
+    comment = comment + "\n" + t->name + ": " + t->dtype + "\n  " + t->describe;
+  }
+  comment = comment + "\nOutputs\n-------";
+  for (const auto& t : plugin->outputs) {
+    comment = comment + "\n" + t->name + ": " + t->dtype + "\n  " + t->describe;
+  }
+  if (plugin->attrs.size() > 0) {
+    comment = comment + "\nAttributes\n-----------";
+    for (const auto& a : plugin->attrs) {
+      comment = comment + "\n" + a->name + ": " + a->type + "\n  " + a->describe;
+    }
+  }
+  stack_.func_def(plugin->name).func_arg("self", "object");
+  for (const auto& attr : plugin->attrs) {
+    stack_.func_arg(attr->name, attr->type, attr->default_value);
+  }
+  stack_.func_arg("name", "str", "\"" + plugin->name + "\"")
+      .func_arg("layouts", "List[str]", "None")
+      .func_start()
+      .line()
+      .class_def(op_name + "(torch.nn.Module)")
+      .class_start();
+
+  // init method
+  stack_.func_def("__init__")
+      .func_arg("self", "torch.nn.Module")
+      .func_start()
+      .func_call("__init__", "", "super()");
+  for (const auto& attr : plugin->attrs) {
+    stack_.assign("self." + attr->name, attr->name);
+  }
+  stack_.assign("self.name", "name")
+      .cond_if("layouts is None")
+      .assign("self.layouts", "[\"\"] * " + std::to_string(plugin->inputs.size()))
+      .cond_else()
+      .assign("self.layouts", "layouts")
+      .cond_end()
+      .line()
+      .assign("attr_strs", "[]");
+  for (const auto& attr : plugin->attrs) {
+    stack_.func_call("append", "", "attr_strs").call_arg("to_string(" + attr->name + ")");
+  }
+  stack_.func_call("append", "", "attr_strs")
+      .call_arg("name")
+      .func_call("extend", "", "attr_strs")
+      .call_arg("self.layouts")
+      .line()
+      .func_call(op_name + "." + op_name, "self._inner_class", "torch.classes")
+      .call_arg("attr_strs")
+      .func_end();
+
+  // forward method
+  stack_.func_def("forward").func_arg("self", "torch.nn.Module", "List[torch.Tensor]");
+  for (const auto& t : plugin->inputs) {
+    stack_.func_arg(t->name, "torch.Tensor");
+  }
+  stack_.func_start()
+      .func_call(op_name + "." + entry_name, "outputs", "torch.ops")
+      .call_arg("self._inner_class");
+  for (const auto& t : plugin->inputs) {
+    stack_.call_arg(t->name);
+  }
+  stack_.func_end("outputs");
+  stack_.class_end().func_call(op_name, "op");
+  for (const auto& attr : plugin->attrs) {
+    stack_.call_arg(attr->name);
+  }
+  stack_.call_arg("name").call_arg("layouts").func_end("op").comment(comment, true);
+}
+
+const String TorchPluginCodeGen::CodeGenPluginConvert(const Plugin& plugin) {
+  stack_.func_def(ConverterName(plugin)).func_start().func_end();
+  return OpClsName(plugin) + "::" + EntryName(plugin);
+}
 
 void TorchPluginCodeGen::CodeGenMalloc(const Plugin& plugin, const Array<PluginTensor>& tensors,
                                        const String& collect) {

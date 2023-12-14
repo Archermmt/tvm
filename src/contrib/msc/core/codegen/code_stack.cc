@@ -36,7 +36,16 @@ void BaseStack::Line(const Doc& doc) { PushDoc(doc); }
 
 void BaseStack::Line(const String& line) { Line(IdDoc(line)); }
 
-void BaseStack::Comment(const String& comment) { PushDoc(CommentDoc(comment)); }
+void BaseStack::Comment(const String& comment, bool attach) {
+  if (attach) {
+    const auto& doc = TopDoc();
+    ICHECK(doc->IsInstance<StmtDocNode>()) << "Only stmt doc support attach comments";
+    const auto& stmt = Downcast<StmtDoc>(doc);
+    stmt->comment = comment;
+  } else {
+    PushDoc(CommentDoc(comment));
+  }
+}
 
 void BaseStack::AssignBase(const String& lhs, const ExprDoc& rhs, const String& annotation) {
   if (annotation.size() == 0) {
