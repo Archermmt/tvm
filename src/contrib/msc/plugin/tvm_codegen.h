@@ -18,11 +18,11 @@
  */
 
 /*!
- * \file src/contrib/msc/plugin/torch_codegen.h
- * \brief Codegen for torch plugin.
+ * \file src/contrib/msc/plugin/tvm_codegen.h
+ * \brief Codegen for tvm plugin.
  */
-#ifndef TVM_CONTRIB_MSC_PLUGIN_TORCH_CODEGEN_H_
-#define TVM_CONTRIB_MSC_PLUGIN_TORCH_CODEGEN_H_
+#ifndef TVM_CONTRIB_MSC_PLUGIN_TVM_CODEGEN_H_
+#define TVM_CONTRIB_MSC_PLUGIN_TVM_CODEGEN_H_
 
 #include <string>
 
@@ -34,20 +34,17 @@ namespace contrib {
 namespace msc {
 
 /*!
- * \brief CodeGen config for torch plugin
+ * \brief CodeGen config for tvm plugin
  */
-struct TorchPluginCodeGenConfig {
-  bool is_training{false};
-  std::string torch_prefix{"torch"};
+struct TVMPluginCodeGenConfig {
+  bool as_relay{false};
   PLUGIN_CODEGEN_CONFIG_MEMBERS
   void Load(dmlc::JSONReader* reader) {
     std::string key;
     reader->BeginObject();
     while (reader->NextObjectItem(&key)) {
-      if (key == "is_training") {
-        reader->Read(&is_training);
-      } else if (key == "torch_prefix") {
-        reader->Read(&torch_prefix);
+      if (key == "as_relay") {
+        reader->Read(&as_relay);
       } else {
         PLUGIN_CODEGEN_CONFIG_PARSE
       }
@@ -55,14 +52,14 @@ struct TorchPluginCodeGenConfig {
   }
 };
 
-class TorchPluginCodeGen : public BasePluginCodeGen<TorchPluginCodeGenConfig> {
+class TVMPluginCodeGen : public BasePluginCodeGen<TVMPluginCodeGenConfig> {
  public:
   /*!
-   * \brief The constructor of TorchPluginCodeGen
+   * \brief The constructor of TVMPluginCodeGen
    * \param config the options for codegen.
    */
-  explicit TorchPluginCodeGen(const std::string& config = "")
-      : BasePluginCodeGen<TorchPluginCodeGenConfig>(config) {}
+  explicit TVMPluginCodeGen(const std::string& config = "")
+      : BasePluginCodeGen<TVMPluginCodeGenConfig>(config) {}
 
  protected:
   /*! \brief Codegen attr struct declare for plugin*/
@@ -89,30 +86,29 @@ class TorchPluginCodeGen : public BasePluginCodeGen<TorchPluginCodeGenConfig> {
   /*! \brief Codegen manager member for plugin*/
   void CodeGenPluginManager(const Plugin& plugin) final;
 
-  /*! \brief Codegen convert function for plugin*/
-  const String CodeGenPluginConvert(const Plugin& plugin) final;
-
  private:
-  /*! \brief Codegen malloc for outputs/buffers*/
-  void CodeGenMalloc(const Plugin& plugin, const Array<PluginTensor>& tensors,
-                     const String& collect);
+  /*! \brief Class name of relax op attr*/
+  const String RelaxAttrClsName(const Plugin& plugin) { return plugin->name + "RelaxAttrs"; }
 
-  /*! \brief Codegen compute*/
-  void CodeGenCompute(const Plugin& plugin, const String& device);
-
-  /*! \brief Entry name of torch function*/
-  const String EntryName(const Plugin& plugin) { return plugin->name + "Entry"; }
-
-  /*! \brief Type name in torch*/
-  const String ConvertTorchAttrType(const String& type) {
-    if (type == "float") {
-      return "double";
+  /*! \brief Type name in tvm*/
+  const String ConvertTVMAttrType(const String& type) {
+    if (type == "string") {
+      return "String";
     }
-    return BasePluginCodeGen<TorchPluginCodeGenConfig>::ConvertAttrType(type);
+    if (type == "list(int)") {
+      return "Array<Integer>";
+    }
+    if (type == "list(float)") {
+      return "Array<FloatImm>";
+    }
+    if (type == "list(bool)") {
+      return "Array<Bool>";
+    }
+    return BasePluginCodeGen<TVMPluginCodeGenConfig>::ConvertAttrType(type);
   }
 };
 
 }  // namespace msc
 }  // namespace contrib
 }  // namespace tvm
-#endif  // TVM_CONTRIB_MSC_PLUGIN_TORCH_CODEGEN_H_
+#endif  // TVM_CONTRIB_MSC_PLUGIN_TVM_CODEGEN_H_

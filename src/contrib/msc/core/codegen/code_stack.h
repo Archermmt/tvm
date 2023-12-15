@@ -127,6 +127,7 @@ class BaseStack {
 
   /*! \brief End function body block*/
   void FuncEnd(const String& ret_val = "");
+  void FuncEnd(const ExprDoc& ret_val);
 
   /*! \brief Push call and maybe assign Doc*/
   void FuncCall(const String& callee, Optional<DeclareDoc> assign_to,
@@ -316,6 +317,10 @@ class BaseStack {
     return *this;                                                                               \
   }                                                                                             \
   Stack& func_end(const String& ret_val = "") {                                                 \
+    FuncEnd(ret_val);                                                                           \
+    return *this;                                                                               \
+  }                                                                                             \
+  Stack& func_end(const ExprDoc& ret_val) {                                                     \
     FuncEnd(ret_val);                                                                           \
     return *this;                                                                               \
   }                                                                                             \

@@ -63,15 +63,39 @@ class BasePluginCodeGen {
   virtual ~BasePluginCodeGen() = default;
 
   /*! \brief Get plugin sources*/
-  virtual const Map<String, String> GetPluginSources(const std::string& print_options = "") {
+  virtual const Map<String, String> GetBuildSources(const std::string& print_options = "") {
     Map<String, String> sources;
     // plugin sources
     for (const auto& name : ListPluginNames()) {
       const auto& plugin = GetPlugin(name);
-      CodeGenPluginAttr(plugin);
+      // attr declare
+      const String& macro = "TVM_CONTRIB_MSC_" + StringUtils::Upper(AttrClsName(plugin)) + "_H_";
+      this->stack_.line("#ifndef " + macro)
+          .line("#define " + macro)
+          .line()
+          .line("#include \"utils/plugin_utils.h\"")
+          .line();
+      StartNamespace();
+      CodeGenAttrDeclare(plugin);
+      EndNamespace();
+      this->stack_.line("#endif // " + macro);
       sources.Set(plugin->name + "_attr.h", ToCppSource(print_options));
-      CodeGenPluginSource(plugin);
+      // attr define
+      if (this->config()->define_attr) {
+        this->stack_.line("#include \"" + plugin->name + "_attr.h\"").line();
+        StartNamespace();
+        CodeGenAttrDefine(plugin);
+        EndNamespace();
+        sources.Set(plugin->name + "_attr.cc", ToCppSource(print_options));
+      }
+      // op define and register
+      CodeGenPluginOp(plugin);
       sources.Set(plugin->name + "_op.cc", ToCppSource(print_options));
+      // op runtime
+      if (this->config()->with_runtime) {
+        CodeGenPluginRuntime(plugin);
+        sources.Set(plugin->name + "_runtime.cc", ToCppSource(print_options));
+      }
     }
     // cmakelists
     std::set<String> devices;
@@ -91,14 +115,15 @@ class BasePluginCodeGen {
   /*! \brief Get manager sources*/
   virtual const Map<String, String> GetManagerSources(const std::string& print_options = "") {
     Map<String, String> sources;
-    CodeGenManagerUtils();
-    sources.Set("utils.py", ToPySource(print_options));
+    this->stack_.comment("Auto generated manager of msc plugin");
+    sources.Set("__init__.py", ToPySource(print_options));
     CodeGenManagerImports();
+    this->stack_.line();
+    CodeGenManagerUtils();
     this->stack_.line().class_def("PluginManager(object)").class_start();
     CodeGenManagerMethods();
     for (const auto& name : ListPluginNames()) {
-      const auto& plugin = GetPlugin(name);
-      CodeGenPluginManager(plugin);
+      CodeGenPluginManager(GetPlugin(name));
     }
     if (this->config()->need_convert) {
       Map<Plugin, String> symbols;
@@ -165,25 +190,11 @@ class BasePluginCodeGen {
         .line("}");
   }
 
-  /*! \brief Get plugin attr*/
-  virtual void CodeGenPluginAttr(const Plugin& plugin) {
-    const String& macro = "TVM_CONTRIB_MSC_" + StringUtils::Upper(AttrClsName(plugin)) + "_H_";
-    this->stack_.line("#ifndef " + macro)
-        .line("#define " + macro)
-        .line()
-        .line("#include \"utils/plugin_utils.h\"")
-        .line();
-    StartNamespace();
-    CodeGenAttrStruct(plugin);
-    EndNamespace();
-    this->stack_.line("#endif // " + macro);
-  }
-
-  /*! \brief Codegen attr struct for plugin*/
-  virtual void CodeGenAttrStruct(const Plugin& plugin) {
+  /*! \brief Codegen attr struct declare for plugin*/
+  virtual void CodeGenAttrDeclare(const Plugin& plugin) {
     this->stack_.struct_start(AttrClsName(plugin)).comment("define attributes");
     for (const auto& attr : plugin->attrs) {
-      this->stack_.declare(attr->type, attr->name);
+      this->stack_.declare(ConvertAttrType(attr->type), attr->name);
       if (attr->default_value.size() > 0) {
         this->stack_.declare_arg(attr->default_value);
       }
@@ -199,40 +210,36 @@ class BasePluginCodeGen {
       this->stack_.line("out << \"| " + attr->name + "(" + attr->type + ")=\" << attrs." +
                         attr->name + ";");
     }
-    this->stack_.func_end("out");
-    CodeGenAttrSerialize(plugin);
-    this->stack_.struct_end();
+    this->stack_.func_end("out").struct_end();
   }
 
-  /*! \brief Codegen attr serilaze/deserialize for plugin*/
-  virtual void CodeGenAttrSerialize(const Plugin& plugin) {}
+  /*! \brief Get plugin attr define for plugin*/
+  virtual void CodeGenAttrDefine(const Plugin& plugin) {}
 
-  /*! \brief Get plugin sources*/
-  virtual void CodeGenPluginSource(const Plugin& plugin) {
+  /*! \brief Get plugin op source*/
+  virtual void CodeGenPluginOp(const Plugin& plugin) {
     CodeGenHeader(plugin);
     StartNamespace();
-    CodeGenDefine(plugin);
-    CodeGenRegister(plugin);
+    CodeGenOpDefine(plugin);
+    CodeGenOpRegister(plugin);
     EndNamespace();
   }
 
   /*! \brief Codegen define for plugin*/
-  virtual void CodeGenDefine(const Plugin& plugin) {}
+  virtual void CodeGenOpDefine(const Plugin& plugin) = 0;
 
   /*! \brief Codegen register for plugin*/
-  virtual void CodeGenRegister(const Plugin& plugin) {}
+  virtual void CodeGenOpRegister(const Plugin& plugin) = 0;
+
+  /*! \brief Get plugin runtime source*/
+  virtual void CodeGenPluginRuntime(const Plugin& plugin) {}
 
   /*! \brief Codegen cmake file*/
   virtual void CodeGenCmake(const std::set<String>& devices) {}
 
   /*! \brief Codegen manager utils*/
   virtual void CodeGenManagerUtils() {
-    this->stack_.line("import os")
-        .line("import shutil")
-        .line("import ctypes")
-        .line("form typing import Any, List")
-        .line()
-        .func_def("to_string", "str")
+    this->stack_.func_def("to_string", "str")
         .func_arg("value", "Any")
         .func_start()
         .switch_start("isinstance(value, (list, tuple))")
@@ -240,13 +247,18 @@ class BasePluginCodeGen {
         .switch_case("isinstance(value, bool)")
         .assign("str_value", "\"1\" if value else \"0\"")
         .switch_case()
-        .assign("str_value", "value")
+        .assign("str_value", "str(value)")
         .switch_end()
         .func_end("str_value");
   }
 
   /*! \brief Codegen manager imports*/
-  virtual void CodeGenManagerImports() { this->stack_.line("from .utils import *"); }
+  virtual void CodeGenManagerImports() {
+    this->stack_.line("import os")
+        .line("import shutil")
+        .line("import ctypes")
+        .line("from typing import Any, List");
+  }
 
   /*! \brief Codegen manager methods*/
   virtual void CodeGenManagerMethods() {
@@ -278,7 +290,7 @@ class BasePluginCodeGen {
   virtual void CodeGenPluginManager(const Plugin& plugin) = 0;
 
   /*! \brief Codegen convert function for plugin*/
-  virtual const String CodeGenPluginConvert(const Plugin& plugin) = 0;
+  virtual const String CodeGenPluginConvert(const Plugin& plugin) { return plugin->name; }
 
   /*! \brief Change code stack to cpp source*/
   const String ToCppSource(const std::string& print_options = "") {
@@ -288,7 +300,7 @@ class BasePluginCodeGen {
     }
     this->stack_.Reset();
     return printer.GetString();
-  };
+  }
 
   /*! \brief Change code stack to python source*/
   const String ToPySource(const std::string& print_options = "") {
@@ -298,16 +310,45 @@ class BasePluginCodeGen {
     }
     this->stack_.Reset();
     return printer.GetString();
-  };
+  }
 
   /*! \brief Get class name for attr*/
-  const String AttrClsName(const Plugin& plugin) const { return plugin->name + "_attr"; }
-
-  /*! \brief Get class name for op define*/
-  const String OpClsName(const Plugin& plugin) const { return plugin->name + "_op"; }
+  const String AttrClsName(const Plugin& plugin) const { return plugin->name + "Attrs"; }
 
   /*! \brief Get converter name for plugin*/
-  const String ConverterName(const Plugin& plugin) const { return plugin->name + "_converter"; }
+  const String ConverterName(const Plugin& plugin) const { return plugin->name + "Converter"; }
+
+  /*! \brief Check if the type is list type. */
+  bool IsListType(const String& type) { return StringUtils::StartsWith(type, "list"); }
+
+  /*! \brief Get type of element. */
+  const String GetEleType(const String& type) {
+    if (!IsListType(type)) {
+      return "";
+    }
+    return StringUtils::Replace(StringUtils::Replace(type, "list(", ""), ")", "");
+  }
+
+  /*! \brief Type name in framework*/
+  virtual const String ConvertAttrType(const String& type) {
+    if (IsListType(type)) {
+      const auto& ele_type = GetEleType(type);
+      return "std::vector<" + ConvertAttrType(ele_type) + ">";
+    }
+    if (type == "int64") {
+      return "int64_t";
+    }
+    if (type == "int32" || type == "int") {
+      return "int32_t";
+    }
+    if (type == "int8") {
+      return "int8_t";
+    }
+    if (type == "string") {
+      return "std::string";
+    }
+    return type;
+  }
 
   /*!
    * \brief Compare version with version in config

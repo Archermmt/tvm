@@ -25,12 +25,12 @@ from .register import register_plugin
 def build_plugins(
     plugins: Dict[str, dict],
     frameworks: List[str],
-    output_folder: msc_utils.MSCDirectory,
+    workspace: msc_utils.MSCDirectory = None,
     codegen_config: Optional[Dict[str, str]] = None,
     cpp_print_config: Optional[Dict[str, str]] = None,
     py_print_config: Optional[Dict[str, str]] = None,
     externs_dir: msc_utils.MSCDirectory = None,
-    workspace: msc_utils.MSCDirectory = None,
+    on_debug:bool=False
 ):
     """Build the plugins
 
@@ -40,8 +40,8 @@ def build_plugins(
         The plugins define.
     frameworks: list<str>
         The frameworks for plugin.
-    output_folder: MSCDirectory:
-        The output folder.
+    workspace: MSCDirectory
+        The workspace folder.
     codegen_config: dict<string, string>
         The config to generate code.
     cpp_print_config: dict<string, string>
@@ -50,11 +50,12 @@ def build_plugins(
         The config to print python code.
     externs_dir: MSCDirectory
         The extern sources folder.
-    workspace: MSCDirectory
-        The workspace folder.
+    on_debug: bool
+        Whether to debug the building.
     """
 
-    workspace = workspace or msc_utils.msc_dir(keep_history=False, cleanup=True)
+    workspace = workspace or msc_utils.msc_dir("msc_plugin")
+    
     # register the plugins
     extern_sources, extern_libs = {}, {}
     for name, plugin in plugins.items():
@@ -64,22 +65,21 @@ def build_plugins(
     # build plugins for frameworks
     codegens = {}
     for framework in frameworks:
+        build_folder = workspace.create_dir("source_"+framework,keep_history=on_debug, cleanup=not on_debug)
         codegen = get_codegen(
             framework,
             codegen_config,
             cpp_print_config=cpp_print_config,
             py_print_config=py_print_config,
-            build_folder=workspace.create_dir(framework),
-            output_folder=output_folder,
+            build_folder=build_folder,
+            output_folder=workspace,
             extern_sources=extern_sources,
             extern_libs=extern_libs,
         )
-        libs_file = codegen.build_libs()
-        print("libs_file " + str(libs_file))
-        if codegen.need_manager:
-            files = codegen.build_manager()
-            print("manager files " + str(files))
-        raise Exception("stop here!!")
+        if len(codegen.lib_folder.listdir())==0:
+            codegen.build_libs()
+        if codegen.need_manager and len(codegen.manager_folder.listdir())==0:
+            codegen.build_manager()
         codegens[framework] = codegen
     return codegens
 
@@ -87,12 +87,12 @@ def build_plugins(
 def build_plugins_manager(
     plugins: Dict[str, dict],
     frameworks: List[str],
-    output_folder: msc_utils.MSCDirectory,
+    workspace: msc_utils.MSCDirectory = None,
     codegen_config: Optional[Dict[str, str]] = None,
     cpp_print_config: Optional[Dict[str, str]] = None,
     py_print_config: Optional[Dict[str, str]] = None,
     externs_dir: msc_utils.MSCDirectory = None,
-    workspace: msc_utils.MSCDirectory = None,
+    on_debug:bool=False
 ) -> Dict[str, Any]:
     """Build the plugins and load plugin manager
 
@@ -102,8 +102,8 @@ def build_plugins_manager(
         The plugins define.
     frameworks: list<str>
         The frameworks for plugin.
-    output_folder: MSCDirectory:
-        The output folder.
+    workspace: MSCDirectory
+        The workspace folder.
     codegen_config: dict<string, string>
         The config to generate code.
     cpp_print_config: dict<string, string>
@@ -112,8 +112,8 @@ def build_plugins_manager(
         The config to print python code.
     externs_dir: MSCDirectory
         The extern sources folder.
-    workspace: MSCDirectory
-        The workspace folder.
+    on_debug: bool
+        Whether to debug the building.
 
     Returns
     -------
@@ -124,16 +124,22 @@ def build_plugins_manager(
     codegens = build_plugins(
         plugins,
         frameworks,
-        output_folder,
+        workspace,
         codegen_config=codegen_config,
         cpp_print_config=cpp_print_config,
         py_print_config=py_print_config,
         externs_dir=externs_dir,
-        workspace=workspace,
+        on_debug=on_debug,
     )
+    managers={}
+    for name, codegen in codegens.items():
+        manager_file=codegen.manager_folder.relpath("manager.py")
+        manager_cls = msc_utils.load_callable(manager_file + ":PluginManager" )                    
+        managers[name]=manager_cls(codegen.lib_folder.path)
+    return managers
 
 
-def build_plugins_wheel(
+def pack_plugins_wheel(
     project_name: str,
     plugins: Dict[str, dict],
     frameworks: List[str],
@@ -142,7 +148,7 @@ def build_plugins_wheel(
     cpp_print_config: Optional[Dict[str, str]] = None,
     py_print_config: Optional[Dict[str, str]] = None,
     externs_dir: msc_utils.MSCDirectory = None,
-    workspace: msc_utils.MSCDirectory = None,
+    on_debug:bool=False,
 ) -> str:
     """Build the plugins and build to wheel
 
@@ -164,8 +170,8 @@ def build_plugins_wheel(
         The config to print python code.
     externs_dir: MSCDirectory
         The extern sources folder.
-    workspace: MSCDirectory
-        The workspace folder.
+    on_debug: bool
+        Whether to debug the building.
 
     Returns
     -------
@@ -181,5 +187,5 @@ def build_plugins_wheel(
         cpp_print_config=cpp_print_config,
         py_print_config=py_print_config,
         externs_dir=externs_dir,
-        workspace=workspace,
+        on_debug=on_debug,
     )

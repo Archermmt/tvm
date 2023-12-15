@@ -50,6 +50,8 @@ class CppPrinter : public MSCBasePrinter {
     endlines_.push_back(true);
   }
 
+  static const String Empty() { return "empty"; }
+
  protected:
   /*! * \brief Print a LiteralDoc to cpp format*/
   void PrintTypedDoc(const LiteralDoc& doc) final;
@@ -134,6 +136,9 @@ class CppPrinter : public MSCBasePrinter {
       output_ << ";";
     }
   }
+
+  /*! \brief Check if the doc is empty doc*/
+  bool IsEmptyDoc(const ExprDoc& doc);
 
   /*! \brief Print block with indent*/
   void PrintIndentedBlock(const Array<StmtDoc>& docs);

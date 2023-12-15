@@ -118,6 +118,11 @@ void BaseStack::FuncEnd(const String& ret_val) {
   PushDoc(FunctionDoc(func->name, func->args, func->decorators, func->return_type, body));
 }
 
+void BaseStack::FuncEnd(const ExprDoc& ret_val) {
+  PushDoc(ReturnDoc(ret_val));
+  FuncEnd("");
+}
+
 void BaseStack::ClassDef(const String& class_name) {
   PushDoc(ClassDoc(IdDoc(class_name), Array<ExprDoc>(), Array<StmtDoc>()));
 }

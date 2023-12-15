@@ -18,11 +18,15 @@
 """ Test Plugin in MSC. """
 
 import pytest
+import numpy as np
 
 import torch
 from torch import nn
 
 import tvm.testing
+from tvm import relax
+from tvm.relax.transform import BindParams
+from tvm.script import relax as R
 from tvm.contrib.msc.plugin import build_plugins_manager
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
@@ -53,7 +57,8 @@ template <typename TAttr>
 std::vector<MetaTensor> my_relu_infer(const std::vector<MetaTensor>& inputs, const TAttr& attrs,
                                       bool is_runtime) {
   std::vector<MetaTensor> outputs;
-  outputs.push_back(MetaTensor(inputs[0].shape(), inputs[0].layout()));
+  outputs.push_back(
+      MetaTensor(inputs[0].shape(), inputs[0].data_type(), inputs[0].device(), inputs[0].layout()));
   return outputs;
 }
 
@@ -172,7 +177,7 @@ def _create_plugin(externs_dir):
     with open(externs_dir.relpath("externs.cu"), "w") as f:
         f.write(_get_externs_cu())
     return {
-        "my_relu": {
+        "MyRelu": {
             "inputs": [{"name": "input", "dtype": "T"}],
             "outputs": [{"name": "output", "dtype": "T"}],
             "attrs": [{"name": "max_val", "type": "float"}],
@@ -194,17 +199,17 @@ def _create_plugin(externs_dir):
     }
 
 
-def _get_model(torch_manager):
+def _get_torch_model(torch_manager):
     """Build model with plugin"""
 
     class MyModel(nn.Module):
         def __init__(self):
             super(MyModel, self).__init__()
             self.conv = torch.nn.Conv2d(3, 6, 7, bias=True)
-            self.relu = torch_manager.my_relu(max_val=12)
+            self.relu = torch_manager.MyRelu(max_val=0.5)
             self.maxpool = nn.MaxPool2d(kernel_size=[1, 1])
 
-        def forward(self, c):
+        def forward(self, x):
             x = self.conv(x)
             x = self.relu(x)
             return self.maxpool(x)
@@ -212,23 +217,95 @@ def _get_model(torch_manager):
     return MyModel()
 
 
-def test_torch_plugin():
-    """Test plugin in torch"""
+def _get_tvm_model(tvm_manager):
+    """Build model with plugin"""
 
-    externs_dir = msc_utils.msc_dir("msc_externs")
-    install_dir = msc_utils.msc_dir("msc_plugins")
-    workspace = msc_utils.msc_dir("msc_workspace")
+    block_builder = relax.BlockBuilder()
+    weights = np.random.rand(6, 3, 7, 7).astype("float32")
+    x = relax.Var("x", R.Tensor((1, 3, 224, 224), "float32"))
+    w = relax.Var("w", R.Tensor(weights.shape, weights.dtype.name))
+    inputs = [x, w]
+    with block_builder.function(name="main", params=inputs.copy()):
+        with block_builder.dataflow():
+            x = relax.op.nn.conv2d(x, w)
+            x = block_builder.emit(x, "conv2d")
+            x = tvm_manager.MyRelu(x, max_val=0.5)
+            x = block_builder.emit(x, "relu")
+            x = relax.op.nn.max_pool2d(x)
+            x = block_builder.emit(x, "max_pool2d")
+            x = block_builder.emit_output(x)
+        block_builder.emit_func_output(x)
+    mod = block_builder.finalize()
+    return BindParams("main", {"w": weights})(mod)
+
+
+def _build_plugin(frameworks):
+    test_dir = msc_utils.msc_dir("msc_plugin")
+    externs_dir = test_dir.create_dir("externs")
+    install_dir = test_dir.create_dir("install")
     plugin = _create_plugin(externs_dir)
     managers = build_plugins_manager(
-        plugin, [MSCFramework.TORCH], install_dir, externs_dir=externs_dir, workspace=workspace
+        plugin, frameworks, install_dir, externs_dir=externs_dir, on_debug=True
     )
+    # test_dir.destory()
+    return managers
 
-    model = _get_model()
-    # externs_dir.destory()
-    # install_dir.destory()
-    # workspace.destory()
+
+def _run_relax(relax_mod, target, data):
+    target = tvm.target.Target(target)
+    relax_mod = tvm.relax.transform.LegalizeOps()(relax_mod)
+    with tvm.transform.PassContext(opt_level=3):
+        relax_exec = tvm.relax.build(relax_mod, target)
+        runnable = tvm.relax.VirtualMachine(relax_exec, tvm.cpu())
+    return runnable["main"](data).asnumpy()
+
+
+def _test_tvm_plugin(target):
+    """Test plugin in tvm"""
+
+    managers = _build_plugin([MSCFramework.TVM])
+    model = _get_tvm_model(managers[MSCFramework.TVM])
+    print("model " + str(model))
+    tvm_data = tvm.nd.array(np.random.rand(1, 3, 224, 224).astype("float32"))
+    outputs = _run_relax(model, target, tvm_data)
+    assert outputs.min() >= 0 and outputs.max() <= 0.5
+
+
+def test_tvm_plugin_cpu():
+    """Test plugin in tvm on cpu"""
+
+    _test_tvm_plugin("llvm")
+
+
+@tvm.testing.requires_gpu
+def test_tvm_plugin_gpu():
+    """Test plugin in tvm on cpu"""
+
+    _test_tvm_plugin("cuda")
+
+
+@pytest.mark.parametrize("compile_type", ["", MSCFramework.TORCH, MSCFramework.TVM])
+def test_torch_plugin(compile_type):
+    """Test plugin in torch"""
+
+    frameworks = [MSCFramework.TORCH]
+    if compile_type:
+        frameworks.append(MSCFramework.TVM)
+    managers = _build_plugin(frameworks)
+    model = _get_torch_model(managers[MSCFramework.TORCH])
+    torch_data = torch.from_numpy(np.random.rand(1, 3, 224, 224).astype("float32"))
+    if torch.cuda.is_available():
+        model = model.to(torch.device("cuda:0"))
+        torch_data = torch_data.to(torch.device("cuda:0"))
+
+    golden = model(torch_data)
+    print("golden " + str(msc_utils.inspect_array(golden)))
+    assert golden.min() >= 0 and golden.max() <= 0.5
+    if compile_type:
+        print("test compile on " + str(compile_type))
 
 
 if __name__ == "__main__":
     # tvm.testing.main()
-    test_torch_plugin()
+    # test_tvm_plugin_cpu()
+    test_torch_plugin("")

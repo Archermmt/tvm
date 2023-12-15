@@ -125,8 +125,7 @@ void RelaxCodeGen::CodeGenGraph() {
   } else {
     stack_.call_arg(DocUtils::ToListDoc(idx_exits));
   }
-
-  stack_.scope_end().assign("mod", "block_builder.get()").func_end("mod");
+  stack_.scope_end().assign("mod", "block_builder.finalize()").func_end("mod");
 }
 
 void RelaxCodeGen::CodeGenInference() {

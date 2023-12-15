@@ -79,8 +79,10 @@ void CppPrinter::PrintTypedDoc(const CallDoc& doc) {
 void CppPrinter::PrintTypedDoc(const AssignDoc& doc) {
   ICHECK(doc->lhs.defined()) << "lhs should be given for assign";
   if (doc->annotation.defined()) {
-    PrintDoc(doc->annotation.value(), false);
-    output_ << " ";
+    if (!IsEmptyDoc(doc->annotation.value())) {
+      PrintDoc(doc->annotation.value(), false);
+      output_ << " ";
+    }
   }
   PrintDoc(doc->lhs, false);
   if (doc->rhs.defined()) {
@@ -158,11 +160,13 @@ void CppPrinter::PrintTypedDoc(const FunctionDoc& doc) {
     ICHECK(arg_doc->comment == nullptr) << "Function arg cannot have comment attached to them.";
   }
   if (doc->return_type.defined()) {
-    PrintDoc(doc->return_type.value(), false);
+    if (!IsEmptyDoc(doc->return_type.value())) {
+      PrintDoc(doc->return_type.value(), false);
+      output_ << " ";
+    }
   } else {
-    output_ << "void";
+    output_ << "void ";
   }
-  output_ << " ";
   PrintDoc(doc->name, false);
   output_ << "(";
   PrintJoinedDocs(doc->args, ", ");
@@ -171,7 +175,9 @@ void CppPrinter::PrintTypedDoc(const FunctionDoc& doc) {
     output_ << " {";
     PrintIndentedBlock(doc->body);
     if (doc->return_type.defined()) {
-      Endline();
+      if (!IsEmptyDoc(doc->return_type.value())) {
+        Endline();
+      }
     }
     NewLine();
     output_ << "}";
@@ -189,9 +195,10 @@ void CppPrinter::PrintTypedDoc(const ClassDoc& doc) {
   for (const StmtDoc& d : doc->body) {
     PrintDoc(d);
   }
-  NewLine(false);
   output_ << "}";
   Endline();
+  output_ << " // class ";
+  PrintDoc(doc->name, false);
 }
 
 void CppPrinter::PrintTypedDoc(const CommentDoc& doc) {
@@ -240,9 +247,10 @@ void CppPrinter::PrintTypedDoc(const StructDoc& doc) {
     PrintDoc(d);
   }
   DecreaseIndent();
-  NewLine(false);
   output_ << "}";
   Endline();
+  output_ << " // struct ";
+  PrintDoc(doc->name, false);
 }
 
 void CppPrinter::PrintTypedDoc(const ConstructorDoc& doc) {
@@ -263,6 +271,14 @@ void CppPrinter::PrintTypedDoc(const ConstructorDoc& doc) {
     Endline();
   }
   NewLine(false);
+}
+
+bool CppPrinter::IsEmptyDoc(const ExprDoc& doc) {
+  if (!doc->IsInstance<IdDocNode>()) {
+    return false;
+  }
+  const auto& id_doc = Downcast<IdDoc>(doc);
+  return id_doc->name == CppPrinter::Empty();
 }
 
 void CppPrinter::PrintIndentedBlock(const Array<StmtDoc>& docs) {

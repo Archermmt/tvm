@@ -41,7 +41,7 @@ namespace tvm {
 namespace contrib {
 namespace msc {
 
-enum MetaDataType {
+typedef enum {
   UINT8 = 0,
   INT8 = 1,
   INT16 = 2,
@@ -50,8 +50,14 @@ enum MetaDataType {
   FLOAT16 = 5,
   FLOAT32 = 6,
   FLOAT64 = 7,
-  UNKNOWN
-};
+  UNKNOWN = 8,
+} MetaDataType;
+
+typedef enum {
+  CPU = 0,
+  CUDA = 1,
+  COMMON = 2,
+} MetaDevice;
 
 class MetaShape {
  public:
@@ -221,14 +227,19 @@ class MetaLayout {
 
 class MetaTensor {
  public:
-  MetaTensor(const MetaShape& shape, const MetaLayout& layout = MetaLayout())
-      : shape_(shape), layout_(layout) {}
+  MetaTensor(const MetaShape& shape, const MetaDataType& data_type, const MetaDevice& device,
+             const MetaLayout& layout = MetaLayout())
+      : shape_(shape), data_type_(data_type), device_(device), layout_(layout) {}
 
   inline void set_shape(const MetaShape& shape) { shape_ = shape; }
 
   inline void set_layout(const MetaLayout& layout) { layout_ = layout; }
 
   inline const MetaShape shape() const { return shape_; }
+
+  inline const MetaDataType data_type() const { return data_type_; }
+
+  inline const MetaDevice device() const { return device_; }
 
   inline const std::vector<int64_t> meta_shape() const { return shape_.shape(); }
 
@@ -260,18 +271,23 @@ class MetaTensor {
 
  private:
   MetaShape shape_;
+  MetaDataType data_type_;
+  MetaDevice device_;
   MetaLayout layout_;
 };
 
 template <typename T>
 class DataTensor : public MetaTensor {
  public:
-  DataTensor(const MetaShape shape, const MetaLayout layout, T* data) : MetaTensor(shape, layout) {
+  DataTensor(const MetaShape shape, const MetaDataType& data_type, const MetaDevice& device,
+             const MetaLayout layout, T* data)
+      : MetaTensor(shape, data_type, device, layout) {
     data_ = data;
   }
 
-  DataTensor(const MetaShape shape, const MetaLayout layout, const T* data)
-      : MetaTensor(shape, layout) {
+  DataTensor(const MetaShape shape, const MetaDataType& data_type, const MetaDevice& device,
+             const MetaLayout layout, const T* data)
+      : MetaTensor(shape, data_type, device, layout) {
     data_ = const_cast<T*>(data);
   }
 
@@ -321,6 +337,8 @@ def get_plugin_utils_h_code() -> str:
 #ifdef PLUGIN_SUPPORT_TVM
 #include <tvm/relax/expr.h>
 #include <tvm/runtime/vm/memory_manager.h>
+
+#include "tvm/../../src/contrib/msc/core/utils.h"
 #endif
 
 #ifdef PLUGIN_SUPPORT_TORCH
@@ -450,7 +468,7 @@ class SerializeUtils {
   }
 };
 
-class DataTypeUtils {
+class DataUtils {
  public:
   static MetaDataType ToMetaType(const std::string& name) {
     MetaDataType dtype;
@@ -477,35 +495,26 @@ class DataTypeUtils {
   }
 };
 
+class DeviceUtils {
+ public:
+  static MetaDevice ToMetaDevice(const std::string& name) {
+    MetaDevice device;
+    if (name == "llvm" || name == "cpu") {
+      device = MetaDevice::CPU;
+    } else if (name == "cuda" || name == "gpu") {
+      device = MetaDevice::CUDA;
+    } else {
+      device = MetaDevice::COMMON;
+    }
+    return device;
+  }
+};
+
 #ifdef PLUGIN_SUPPORT_TVM
 using namespace tvm::relax;
 using namespace tvm::runtime;
 class TVMUtils {
  public:
-  static DataType ToTVMType(const std::string dtype) {
-    DataType tvm_type;
-    if (dtype == "int8") {
-      tvm_type = DataType::Int(8);
-    } else if (dtype == "uint8" || dtype == "char") {
-      tvm_type = DataType::UInt(8);
-    } else if (dtype == "int16") {
-      tvm_type = DataType::Int(16);
-    } else if (dtype == "int32" || dtype == "int") {
-      tvm_type = DataType::Int(32);
-    } else if (dtype == "int64" || dtype == "long" || dtype == "long long") {
-      tvm_type = DataType::Int(64);
-    } else if (dtype == "float16" || dtype == "half") {
-      tvm_type = DataType::Float(16);
-    } else if (dtype == "float32" || dtype == "float") {
-      tvm_type = DataType::Float(32);
-    } else if (dtype == "float64" || dtype == "double") {
-      tvm_type = DataType::Float(64);
-    } else {
-      throw std::runtime_error(("Unsupported type " + dtype).c_str());
-    }
-    return tvm_type;
-  }
-
   static MetaDataType ToMetaType(const DataType& dtype) {
     MetaDataType meta_type;
     if (dtype.code() == 0 && dtype.bits() == 8) {
@@ -554,29 +563,47 @@ class TVMUtils {
     return meta_type;
   }
 
-  static Array<tvm::PrimExpr> ToTVMShape(const MetaShape& meta_shape) {
-    Array<tvm::PrimExpr> tvm_shape;
-    for (size_t i = 0; i < meta_shape.Ndim(); i++) {
-      auto dim = meta_shape.DimAt(i);
-      if (dim == -1) {
-        tvm_shape.push_back(tir::Any());
+  static MetaDevice ToMetaDevice(const Optional<VDevice>& device) {
+    if (device.defined()) {
+      MetaDevice meta_type;
+      const auto& d_name = device.value()->target->kind->name;
+      if (d_name == "llvm") {
+        meta_type = MetaDevice::CPU;
+      } else if (d_name == "cuda") {
+        meta_type = MetaDevice::CUDA;
       } else {
-        tvm_shape.push_back(Integer(dim));
+        meta_type = MetaDevice::COMMON;
       }
+      return meta_type;
     }
-    return tvm_shape;
+    return MetaDevice::COMMON;
   }
 
-  static MetaShape ToMetaShape(const Array<tvm::PrimExpr>& tvm_shape) {
-    std::vector<int64_t> shape_data;
-    for (auto s : tvm_shape) {
-      if (s->IsInstance<tvm::IntImmNode>()) {
-        shape_data.push_back(Downcast<Integer>(s)->value);
-      } else {
-        shape_data.push_back(-1);
-      }
+  static MetaDevice ToMetaDevice(const DLDeviceType& device) {
+    MetaDevice meta_type;
+    if (device == DLDeviceType::kDLCPU) {
+      meta_type = MetaDevice::CPU;
+    } else if (device == DLDeviceType::kDLCUDA) {
+      meta_type = MetaDevice::CUDA;
+    } else {
+      meta_type = MetaDevice::COMMON;
     }
-    return MetaShape(shape_data);
+    return meta_type;
+  }
+
+  static MetaShape ToMetaShape(const Optional<Array<PrimExpr>>& tvm_shape) {
+    if (tvm_shape.defined()) {
+      std::vector<int64_t> shape_data;
+      for (auto s : tvm_shape.value()) {
+        if (s->IsInstance<tvm::IntImmNode>()) {
+          shape_data.push_back(Downcast<Integer>(s)->value);
+        } else {
+          shape_data.push_back(-1);
+        }
+      }
+      return MetaShape(shape_data);
+    }
+    return MetaShape();
   }
 
   static MetaShape ToMetaShape(DLTensor* tensor, bool as_data = true) {
@@ -596,22 +623,67 @@ class TVMUtils {
     return MetaShape(dims);
   }
 
+  static MetaTensor ToMetaTensor(const Expr& expr) {
+    const auto* sinfo = GetStructInfoAs<TensorStructInfoNode>(expr);
+    const auto& layout = MetaLayout(SpanUtils::GetAttr(expr->span, "layout"));
+    return MetaTensor(ToMetaShape(sinfo->GetShape()), ToMetaType(sinfo->dtype),
+                      ToMetaDevice(sinfo->vdevice), layout);
+  }
+
+  template <typename T>
+  static DataTensor<T> ToDataTensor(DLTensor* tensor, bool read_only, const MetaLayout& layout) {
+    if (read_only) {
+      return DataTensor<T>(ToMetaShape(tensor, false), ToMetaType(tensor->dtype),
+                           ToMetaDevice(tensor->device), layout, (const T*)(tensor->data));
+    } else {
+      return DataTensor<T>(ToMetaShape(tensor, false), ToMetaType(tensor->dtype),
+                           ToMetaDevice(tensor->device), layout, (T*)(tensor->data));
+    }
+  }
+
+  static DataType ToTVMType(const MetaDataType& dtype) {
+    DataType tvm_type;
+    if (dtype == MetaDataType::INT8) {
+      tvm_type = DataType::Int(8);
+    } else if (dtype == MetaDataType::INT16) {
+      tvm_type = DataType::Int(16);
+    } else if (dtype == MetaDataType::INT32) {
+      tvm_type = DataType::Int(32);
+    } else if (dtype == MetaDataType::INT64) {
+      tvm_type = DataType::Int(64);
+    } else if (dtype == MetaDataType::FLOAT16) {
+      tvm_type = DataType::Float(16);
+    } else if (dtype == MetaDataType::FLOAT32) {
+      tvm_type = DataType::Float(32);
+    } else if (dtype == MetaDataType::FLOAT64) {
+      tvm_type = DataType::Float(64);
+    } else {
+      throw std::runtime_error("Unsupported type");
+    }
+    return tvm_type;
+  }
+
+  static DataType ToTVMType(const std::string& dtype) {
+    return ToTVMType(DataUtils::ToMetaType(dtype));
+  }
+
+  static Array<tvm::PrimExpr> ToTVMShape(const MetaShape& meta_shape) {
+    Array<tvm::PrimExpr> tvm_shape;
+    for (size_t i = 0; i < meta_shape.Ndim(); i++) {
+      auto dim = meta_shape.DimAt(i);
+      if (dim == -1) {
+        tvm_shape.push_back(tir::Any());
+      } else {
+        tvm_shape.push_back(Integer(dim));
+      }
+    }
+    return tvm_shape;
+  }
+
   static void FillDLShape(const MetaShape& shape, DLTensor* data) {
     auto shape_data = static_cast<int64_t*>(data->data);
     for (size_t i = 0; i < shape.Ndim(); i++) {
       shape_data[i] = shape.DimAt(i);
-    }
-  }
-
-  template <typename T>
-  static DataTensor<T> ToDataTensor(DLTensor* tensor, bool read_only,
-                                    const std::string& layout = "") {
-    if (read_only) {
-      return DataTensor<T>(TVMUtils::ToMetaShape(tensor, false), MetaLayout(layout),
-                           (const T*)(tensor->data));
-    } else {
-      return DataTensor<T>(TVMUtils::ToMetaShape(tensor, false), MetaLayout(layout),
-                           (T*)(tensor->data));
     }
   }
 
@@ -634,52 +706,38 @@ class TVMUtils {
 #ifdef PLUGIN_SUPPORT_TORCH
 class TorchUtils {
  public:
-  static torch::ScalarType ToTorchType(const std::string& dtype) {
-    torch::ScalarType torch_type;
-    if (dtype == "int8") {
-      torch_type = torch::kChar;
-    } else if (dtype == "uint8") {
-      torch_type = torch::kUInt8;
-    } else if (dtype == "char") {
-      torch_type = torch::kChar;
-    } else if (dtype == "int32" || dtype == "int") {
-      torch_type = torch::kInt;
-    } else if (dtype == "int64") {
-      torch_type = torch::kInt64;
-    } else if (dtype == "long" || dtype == "long long") {
-      torch_type = torch::kLong;
-    } else if (dtype == "float16" || dtype == "half") {
-      torch_type = torch::kFloat16;
-    } else if (dtype == "float32" || dtype == "float") {
-      torch_type = torch::kFloat;
-    } else if (dtype == "float64" || dtype == "double") {
-      torch_type = torch::kDouble;
+  static MetaDataType ToMetaType(const torch::ScalarType& dtype) {
+    MetaDataType meta_type;
+    if (dtype == torch::kChar) {
+      meta_type = MetaDataType::INT8;
+    } else if (dtype == torch::kInt) {
+      meta_type = MetaDataType::INT32;
+    } else if (dtype == torch::kInt64) {
+      meta_type = MetaDataType::INT64;
+    } else if (dtype == torch::kLong) {
+      meta_type = MetaDataType::INT64;
+    } else if (dtype == torch::kFloat16) {
+      meta_type = MetaDataType::FLOAT16;
+    } else if (dtype == torch::kFloat) {
+      meta_type = MetaDataType::FLOAT32;
+    } else if (dtype == torch::kDouble) {
+      meta_type = MetaDataType::FLOAT64;
     } else {
-      throw std::runtime_error(("Unsupported type " + dtype).c_str());
+      meta_type = MetaDataType::UNKNOWN;
     }
-    return torch_type;
+    return meta_type;
   }
 
-  static std::string TypeName(const torch::ScalarType& dtype) {
-    std::string dtype_name;
-    if (dtype == torch::kChar) {
-      dtype_name = "char";
-    } else if (dtype == torch::kInt) {
-      dtype_name = "int";
-    } else if (dtype == torch::kInt64) {
-      dtype_name = "int64";
-    } else if (dtype == torch::kLong) {
-      dtype_name = "long";
-    } else if (dtype == torch::kFloat16) {
-      dtype_name = "float16";
-    } else if (dtype == torch::kFloat) {
-      dtype_name = "float32";
-    } else if (dtype == torch::kDouble) {
-      dtype_name = "double";
+  static MetaDevice ToMetaDevice(const torch::Device& device) {
+    MetaDevice meta_type;
+    if (device == torch::kCPU) {
+      meta_type = MetaDevice::CPU;
+    } else if (device == torch::kCUDA) {
+      meta_type = MetaDevice::CUDA;
     } else {
-      dtype_name = "unknown";
+      meta_type = MetaDevice::COMMON;
     }
-    return dtype_name;
+    return meta_type;
   }
 
   static MetaShape ToMetaShape(const torch::Tensor& tensor) {
@@ -692,17 +750,65 @@ class TorchUtils {
 
   static MetaTensor ToMetaTensor(const torch::Tensor& tensor,
                                  const MetaLayout& layout = MetaLayout()) {
-    return MetaTensor(TorchUtils::ToMetaShape(tensor), layout);
+    return MetaTensor(ToMetaShape(tensor), ToMetaType(tensor.scalar_type()),
+                      ToMetaDevice(tensor.device()), layout);
   }
 
   template <typename T>
   static DataTensor<T> ToDataTensor(const torch::Tensor& tensor, const MetaTensor& meta,
                                     bool read_only) {
     if (read_only) {
-      return DataTensor<T>(meta.shape(), meta.layout(), (const T*)(tensor.data_ptr()));
+      return DataTensor<T>(meta.shape(), meta.data_type(), meta.device(), meta.layout(),
+                           (const T*)(tensor.data_ptr()));
     } else {
-      return DataTensor<T>(meta.shape(), meta.layout(), (T*)(tensor.data_ptr()));
+      return DataTensor<T>(meta.shape(), meta.data_type(), meta.device(), meta.layout(),
+                           (T*)(tensor.data_ptr()));
     }
+  }
+
+  static torch::ScalarType ToTorchType(const MetaDataType& dtype) {
+    torch::ScalarType torch_type;
+    if (dtype == MetaDataType::INT8) {
+      torch_type = torch::kChar;
+    } else if (dtype == MetaDataType::INT32) {
+      torch_type = torch::kInt;
+    } else if (dtype == MetaDataType::INT64) {
+      torch_type = torch::kInt64;
+    } else if (dtype == MetaDataType::FLOAT16) {
+      torch_type = torch::kFloat16;
+    } else if (dtype == MetaDataType::FLOAT32) {
+      torch_type = torch::kFloat;
+    } else if (dtype == MetaDataType::FLOAT64) {
+      torch_type = torch::kDouble;
+    } else {
+      throw std::runtime_error("Unsupported type");
+    }
+    return torch_type;
+  }
+
+  static torch::ScalarType ToTorchType(const std::string& dtype) {
+    return ToTorchType(DataUtils::ToMetaType(dtype));
+  }
+
+  static torch::Device ToTorchDevice(const MetaDevice& device) {
+    if (device == MetaDevice::CPU) {
+      return torch::Device(torch::kCPU);
+    }
+    if (device == MetaDevice::CUDA) {
+      return torch::Device(torch::kCUDA);
+    } 
+    return torch::Device(torch::kCPU);
+  }
+
+  static torch::Device ToTorchDevice(const std::string& device) {
+    return ToTorchDevice(DeviceUtils::ToMetaDevice(device));
+  }
+
+  static torch::Tensor MallocTorchTensor(const MetaTensor& tensor) {
+    auto t_type = ToTorchType(tensor.data_type());
+    auto t_device = ToTorchDevice(tensor.device());
+    auto opt = torch::TensorOptions().dtype(t_type).device(t_device);
+    return torch::zeros(tensor.meta_shape(), opt);
   }
 };
 #endif  // PLUGIN_SUPPORT_TORCH
@@ -710,8 +816,8 @@ class TorchUtils {
 #ifdef PLUGIN_SUPPORT_TENSORRT
 
 #ifndef TRT_VERSION_GE
-#define TRT_VERSION_GE(major, minor, patch)                            \
-  ((TRT_MAJOR > major) || (TRT_MAJOR == major && TRT_MINOR > minor) || \
+#define TRT_VERSION_GE(major, minor, patch)                            \\
+  ((TRT_MAJOR > major) || (TRT_MAJOR == major && TRT_MINOR > minor) || \\
    (TRT_MAJOR == major && TRT_MINOR == minor && TRT_PATCH >= patch))
 #endif
 

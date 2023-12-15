@@ -69,12 +69,11 @@ class BasePluginCodeGen(object):
     def setup(self):
         """Set up the codegen"""
 
-        self._libs_dir = self._output_folder.create_dir("libs")
-        self._manager_dir = self._output_folder.create_dir(self.framework)
+        self._lib_folder = self._output_folder.create_dir("libs")
+        self._manager_folder = self._output_folder.create_dir(self.framework)
         self._libs = [os.path.basename(l) for l in self._extern_libs.values()]
-        self._codegen_config.update(
-            {"need_convert": self.need_convert, "install_dir": self._libs_dir.path}
-        )
+        self._libs.extend([os.path.basename(l) for l in self._lib_folder.listdir()])
+        self._codegen_config.update({"install_dir": self._lib_folder.path})
 
     def build_libs(self) -> List[str]:
         """Generate source and build the lib
@@ -86,7 +85,7 @@ class BasePluginCodeGen(object):
         """
 
         codegen_config = msc_utils.dump_dict(self._codegen_config)
-        sources = self.source_getter(codegen_config, self._cpp_print_config, "sources")
+        sources = self.source_getter(codegen_config, self._cpp_print_config, "build")
         with self._build_folder as folder:
             # add depends
             with folder.create_dir("src") as src_folder:
@@ -110,8 +109,8 @@ class BasePluginCodeGen(object):
                 ), "Failed to build plugin under {}, check codegen.log for detail".format(
                     os.getcwd()
                 )
-            self._libs.extend([os.path.basename(l) for l in self._libs_dir.listdir()])
-        return self._libs_dir.listdir(as_abs=True)
+            self._libs.extend([os.path.basename(l) for l in self._lib_folder.listdir()])
+        return self._lib_folder.listdir(as_abs=True)
 
     def build_manager(self) -> List[str]:
         """Generate manager source for plugin
@@ -126,7 +125,7 @@ class BasePluginCodeGen(object):
         codegen_config = msc_utils.dump_dict(self._codegen_config)
         sources = self.source_getter(codegen_config, self._py_print_config, "manager")
         manager_files = []
-        with self._manager_dir as folder:
+        with self._manager_folder as folder:
             for name, source in sources.items():
                 manager_files.append(folder.add_file(name, source))
         return manager_files
@@ -140,22 +139,30 @@ class BasePluginCodeGen(object):
         return True
 
     @property
-    def need_convert(self):
-        return True
-
-    @property
     def framework(self):
         return MSCFramework.MSC
 
+    @property
+    def lib_folder(self):
+        return self._lib_folder
+
+    @property
+    def manager_folder(self):
+        return self._manager_folder
+
 
 class TVMPluginCodegen(BasePluginCodeGen):
+    def setup(self):
+        """Set up the codegen"""
+
+        super().setup()
+        self._codegen_config.update(
+            {"need_convert": False, "with_runtime": True, "define_attr": True}
+        )
+
     @property
     def source_getter(self):
         return _ffi_api.GetTVMPluginSources
-
-    @property
-    def need_convert(self):
-        return False
 
     @property
     def framework(self):
@@ -168,8 +175,15 @@ class TorchPluginCodegen(BasePluginCodeGen):
 
         import torch.utils
 
-        self._codegen_config["torch_prefix"] = torch.utils.cmake_prefix_path
         super().setup()
+        self._codegen_config.update(
+            {
+                "need_convert": False,
+                "with_runtime": False,
+                "define_attr": True,
+                "torch_prefix": torch.utils.cmake_prefix_path,
+            }
+        )
 
     @property
     def source_getter(self):
@@ -181,13 +195,17 @@ class TorchPluginCodegen(BasePluginCodeGen):
 
 
 class TensorRTPluginCodegen(BasePluginCodeGen):
+    def setup(self):
+        """Set up the codegen"""
+
+        super().setup()
+        self._codegen_config.update(
+            {"need_convert": False, "with_runtime": False, "define_attr": False}
+        )
+
     @property
     def source_getter(self):
         return _ffi_api.GetTensorRTPluginSources
-
-    @property
-    def need_convert(self):
-        return False
 
     @property
     def framework(self):
