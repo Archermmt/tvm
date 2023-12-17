@@ -38,6 +38,7 @@ namespace msc {
  */
 struct TVMPluginCodeGenConfig {
   bool as_relay{false};
+  std::string tvm_root{"tvm"};
   PLUGIN_CODEGEN_CONFIG_MEMBERS
   void Load(dmlc::JSONReader* reader) {
     std::string key;
@@ -45,6 +46,8 @@ struct TVMPluginCodeGenConfig {
     while (reader->NextObjectItem(&key)) {
       if (key == "as_relay") {
         reader->Read(&as_relay);
+      } else if (key == "tvm_root") {
+        reader->Read(&tvm_root);
       } else {
         PLUGIN_CODEGEN_CONFIG_PARSE
       }
@@ -74,6 +77,9 @@ class TVMPluginCodeGen : public BasePluginCodeGen<TVMPluginCodeGenConfig> {
   /*! \brief Codegen register for plugin*/
   void CodeGenOpRegister(const Plugin& plugin) final;
 
+  /*! \brief Get plugin runtime source*/
+  void CodeGenOpRuntime(const Plugin& plugin) final;
+
   /*! \brief Codegen cmake file*/
   void CodeGenCmake(const std::set<String>& devices) final;
 
@@ -90,8 +96,11 @@ class TVMPluginCodeGen : public BasePluginCodeGen<TVMPluginCodeGenConfig> {
   /*! \brief Class name of relax op attr*/
   const String RelaxAttrClsName(const Plugin& plugin) { return plugin->name + "RelaxAttrs"; }
 
+  /*! \brief Codegen compute*/
+  void CodeGenCompute(const Plugin& plugin, const String& device);
+
   /*! \brief Type name in tvm*/
-  const String ConvertTVMAttrType(const String& type) {
+  const String ToTVMType(const String& type) {
     if (type == "string") {
       return "String";
     }
@@ -104,7 +113,15 @@ class TVMPluginCodeGen : public BasePluginCodeGen<TVMPluginCodeGenConfig> {
     if (type == "list(bool)") {
       return "Array<Bool>";
     }
-    return BasePluginCodeGen<TVMPluginCodeGenConfig>::ConvertAttrType(type);
+    return BasePluginCodeGen<TVMPluginCodeGenConfig>::ToCppType(type);
+  }
+
+  /*! \brief Type name from tvm args to cpp*/
+  const String FromTVMArgType(const String& type) {
+    if (type == "float") {
+      return "double";
+    }
+    return BasePluginCodeGen<TVMPluginCodeGenConfig>::ToCppType(type);
   }
 };
 

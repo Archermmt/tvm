@@ -104,11 +104,11 @@ class TorchPluginCodeGen : public BasePluginCodeGen<TorchPluginCodeGenConfig> {
   const String EntryName(const Plugin& plugin) { return plugin->name + "Entry"; }
 
   /*! \brief Type name in torch*/
-  const String ConvertTorchAttrType(const String& type) {
+  const String ToTorchType(const String& type) {
     if (type == "float") {
       return "double";
     }
-    return BasePluginCodeGen<TorchPluginCodeGenConfig>::ConvertAttrType(type);
+    return BasePluginCodeGen<TorchPluginCodeGenConfig>::ToCppType(type);
   }
 };
 

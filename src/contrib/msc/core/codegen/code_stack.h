@@ -70,13 +70,14 @@ class BaseStack {
   void Comment(const String& comment, bool attach = false);
 
   /*! \brief Push typed assign Doc*/
-  void AssignBase(const String& lhs, const ExprDoc& rhs, const String& annotation = "");
+  void AssignBase(const ExprDoc& lhs, const ExprDoc& rhs, const String& annotation = "");
 
-  template <typename T>
-  inline void Assign(const String& lhs, const T& rhs, const String& annotation = "") {
+  template <typename LT, typename RT>
+  inline void Assign(const LT& lhs, const RT& rhs, const String& annotation = "") {
+    const auto& doc_lhs = DocUtils::ToDoc(lhs);
     const auto& doc_rhs = DocUtils::ToDoc(rhs);
     if (doc_rhs.defined()) {
-      AssignBase(lhs, doc_rhs, annotation);
+      AssignBase(doc_lhs, doc_rhs, annotation);
     }
   }
 
@@ -137,7 +138,7 @@ class BaseStack {
   void FuncCall(const String& callee, const String& assign_to = "", const String& caller = "");
 
   /*! \brief Push method call Doc*/
-  void MethodCall(const String& callee);
+  void MethodCall(const String& callee, bool new_line = false);
 
   /*! \brief Cache constructor Doc*/
   void ConstructorDef(const String& constructor_name);
@@ -187,6 +188,7 @@ class BaseStack {
 
   /*! \brief Push for range to cache and start for block*/
   void ForStart(const String& lhs, size_t start, size_t end);
+  void ForStart(const String& lhs, const String& start, const String& end);
 
   /*! \brief End a for block*/
   void ForEnd();
@@ -261,8 +263,8 @@ class BaseStack {
     Comment(comment, attach);                                                                   \
     return *this;                                                                               \
   }                                                                                             \
-  template <typename T>                                                                         \
-  Stack& assign(const String& lhs, const T& rhs, const String& annotation = "") {               \
+  template <typename LT, typename RT>                                                           \
+  Stack& assign(const LT& lhs, const RT& rhs, const String& annotation = "") {                  \
     Assign(lhs, rhs, annotation);                                                               \
     return *this;                                                                               \
   }                                                                                             \
@@ -334,8 +336,8 @@ class BaseStack {
     FuncCall(callee, assign_to, caller);                                                        \
     return *this;                                                                               \
   }                                                                                             \
-  Stack& method_call(const String& callee) {                                                    \
-    MethodCall(callee);                                                                         \
+  Stack& method_call(const String& callee, bool new_line = false) {                             \
+    MethodCall(callee, new_line);                                                               \
     return *this;                                                                               \
   }                                                                                             \
   Stack& constructor_def(const String& func_name) {                                             \
@@ -389,6 +391,10 @@ class BaseStack {
     return *this;                                                                               \
   }                                                                                             \
   Stack& for_start(const String& lhs, size_t start, size_t end) {                               \
+    ForStart(lhs, start, end);                                                                  \
+    return *this;                                                                               \
+  }                                                                                             \
+  Stack& for_start(const String& lhs, const String& start, const String& end) {                 \
     ForStart(lhs, start, end);                                                                  \
     return *this;                                                                               \
   }                                                                                             \

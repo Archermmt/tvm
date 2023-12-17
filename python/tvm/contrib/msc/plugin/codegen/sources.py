@@ -53,12 +53,6 @@ typedef enum {
   UNKNOWN = 8,
 } MetaDataType;
 
-typedef enum {
-  CPU = 0,
-  CUDA = 1,
-  COMMON = 2,
-} MetaDevice;
-
 class MetaShape {
  public:
   MetaShape() { shape_.resize(0); }
@@ -227,9 +221,9 @@ class MetaLayout {
 
 class MetaTensor {
  public:
-  MetaTensor(const MetaShape& shape, const MetaDataType& data_type, const MetaDevice& device,
+  MetaTensor(const MetaShape& shape, const MetaDataType& data_type,
              const MetaLayout& layout = MetaLayout())
-      : shape_(shape), data_type_(data_type), device_(device), layout_(layout) {}
+      : shape_(shape), data_type_(data_type), layout_(layout) {}
 
   inline void set_shape(const MetaShape& shape) { shape_ = shape; }
 
@@ -238,8 +232,6 @@ class MetaTensor {
   inline const MetaShape shape() const { return shape_; }
 
   inline const MetaDataType data_type() const { return data_type_; }
-
-  inline const MetaDevice device() const { return device_; }
 
   inline const std::vector<int64_t> meta_shape() const { return shape_.shape(); }
 
@@ -272,22 +264,20 @@ class MetaTensor {
  private:
   MetaShape shape_;
   MetaDataType data_type_;
-  MetaDevice device_;
   MetaLayout layout_;
 };
 
 template <typename T>
 class DataTensor : public MetaTensor {
  public:
-  DataTensor(const MetaShape shape, const MetaDataType& data_type, const MetaDevice& device,
-             const MetaLayout layout, T* data)
-      : MetaTensor(shape, data_type, device, layout) {
+  DataTensor(const MetaShape shape, const MetaDataType& data_type, const MetaLayout layout, T* data)
+      : MetaTensor(shape, data_type, layout) {
     data_ = data;
   }
 
-  DataTensor(const MetaShape shape, const MetaDataType& data_type, const MetaDevice& device,
-             const MetaLayout layout, const T* data)
-      : MetaTensor(shape, data_type, device, layout) {
+  DataTensor(const MetaShape shape, const MetaDataType& data_type, const MetaLayout layout,
+             const T* data)
+      : MetaTensor(shape, data_type, layout) {
     data_ = const_cast<T*>(data);
   }
 
@@ -336,9 +326,9 @@ def get_plugin_utils_h_code() -> str:
 
 #ifdef PLUGIN_SUPPORT_TVM
 #include <tvm/relax/expr.h>
-#include <tvm/runtime/vm/memory_manager.h>
 
 #include "tvm/../../src/contrib/msc/core/utils.h"
+#include "tvm/../../src/contrib/msc/core/transform/layout_utils.h"
 #endif
 
 #ifdef PLUGIN_SUPPORT_TORCH
@@ -495,21 +485,6 @@ class DataUtils {
   }
 };
 
-class DeviceUtils {
- public:
-  static MetaDevice ToMetaDevice(const std::string& name) {
-    MetaDevice device;
-    if (name == "llvm" || name == "cpu") {
-      device = MetaDevice::CPU;
-    } else if (name == "cuda" || name == "gpu") {
-      device = MetaDevice::CUDA;
-    } else {
-      device = MetaDevice::COMMON;
-    }
-    return device;
-  }
-};
-
 #ifdef PLUGIN_SUPPORT_TVM
 using namespace tvm::relax;
 using namespace tvm::runtime;
@@ -563,34 +538,6 @@ class TVMUtils {
     return meta_type;
   }
 
-  static MetaDevice ToMetaDevice(const Optional<VDevice>& device) {
-    if (device.defined()) {
-      MetaDevice meta_type;
-      const auto& d_name = device.value()->target->kind->name;
-      if (d_name == "llvm") {
-        meta_type = MetaDevice::CPU;
-      } else if (d_name == "cuda") {
-        meta_type = MetaDevice::CUDA;
-      } else {
-        meta_type = MetaDevice::COMMON;
-      }
-      return meta_type;
-    }
-    return MetaDevice::COMMON;
-  }
-
-  static MetaDevice ToMetaDevice(const DLDeviceType& device) {
-    MetaDevice meta_type;
-    if (device == DLDeviceType::kDLCPU) {
-      meta_type = MetaDevice::CPU;
-    } else if (device == DLDeviceType::kDLCUDA) {
-      meta_type = MetaDevice::CUDA;
-    } else {
-      meta_type = MetaDevice::COMMON;
-    }
-    return meta_type;
-  }
-
   static MetaShape ToMetaShape(const Optional<Array<PrimExpr>>& tvm_shape) {
     if (tvm_shape.defined()) {
       std::vector<int64_t> shape_data;
@@ -623,21 +570,24 @@ class TVMUtils {
     return MetaShape(dims);
   }
 
-  static MetaTensor ToMetaTensor(const Expr& expr) {
+  static MetaTensor ToMetaTensor(const Expr& expr, const LayoutDecision& layout_dec = LayoutDecision()) {
     const auto* sinfo = GetStructInfoAs<TensorStructInfoNode>(expr);
+    if (layout_dec->layout.defined()) {
+      const auto& layout = MetaLayout(layout_dec->layout.name());
+      return MetaTensor(ToMetaShape(sinfo->GetShape()), ToMetaType(sinfo->dtype), layout);    
+    }
     const auto& layout = MetaLayout(SpanUtils::GetAttr(expr->span, "layout"));
-    return MetaTensor(ToMetaShape(sinfo->GetShape()), ToMetaType(sinfo->dtype),
-                      ToMetaDevice(sinfo->vdevice), layout);
+    return MetaTensor(ToMetaShape(sinfo->GetShape()), ToMetaType(sinfo->dtype), layout);
   }
 
   template <typename T>
-  static DataTensor<T> ToDataTensor(DLTensor* tensor, bool read_only, const MetaLayout& layout) {
+  static DataTensor<T> ToDataTensor(DLTensor* tensor, bool read_only) {
     if (read_only) {
-      return DataTensor<T>(ToMetaShape(tensor, false), ToMetaType(tensor->dtype),
-                           ToMetaDevice(tensor->device), layout, (const T*)(tensor->data));
+      return DataTensor<T>(ToMetaShape(tensor, false), ToMetaType(tensor->dtype), MetaLayout(),
+                           (const T*)(tensor->data));
     } else {
-      return DataTensor<T>(ToMetaShape(tensor, false), ToMetaType(tensor->dtype),
-                           ToMetaDevice(tensor->device), layout, (T*)(tensor->data));
+      return DataTensor<T>(ToMetaShape(tensor, false), ToMetaType(tensor->dtype), MetaLayout(),
+                           (T*)(tensor->data));
     }
   }
 
@@ -687,8 +637,15 @@ class TVMUtils {
     }
   }
 
+  static TensorStructInfo ToTensorStructInfo(const MetaTensor& tensor,
+                                             const Optional<VDevice>& device) {
+    const auto& t_shape = ToTVMShape(tensor.shape());
+    const auto& t_type = ToTVMType(tensor.data_type());
+    return TensorStructInfo(ShapeExpr(t_shape), t_type, device);
+  }
+
   static void CheckDevice(DLTensor* tensor, DLDeviceType device) {
-    ICHECK_EQ(tensor->device.device_typ, device);
+    ICHECK_EQ(tensor->device.device_type, device);
   }
 
   static Device DefaultCPU() {
@@ -728,18 +685,6 @@ class TorchUtils {
     return meta_type;
   }
 
-  static MetaDevice ToMetaDevice(const torch::Device& device) {
-    MetaDevice meta_type;
-    if (device == torch::kCPU) {
-      meta_type = MetaDevice::CPU;
-    } else if (device == torch::kCUDA) {
-      meta_type = MetaDevice::CUDA;
-    } else {
-      meta_type = MetaDevice::COMMON;
-    }
-    return meta_type;
-  }
-
   static MetaShape ToMetaShape(const torch::Tensor& tensor) {
     std::vector<int64_t> shape_data;
     for (size_t idx = 0; idx < tensor.dim(); idx++) {
@@ -750,18 +695,17 @@ class TorchUtils {
 
   static MetaTensor ToMetaTensor(const torch::Tensor& tensor,
                                  const MetaLayout& layout = MetaLayout()) {
-    return MetaTensor(ToMetaShape(tensor), ToMetaType(tensor.scalar_type()),
-                      ToMetaDevice(tensor.device()), layout);
+    return MetaTensor(ToMetaShape(tensor), ToMetaType(tensor.scalar_type()), layout);
   }
 
   template <typename T>
   static DataTensor<T> ToDataTensor(const torch::Tensor& tensor, const MetaTensor& meta,
                                     bool read_only) {
     if (read_only) {
-      return DataTensor<T>(meta.shape(), meta.data_type(), meta.device(), meta.layout(),
+      return DataTensor<T>(meta.shape(), meta.data_type(), meta.layout(),
                            (const T*)(tensor.data_ptr()));
     } else {
-      return DataTensor<T>(meta.shape(), meta.data_type(), meta.device(), meta.layout(),
+      return DataTensor<T>(meta.shape(), meta.data_type(), meta.layout(),
                            (T*)(tensor.data_ptr()));
     }
   }
@@ -790,24 +734,19 @@ class TorchUtils {
     return ToTorchType(DataUtils::ToMetaType(dtype));
   }
 
-  static torch::Device ToTorchDevice(const MetaDevice& device) {
-    if (device == MetaDevice::CPU) {
+  static torch::Device ToTorchDevice(const std::string& device) {
+    if (device == "cpu") {
       return torch::Device(torch::kCPU);
     }
-    if (device == MetaDevice::CUDA) {
+    if (device == "cuda") {
       return torch::Device(torch::kCUDA);
-    } 
+    }
     return torch::Device(torch::kCPU);
   }
 
-  static torch::Device ToTorchDevice(const std::string& device) {
-    return ToTorchDevice(DeviceUtils::ToMetaDevice(device));
-  }
-
-  static torch::Tensor MallocTorchTensor(const MetaTensor& tensor) {
+  static torch::Tensor MallocTorchTensor(const MetaTensor& tensor, const torch::Device& device) {
     auto t_type = ToTorchType(tensor.data_type());
-    auto t_device = ToTorchDevice(tensor.device());
-    auto opt = torch::TensorOptions().dtype(t_type).device(t_device);
+    auto opt = torch::TensorOptions().dtype(t_type).device(device);
     return torch::zeros(tensor.meta_shape(), opt);
   }
 };

@@ -28,6 +28,10 @@ namespace tvm {
 namespace contrib {
 namespace msc {
 
+const String DocSymbol::Empty() { return "::EMPTY"; }
+
+const String DocSymbol::NextLine() { return "::NEXT_LINE"; }
+
 const ExprDoc DocUtils::ToDoc(int64_t val) { return LiteralDoc::Int(val, NullOpt); }
 
 const ExprDoc DocUtils::ToDoc(int val) { return ToDoc(static_cast<int64_t>(val)); }
@@ -70,14 +74,6 @@ const DeclareDoc DocUtils::ToDeclareDoc(const String& type, const String& variab
   Array<Doc> doc_indices{DocUtils::ToDoc(len)};
   return DeclareDoc(type_doc, IndexDoc(IdDoc(variable), doc_indices), Array<ExprDoc>(),
                     use_constructor);
-}
-
-const AttrAccessDoc DocUtils::ToAttrAccessDoc(const String& value, const String& name) {
-  return AttrAccessDoc(IdDoc(value), name);
-}
-
-const AttrAccessDoc DocUtils::ToAttrAccessDoc(const ExprDoc& value, const String& name) {
-  return AttrAccessDoc(value, name);
 }
 
 const Array<StmtDoc> DocUtils::ToStmts(const Array<Doc>& docs) {

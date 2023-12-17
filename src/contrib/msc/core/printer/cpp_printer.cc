@@ -54,10 +54,20 @@ void CppPrinter::PrintTypedDoc(const IndexDoc& doc) {
 
 void CppPrinter::PrintTypedDoc(const AttrAccessDoc& doc) {
   PrintDoc(doc->value, false);
-  if (!doc->value->IsInstance<PointerDocNode>()) {
-    output_ << ".";
+  if (StringUtils::EndsWith(doc->name, DocSymbol::NextLine())) {
+    const auto& v_name = StringUtils::Replace(doc->name, DocSymbol::NextLine(), "");
+    if (!doc->value->IsInstance<PointerDocNode>()) {
+      IncreaseIndent();
+      PrintDoc(IdDoc("."));
+      DecreaseIndent();
+    }
+    output_ << v_name;
+  } else {
+    if (!doc->value->IsInstance<PointerDocNode>()) {
+      output_ << ".";
+    }
+    output_ << doc->name;
   }
-  output_ << doc->name;
 }
 
 void CppPrinter::PrintTypedDoc(const CallDoc& doc) {
@@ -197,8 +207,9 @@ void CppPrinter::PrintTypedDoc(const ClassDoc& doc) {
   }
   output_ << "}";
   Endline();
-  output_ << " // class ";
+  output_ << "  // class ";
   PrintDoc(doc->name, false);
+  NewLine(false);
 }
 
 void CppPrinter::PrintTypedDoc(const CommentDoc& doc) {
@@ -249,8 +260,9 @@ void CppPrinter::PrintTypedDoc(const StructDoc& doc) {
   DecreaseIndent();
   output_ << "}";
   Endline();
-  output_ << " // struct ";
+  output_ << "  // struct ";
   PrintDoc(doc->name, false);
+  NewLine(false);
 }
 
 void CppPrinter::PrintTypedDoc(const ConstructorDoc& doc) {
@@ -278,7 +290,7 @@ bool CppPrinter::IsEmptyDoc(const ExprDoc& doc) {
     return false;
   }
   const auto& id_doc = Downcast<IdDoc>(doc);
-  return id_doc->name == CppPrinter::Empty();
+  return id_doc->name == DocSymbol::Empty();
 }
 
 void CppPrinter::PrintIndentedBlock(const Array<StmtDoc>& docs) {

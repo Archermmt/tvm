@@ -28,7 +28,9 @@
 #include <string>
 #include <vector>
 
+#include "../utils.h"
 #include "msc_base_printer.h"
+#include "print_utils.h"
 
 namespace tvm {
 namespace contrib {
@@ -49,8 +51,6 @@ class CppPrinter : public MSCBasePrinter {
   explicit CppPrinter(const std::string& options = "") : MSCBasePrinter(options) {
     endlines_.push_back(true);
   }
-
-  static const String Empty() { return "empty"; }
 
  protected:
   /*! * \brief Print a LiteralDoc to cpp format*/

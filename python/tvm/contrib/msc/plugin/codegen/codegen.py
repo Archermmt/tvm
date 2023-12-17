@@ -20,6 +20,7 @@ import os
 import subprocess
 from typing import Dict, List, Optional
 
+import tvm
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.plugin import _ffi_api
 from tvm.contrib.msc.core import utils as msc_utils
@@ -156,8 +157,9 @@ class TVMPluginCodegen(BasePluginCodeGen):
         """Set up the codegen"""
 
         super().setup()
+        tvm_root = os.path.dirname(os.path.dirname(tvm.__path__[0]))
         self._codegen_config.update(
-            {"need_convert": False, "with_runtime": True, "define_attr": True}
+            {"need_convert": False, "with_runtime": True, "tvm_root": tvm_root}
         )
 
     @property
@@ -180,7 +182,6 @@ class TorchPluginCodegen(BasePluginCodeGen):
             {
                 "need_convert": False,
                 "with_runtime": False,
-                "define_attr": True,
                 "torch_prefix": torch.utils.cmake_prefix_path,
             }
         )
@@ -199,9 +200,7 @@ class TensorRTPluginCodegen(BasePluginCodeGen):
         """Set up the codegen"""
 
         super().setup()
-        self._codegen_config.update(
-            {"need_convert": False, "with_runtime": False, "define_attr": False}
-        )
+        self._codegen_config.update({"need_convert": False, "with_runtime": False})
 
     @property
     def source_getter(self):

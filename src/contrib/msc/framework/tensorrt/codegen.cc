@@ -68,7 +68,7 @@ void TensorRTCodeGen::CodeGenClassDeclare() {
   // private scope
   stack_.scope_start("private:").declare("std::map<std::string, Weights>", "mWeights").scope_end();
   // end class declare
-  stack_.class_end().line();
+  stack_.class_end();
   // declare test function
   stack_.func_def("test_" + graph()->name, "bool")
       .func_arg("engine", "std::shared_ptr<ICudaEngine>&")

@@ -30,8 +30,7 @@ void TorchPluginCodeGen::CodeGenAttrDeclare(const Plugin& plugin) {
   BasePluginCodeGen<TorchPluginCodeGenConfig>::CodeGenAttrDeclare(plugin);
   const auto& attr_name = AttrClsName(plugin);
   // serialize method for attr
-  stack_.line()
-      .comment("serialize method")
+  stack_.comment("serialize method")
       .func_def(attr_name + "_serialize", "std::vector<std::string>")
       .func_arg("meta_attrs", "const " + attr_name + "&");
   // deserialize method for attr
@@ -49,8 +48,10 @@ void TorchPluginCodeGen::CodeGenAttrDefine(const Plugin& plugin) {
       .func_start()
       .declare("std::vector<std::string>", "attrs");
   for (const auto& attr : plugin->attrs) {
-    stack_.func_call("push_back", "", "attrs")
-        .call_arg("SerializeUtils::ToString(meta_attrs." + attr->name + ")");
+    stack_.func_call("SerializeUtils::ToString", "std::string str_" + attr->name)
+        .call_arg(DocUtils::ToAttrAccessDoc("meta_attrs", attr->name))
+        .func_call("push_back", "", "attrs")
+        .call_arg("str_" + attr->name);
   }
   stack_.func_end("attrs");
   // deserialize method for attr
@@ -61,7 +62,7 @@ void TorchPluginCodeGen::CodeGenAttrDefine(const Plugin& plugin) {
   for (size_t i = 0; i < plugin->attrs.size(); i++) {
     stack_.func_call("SerializeUtils::FromString")
         .call_arg(DocUtils::ToIndexDoc("attrs", i))
-        .call_arg("meta_attrs." + plugin->attrs[i]->name);
+        .call_arg(DocUtils::ToAttrAccessDoc("meta_attrs", plugin->attrs[i]->name));
   }
   stack_.func_end();
 }
@@ -212,7 +213,7 @@ void TorchPluginCodeGen::CodeGenCmake(const std::set<String>& devices) {
     for (const auto& include : config()->includes) {
       includes = includes + " " + include;
     }
-    stack_.line("target_include_directories(msc_torch_plugin PUBLIC" + includes + ")");
+    stack_.line("target_include_directories(msc_torch_plugin PUBLIC " + includes + ")");
   }
   String libs = "";
   for (const auto& lib : config()->libs) {
@@ -239,9 +240,9 @@ void TorchPluginCodeGen::CodeGenManagerMethods() {
       .func_start()
       .cond_if("lib_folder is None")
       .assign("root", "os.path.dirname(__file__)")
-      .assign("self._lib_folder", "os.path.join(root, \"libs\")")
+      .assign(DocUtils::ToAttrAccessDoc("self", "_lib_folder"), "os.path.join(root, \"libs\")")
       .cond_else()
-      .assign("self._lib_folder", "lib_folder")
+      .assign(DocUtils::ToAttrAccessDoc("self", "_lib_folder"), "lib_folder")
       .cond_end()
       .line("assert os.path.isdir(self._lib_folder), \"lib_folder not exist\"")
       .for_start("lib", "os.listdir(self._lib_folder)")
@@ -260,20 +261,6 @@ void TorchPluginCodeGen::CodeGenManagerMethods() {
 
 void TorchPluginCodeGen::CodeGenPluginManager(const Plugin& plugin) {
   const auto& entry_name = EntryName(plugin);
-  String comment = "Python wrapper for " + plugin->name + "\nInputs\n------";
-  for (const auto& t : plugin->inputs) {
-    comment = comment + "\n" + t->name + ": " + t->dtype + "\n  " + t->describe;
-  }
-  comment = comment + "\nOutputs\n-------";
-  for (const auto& t : plugin->outputs) {
-    comment = comment + "\n" + t->name + ": " + t->dtype + "\n  " + t->describe;
-  }
-  if (plugin->attrs.size() > 0) {
-    comment = comment + "\nAttributes\n-----------";
-    for (const auto& a : plugin->attrs) {
-      comment = comment + "\n" + a->name + ": " + a->type + "\n  " + a->describe;
-    }
-  }
   stack_.func_def(plugin->name).func_arg("self", "object");
   for (const auto& attr : plugin->attrs) {
     stack_.func_arg(attr->name, attr->type, attr->default_value);
@@ -284,7 +271,6 @@ void TorchPluginCodeGen::CodeGenPluginManager(const Plugin& plugin) {
       .line()
       .class_def(plugin->name + "(torch.nn.Module)")
       .class_start();
-
   // init method
   stack_.func_def("__init__").func_arg("self", "torch.nn.Module");
   for (const auto& attr : plugin->attrs) {
@@ -295,13 +281,14 @@ void TorchPluginCodeGen::CodeGenPluginManager(const Plugin& plugin) {
       .func_start()
       .func_call("__init__", "", "super()");
   for (const auto& attr : plugin->attrs) {
-    stack_.assign("self." + attr->name, attr->name);
+    stack_.assign(DocUtils::ToAttrAccessDoc("self", attr->name), attr->name);
   }
-  stack_.assign("self.name", "name")
+  stack_.assign(DocUtils::ToAttrAccessDoc("self", "name"), "name")
       .cond_if("layouts is None")
-      .assign("self.layouts", "[\"\"] * " + std::to_string(plugin->inputs.size()))
+      .assign(DocUtils::ToAttrAccessDoc("self", "layouts"),
+              "[\"\"] * " + std::to_string(plugin->inputs.size()))
       .cond_else()
-      .assign("self.layouts", "layouts")
+      .assign(DocUtils::ToAttrAccessDoc("self", "layouts"), "layouts")
       .cond_end()
       .line()
       .assign("attr_strs", "[]");
@@ -311,12 +298,11 @@ void TorchPluginCodeGen::CodeGenPluginManager(const Plugin& plugin) {
   stack_.func_call("append", "", "attr_strs")
       .call_arg("name")
       .func_call("extend", "", "attr_strs")
-      .call_arg("self.layouts")
+      .call_arg(DocUtils::ToAttrAccessDoc("self", "layouts"))
       .line()
       .func_call(plugin->name + "." + plugin->name, "self._inner_class", "torch.classes")
       .call_arg("attr_strs")
       .func_end();
-
   // forward method
   stack_.func_def("forward", "List[torch.Tensor]").func_arg("self", "torch.nn.Module");
   for (const auto& t : plugin->inputs) {
@@ -333,11 +319,13 @@ void TorchPluginCodeGen::CodeGenPluginManager(const Plugin& plugin) {
   } else {
     stack_.func_end("outputs");
   }
-  stack_.class_end().func_call(plugin->name, "op");
+  // end of inner class
+  stack_.class_end();
+  stack_.func_call(plugin->name, "op");
   for (const auto& attr : plugin->attrs) {
     stack_.call_arg(attr->name);
   }
-  stack_.call_arg("name").call_arg("layouts").func_end("op").comment(comment, true);
+  stack_.call_arg("name").call_arg("layouts").func_end("op").comment(GetPyComment(plugin), true);
 }
 
 const String TorchPluginCodeGen::CodeGenPluginConvert(const Plugin& plugin) {
@@ -350,27 +338,10 @@ void TorchPluginCodeGen::CodeGenMalloc(const Plugin& plugin, const Array<PluginT
   Array<String> call_args{"input_metas", "meta_attrs_", "true"};
   stack_.line().comment("malloc " + collect).declare("std::vector<MetaTensor>", collect + "_metas");
   CodeGenSafeCall(plugin->externs["infer_" + collect], call_args, collect + "_metas");
-  stack_.for_start("t", collect + "_metas")
-      .func_call("TorchUtils::MallocTorchTensor", "auto t_tensor")
-      .call_arg("t")
-      .func_call("push_back", "", collect + "_tensors")
-      .call_arg("t_tensor")
-      .for_end();
-
-  /*
   for (size_t i = 0; i < tensors.size(); i++) {
-    const String& var_name = "t_" + tensors[i]->name;
-    const String& opt_name = "opt_" + tensors[i]->name;
-    const auto& idx_meta = DocUtils::ToIndexDoc(collect + "_metas", i);
-    stack_.func_call("torch::TensorOptions", "auto " + opt_name).method_call("dtype");
-    int dtype_idx = plugin->FindDtypeRefIdx(tensors[i]);
-    if (dtype_idx >= 0) {
-      const auto& input_doc = DocUtils::ToIndexDoc("input_tensors", dtype_idx);
-      stack_.call_arg(DocUtils::ToAttrAccessDoc(input_doc, "dtype()"));
-    } else {
-      stack_.call_arg("TorchUtils::ToTorchType(\"" + tensors[i]->dtype + "\")");
-    }
-    stack_.method_call("device");
+    const auto& var_name = "t_" + tensors[i]->name;
+    stack_.func_call("TorchUtils::MallocTorchTensor", "auto " + var_name)
+        .call_arg(DocUtils::ToIndexDoc(collect + "_metas", i));
     int device_idx = plugin->FindDeviceRefIdx(tensors[i]);
     if (device_idx >= 0) {
       const auto& input_doc = DocUtils::ToIndexDoc("input_tensors", device_idx);
@@ -378,12 +349,8 @@ void TorchPluginCodeGen::CodeGenMalloc(const Plugin& plugin, const Array<PluginT
     } else {
       stack_.call_arg("TorchUtils::ToTorchDevice(\"" + tensors[i]->device + "\")");
     }
-    stack_.func_call("torch::zeros", "torch::Tensor " + var_name)
-        .call_arg(DocUtils::ToAttrAccessDoc(idx_meta, "meta_shape()"))
-        .call_arg(opt_name);
     stack_.func_call("push_back", "", collect + "_tensors").call_arg(var_name);
   }
-  */
 }
 
 void TorchPluginCodeGen::CodeGenCompute(const Plugin& plugin, const String& device) {
@@ -403,30 +370,9 @@ void TorchPluginCodeGen::CodeGenCompute(const Plugin& plugin, const String& devi
   };
 
   if (plugin->externs.count(device + "_compute")) {
-    if (device == "cuda") {
-      stack_.declare("cudaStream_t", "stream").assign("stream", "at::cuda::getCurrentCUDAStream()");
-    }
     for (const auto& dtypes : plugin->GetDtypeMatrix()) {
       Array<String> compute_args;
-      Map<String, String> tensor_dtypes;
-      for (const auto& pair : dtypes) {
-        const String& ref_dtype = plugin->inputs[pair.first->value]->dtype;
-        for (const auto& t : plugin->inputs) {
-          if (t->dtype == ref_dtype) {
-            tensor_dtypes.Set(t->name, pair.second);
-          }
-        }
-        for (const auto& t : plugin->outputs) {
-          if (t->dtype == ref_dtype) {
-            tensor_dtypes.Set(t->name, pair.second);
-          }
-        }
-        for (const auto& t : plugin->buffers) {
-          if (t->dtype == ref_dtype) {
-            tensor_dtypes.Set(t->name, pair.second);
-          }
-        }
-      }
+      const auto& tensor_dtypes = GetTensorDtypes(plugin, dtypes);
       String dtype_cond = "";
       size_t cnt = 0;
       for (const auto& pair : dtypes) {
@@ -451,6 +397,7 @@ void TorchPluginCodeGen::CodeGenCompute(const Plugin& plugin, const String& devi
       }
       compute_args.push_back("meta_attrs_");
       if (device == "cuda") {
+        stack_.func_call("at::cuda::getCurrentCUDAStream", "cudaStream_t stream");
         compute_args.push_back("stream");
       }
       CodeGenSafeCall(plugin->externs[device + "_compute"], compute_args);

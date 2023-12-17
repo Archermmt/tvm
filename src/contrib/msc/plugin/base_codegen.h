@@ -78,22 +78,27 @@ class BasePluginCodeGen {
       StartNamespace();
       CodeGenAttrDeclare(plugin);
       EndNamespace();
-      this->stack_.line("#endif // " + macro);
+      this->stack_.line("#endif  // " + macro);
       sources.Set(plugin->name + "_attr.h", ToCppSource(print_options));
       // attr define
-      if (this->config()->define_attr) {
-        this->stack_.line("#include \"" + plugin->name + "_attr.h\"").line();
-        StartNamespace();
-        CodeGenAttrDefine(plugin);
-        EndNamespace();
-        sources.Set(plugin->name + "_attr.cc", ToCppSource(print_options));
-      }
+      this->stack_.line("#include \"" + plugin->name + "_attr.h\"").line();
+      StartNamespace();
+      CodeGenAttrDefine(plugin);
+      EndNamespace();
+      sources.Set(plugin->name + "_attr.cc", ToCppSource(print_options));
       // op define and register
-      CodeGenPluginOp(plugin);
+      CodeGenOpHeader(plugin);
+      StartNamespace();
+      CodeGenOpDefine(plugin);
+      CodeGenOpRegister(plugin);
+      EndNamespace();
       sources.Set(plugin->name + "_op.cc", ToCppSource(print_options));
       // op runtime
       if (this->config()->with_runtime) {
-        CodeGenPluginRuntime(plugin);
+        CodeGenOpHeader(plugin);
+        StartNamespace();
+        CodeGenOpRuntime(plugin);
+        EndNamespace();
         sources.Set(plugin->name + "_runtime.cc", ToCppSource(print_options));
       }
     }
@@ -149,7 +154,7 @@ class BasePluginCodeGen {
 
  protected:
   /*! \brief Header of plugin files*/
-  virtual void CodeGenHeader(const Plugin& plugin) {
+  virtual void CodeGenOpHeader(const Plugin& plugin) {
     this->stack_.line("#include \"" + plugin->name + "_attr.h\"");
     std::set<String> include_headers;
     for (const auto& pair : plugin->externs) {
@@ -168,10 +173,9 @@ class BasePluginCodeGen {
 
   /*! \brief End the namespace*/
   void EndNamespace() {
-    this->stack_.line()
-        .line("} // namespace msc")
-        .line("} // namespace contrib")
-        .line("} // namespace tvm");
+    this->stack_.line("}  // namespace msc")
+        .line("}  // namespace contrib")
+        .line("}  // namespace tvm");
   }
 
   /*! \brief Codegen safe call extern*/
@@ -194,7 +198,7 @@ class BasePluginCodeGen {
   virtual void CodeGenAttrDeclare(const Plugin& plugin) {
     this->stack_.struct_start(AttrClsName(plugin)).comment("define attributes");
     for (const auto& attr : plugin->attrs) {
-      this->stack_.declare(ConvertAttrType(attr->type), attr->name);
+      this->stack_.declare(ToCppType(attr->type), attr->name);
       if (attr->default_value.size() > 0) {
         this->stack_.declare_arg(attr->default_value);
       }
@@ -216,15 +220,6 @@ class BasePluginCodeGen {
   /*! \brief Get plugin attr define for plugin*/
   virtual void CodeGenAttrDefine(const Plugin& plugin) {}
 
-  /*! \brief Get plugin op source*/
-  virtual void CodeGenPluginOp(const Plugin& plugin) {
-    CodeGenHeader(plugin);
-    StartNamespace();
-    CodeGenOpDefine(plugin);
-    CodeGenOpRegister(plugin);
-    EndNamespace();
-  }
-
   /*! \brief Codegen define for plugin*/
   virtual void CodeGenOpDefine(const Plugin& plugin) = 0;
 
@@ -232,7 +227,7 @@ class BasePluginCodeGen {
   virtual void CodeGenOpRegister(const Plugin& plugin) = 0;
 
   /*! \brief Get plugin runtime source*/
-  virtual void CodeGenPluginRuntime(const Plugin& plugin) {}
+  virtual void CodeGenOpRuntime(const Plugin& plugin) {}
 
   /*! \brief Codegen cmake file*/
   virtual void CodeGenCmake(const std::set<String>& devices) {}
@@ -312,6 +307,49 @@ class BasePluginCodeGen {
     return printer.GetString();
   }
 
+  const Map<String, String> GetTensorDtypes(const Plugin& plugin,
+                                            const Map<Integer, String>& dtypes) {
+    Map<String, String> tensor_dtypes;
+    for (const auto& pair : dtypes) {
+      const String& ref_dtype = plugin->inputs[pair.first->value]->dtype;
+      for (const auto& t : plugin->inputs) {
+        if (t->dtype == ref_dtype) {
+          tensor_dtypes.Set(t->name, pair.second);
+        }
+      }
+      for (const auto& t : plugin->outputs) {
+        if (t->dtype == ref_dtype) {
+          tensor_dtypes.Set(t->name, pair.second);
+        }
+      }
+      for (const auto& t : plugin->buffers) {
+        if (t->dtype == ref_dtype) {
+          tensor_dtypes.Set(t->name, pair.second);
+        }
+      }
+    }
+    return tensor_dtypes;
+  }
+
+  /*! \brief Change plugin comment in python*/
+  const String GetPyComment(const Plugin& plugin) {
+    String comment = "Python wrapper for " + plugin->name + "\nInputs\n------";
+    for (const auto& t : plugin->inputs) {
+      comment = comment + "\n" + t->name + ": " + t->dtype + "\n  " + t->describe;
+    }
+    comment = comment + "\nOutputs\n-------";
+    for (const auto& t : plugin->outputs) {
+      comment = comment + "\n" + t->name + ": " + t->dtype + "\n  " + t->describe;
+    }
+    if (plugin->attrs.size() > 0) {
+      comment = comment + "\nAttributes\n-----------";
+      for (const auto& a : plugin->attrs) {
+        comment = comment + "\n" + a->name + ": " + ToPyType(a->type) + "\n  " + a->describe;
+      }
+    }
+    return comment;
+  }
+
   /*! \brief Get class name for attr*/
   const String AttrClsName(const Plugin& plugin) const { return plugin->name + "Attrs"; }
 
@@ -329,11 +367,11 @@ class BasePluginCodeGen {
     return StringUtils::Replace(StringUtils::Replace(type, "list(", ""), ")", "");
   }
 
-  /*! \brief Type name in framework*/
-  virtual const String ConvertAttrType(const String& type) {
+  /*! \brief Type name in cpp*/
+  virtual const String ToCppType(const String& type) {
     if (IsListType(type)) {
       const auto& ele_type = GetEleType(type);
-      return "std::vector<" + ConvertAttrType(ele_type) + ">";
+      return "std::vector<" + ToCppType(ele_type) + ">";
     }
     if (type == "int64") {
       return "int64_t";
@@ -346,6 +384,21 @@ class BasePluginCodeGen {
     }
     if (type == "string") {
       return "std::string";
+    }
+    return type;
+  }
+
+  /*! \brief Type name in python*/
+  virtual const String ToPyType(const String& type) {
+    if (IsListType(type)) {
+      const auto& ele_type = GetEleType(type);
+      return "List[" + ToPyType(ele_type) + "]";
+    }
+    if (type == "int64" || type == "int32" || type == "int" || type == "int8") {
+      return "int";
+    }
+    if (type == "string") {
+      return "str";
     }
     return type;
   }

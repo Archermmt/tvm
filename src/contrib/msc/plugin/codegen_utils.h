@@ -31,7 +31,6 @@ namespace msc {
 #define PLUGIN_CODEGEN_CONFIG_MEMBERS   \
   bool need_convert{false};             \
   bool with_runtime{false};             \
-  bool define_attr{false};              \
   std::string cmake_version{"3.5"};     \
   std::string install_dir;              \
   std::vector<size_t> version{0, 0, 0}; \
@@ -44,8 +43,6 @@ namespace msc {
     reader->Read(&need_convert);                \
   } else if (key == "with_runtime") {           \
     reader->Read(&with_runtime);                \
-  } else if (key == "define_attr") {            \
-    reader->Read(&define_attr);                 \
   } else if (key == "cmake_version") {          \
     reader->Read(&cmake_version);               \
   } else if (key == "install_dir") {            \

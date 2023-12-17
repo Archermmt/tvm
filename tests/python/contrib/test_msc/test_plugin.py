@@ -57,8 +57,7 @@ template <typename TAttr>
 std::vector<MetaTensor> my_relu_infer(const std::vector<MetaTensor>& inputs, const TAttr& attrs,
                                       bool is_runtime) {
   std::vector<MetaTensor> outputs;
-  outputs.push_back(
-      MetaTensor(inputs[0].shape(), inputs[0].data_type(), inputs[0].device(), inputs[0].layout()));
+  outputs.push_back(MetaTensor(inputs[0].shape(), inputs[0].data_type(), inputs[0].layout()));
   return outputs;
 }
 

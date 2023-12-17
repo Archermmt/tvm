@@ -47,11 +47,11 @@ void BaseStack::Comment(const String& comment, bool attach) {
   }
 }
 
-void BaseStack::AssignBase(const String& lhs, const ExprDoc& rhs, const String& annotation) {
+void BaseStack::AssignBase(const ExprDoc& lhs, const ExprDoc& rhs, const String& annotation) {
   if (annotation.size() == 0) {
-    PushDoc(AssignDoc(IdDoc(lhs), rhs, NullOpt));
+    PushDoc(AssignDoc(lhs, rhs, NullOpt));
   } else {
-    PushDoc(AssignDoc(IdDoc(lhs), rhs, IdDoc(annotation)));
+    PushDoc(AssignDoc(lhs, rhs, IdDoc(annotation)));
   }
 }
 
@@ -189,10 +189,11 @@ void BaseStack::FuncCall(const String& callee, const String& assign_to, const St
   FuncCall(callee, assign_doc, caller_doc);
 }
 
-void BaseStack::MethodCall(const String& callee) {
+void BaseStack::MethodCall(const String& callee, bool new_line) {
   const auto& host = PopDoc();
   if (host->IsInstance<ExprDocNode>()) {
-    FuncCall(callee, NullOpt, Downcast<ExprDoc>(host));
+    const auto& v_callee = callee + (new_line ? DocSymbol::NextLine() : "");
+    FuncCall(v_callee, NullOpt, Downcast<ExprDoc>(host));
   } else if (const auto* a_node = host.as<AssignDocNode>()) {
     ICHECK(a_node->rhs.defined()) << "Can not find rhs for inplace host";
     FuncCall(callee, DeclareDoc(a_node->annotation, a_node->lhs, Array<ExprDoc>(), true),
@@ -314,6 +315,12 @@ void BaseStack::ForStart(const String& lhs, const String& rhs) {
 }
 
 void BaseStack::ForStart(const String& lhs, size_t start, size_t end) {
+  Array<ExprDoc> range{DocUtils::ToDoc(start), DocUtils::ToDoc(end)};
+  PushDoc(ForDoc(IdDoc(lhs), TupleDoc(range), Array<StmtDoc>()));
+  BlockStart();
+}
+
+void BaseStack::ForStart(const String& lhs, const String& start, const String& end) {
   Array<ExprDoc> range{DocUtils::ToDoc(start), DocUtils::ToDoc(end)};
   PushDoc(ForDoc(IdDoc(lhs), TupleDoc(range), Array<StmtDoc>()));
   BlockStart();

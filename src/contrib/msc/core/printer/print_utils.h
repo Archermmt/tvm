@@ -37,6 +37,19 @@ namespace msc {
 using namespace tvm::script::printer;
 
 /*!
+ * \brief Symbols for Doc.
+ */
+
+class DocSymbol {
+ public:
+  /*! * \brief The empty symbol*/
+  TVM_DLL static const String Empty();
+
+  /*! * \brief The next line symbol*/
+  TVM_DLL static const String NextLine();
+};
+
+/*!
  * \brief Utils for Doc.
  */
 class DocUtils {
@@ -71,8 +84,10 @@ class DocUtils {
    * \brief Change object to AttrAccessDoc.
    * \return The AttrAccessDoc.
    */
-  TVM_DLL static const AttrAccessDoc ToAttrAccessDoc(const String& value, const String& name);
-  TVM_DLL static const AttrAccessDoc ToAttrAccessDoc(const ExprDoc& value, const String& name);
+  template <typename T>
+  TVM_DLL static const AttrAccessDoc ToAttrAccessDoc(const T& value, const String& name) {
+    return AttrAccessDoc(ToDoc(value), name);
+  }
 
   /*!
    * \brief Change object to List of Docs.
