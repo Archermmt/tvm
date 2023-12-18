@@ -237,6 +237,8 @@ class MetaTensor {
 
   inline const MetaLayout layout() const { return layout_; }
 
+  inline const std::string layout_name() const { return layout_.name(); }
+
   inline size_t Ndim() const { return shape_.Ndim(); }
 
   inline size_t size() const { return shape_.size(); }
@@ -572,7 +574,7 @@ class TVMUtils {
 
   static MetaTensor ToMetaTensor(const Expr& expr, const LayoutDecision& layout_dec = LayoutDecision()) {
     const auto* sinfo = GetStructInfoAs<TensorStructInfoNode>(expr);
-    if (layout_dec->layout.defined()) {
+    if (layout_dec.defined() && layout_dec->layout.defined()) {
       const auto& layout = MetaLayout(layout_dec->layout.name());
       return MetaTensor(ToMetaShape(sinfo->GetShape()), ToMetaType(sinfo->dtype), layout);    
     }
@@ -642,6 +644,11 @@ class TVMUtils {
     const auto& t_shape = ToTVMShape(tensor.shape());
     const auto& t_type = ToTVMType(tensor.data_type());
     return TensorStructInfo(ShapeExpr(t_shape), t_type, device);
+  }
+
+  static TensorStructInfo ToTensorStructInfo(const MetaTensor& tensor, const Expr& expr) {
+    const auto* sinfo = GetStructInfoAs<TensorStructInfoNode>(expr);
+    return ToTensorStructInfo(tensor, sinfo->vdevice);
   }
 
   static void CheckDevice(DLTensor* tensor, DLDeviceType device) {

@@ -77,6 +77,15 @@ SwitchDoc::SwitchDoc(Array<ExprDoc> predicates, Array<Array<StmtDoc>> branchs,
   this->data_ = std::move(n);
 }
 
+LambdaDoc::LambdaDoc(IdDoc name, Array<AssignDoc> args, Array<ExprDoc> refs, Array<StmtDoc> body) {
+  ObjectPtr<LambdaDocNode> n = make_object<LambdaDocNode>();
+  n->name = name;
+  n->args = args;
+  n->refs = refs;
+  n->body = body;
+  this->data_ = std::move(n);
+}
+
 }  // namespace msc
 }  // namespace contrib
 }  // namespace tvm

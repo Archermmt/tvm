@@ -69,7 +69,7 @@ class BasePluginCodeGen {
     for (const auto& name : ListPluginNames()) {
       const auto& plugin = GetPlugin(name);
       // attr declare
-      const String& macro = "TVM_CONTRIB_MSC_" + StringUtils::Upper(AttrClsName(plugin)) + "_H_";
+      const String& macro = "TVM_CONTRIB_MSC_" + StringUtils::Upper(MetaAttrCls(plugin)) + "_H_";
       this->stack_.line("#ifndef " + macro)
           .line("#define " + macro)
           .line()
@@ -196,7 +196,7 @@ class BasePluginCodeGen {
 
   /*! \brief Codegen attr struct declare for plugin*/
   virtual void CodeGenAttrDeclare(const Plugin& plugin) {
-    this->stack_.struct_start(AttrClsName(plugin)).comment("define attributes");
+    this->stack_.struct_start(MetaAttrCls(plugin)).comment("define attributes");
     for (const auto& attr : plugin->attrs) {
       this->stack_.declare(ToCppType(attr->type), attr->name);
       if (attr->default_value.size() > 0) {
@@ -207,9 +207,9 @@ class BasePluginCodeGen {
         .comment("print method")
         .func_def("operator<<", "friend std::ostream&")
         .func_arg("out", "std::ostream&")
-        .func_arg("attrs", AttrClsName(plugin) + "&")
+        .func_arg("attrs", MetaAttrCls(plugin) + "&")
         .func_start()
-        .line("out << \"[" + AttrClsName(plugin) + "] : \";");
+        .line("out << \"[" + MetaAttrCls(plugin) + "] : \";");
     for (const auto& attr : plugin->attrs) {
       this->stack_.line("out << \"| " + attr->name + "(" + attr->type + ")=\" << attrs." +
                         attr->name + ";");
@@ -350,8 +350,8 @@ class BasePluginCodeGen {
     return comment;
   }
 
-  /*! \brief Get class name for attr*/
-  const String AttrClsName(const Plugin& plugin) const { return plugin->name + "Attrs"; }
+  /*! \brief Get class name for meta attrs*/
+  const String MetaAttrCls(const Plugin& plugin) const { return plugin->name + "MetaAttrs"; }
 
   /*! \brief Get converter name for plugin*/
   const String ConverterName(const Plugin& plugin) const { return plugin->name + "Converter"; }

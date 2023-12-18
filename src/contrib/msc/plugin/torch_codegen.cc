@@ -28,7 +28,7 @@ namespace msc {
 
 void TorchPluginCodeGen::CodeGenAttrDeclare(const Plugin& plugin) {
   BasePluginCodeGen<TorchPluginCodeGenConfig>::CodeGenAttrDeclare(plugin);
-  const auto& attr_name = AttrClsName(plugin);
+  const auto& attr_name = MetaAttrCls(plugin);
   // serialize method for attr
   stack_.comment("serialize method")
       .func_def(attr_name + "_serialize", "std::vector<std::string>")
@@ -41,14 +41,16 @@ void TorchPluginCodeGen::CodeGenAttrDeclare(const Plugin& plugin) {
 }
 
 void TorchPluginCodeGen::CodeGenAttrDefine(const Plugin& plugin) {
-  const auto& attr_name = AttrClsName(plugin);
+  const auto& attr_name = MetaAttrCls(plugin);
   // serialize method for attr
   stack_.func_def(attr_name + "_serialize", "std::vector<std::string>")
       .func_arg("meta_attrs", "const " + attr_name + "&")
       .func_start()
       .declare("std::vector<std::string>", "attrs");
   for (const auto& attr : plugin->attrs) {
-    stack_.func_call("SerializeUtils::ToString", "std::string str_" + attr->name)
+    stack_
+        .func_call("SerializeUtils::ToString",
+                   DocUtils::ToDeclareDoc("std::string", "str_" + attr->name))
         .call_arg(DocUtils::ToAttrAccessDoc("meta_attrs", attr->name))
         .func_call("push_back", "", "attrs")
         .call_arg("str_" + attr->name);
@@ -68,7 +70,7 @@ void TorchPluginCodeGen::CodeGenAttrDefine(const Plugin& plugin) {
 }
 
 void TorchPluginCodeGen::CodeGenOpDefine(const Plugin& plugin) {
-  const auto& attr_name = AttrClsName(plugin);
+  const auto& attr_name = MetaAttrCls(plugin);
   stack_.struct_start(plugin->name + " : torch::CustomClassHolder");
   // define constructor
   stack_.constructor_def(plugin->name)
@@ -81,7 +83,7 @@ void TorchPluginCodeGen::CodeGenOpDefine(const Plugin& plugin) {
       .comment("get extra info")
       .assign("name_", DocUtils::ToIndexDoc("attrs", plugin->attrs.size()))
       .for_start("i", 1 + plugin->attrs.size(), 1 + plugin->attrs.size() + plugin->inputs.size())
-      .func_call("MetaLayout", "MetaLayout layout")
+      .func_call("MetaLayout", DocUtils::ToDeclareDoc("MetaLayout", "layout"))
       .call_arg(DocUtils::ToIndexDoc("attrs", "i"))
       .func_call("push_back", "", "layouts_")
       .call_arg("layout")
@@ -112,7 +114,7 @@ void TorchPluginCodeGen::CodeGenOpDefine(const Plugin& plugin) {
       .comment("extract meta inputs")
       .declare("std::vector<MetaTensor>", "input_metas")
       .for_start("i", 0, plugin->inputs.size())
-      .func_call("TorchUtils::ToMetaTensor", "MetaTensor m_input")
+      .func_call("TorchUtils::ToMetaTensor", DocUtils::ToDeclareDoc("MetaTensor", "m_input"))
       .call_arg(DocUtils::ToIndexDoc("input_tensors", "i"))
       .call_arg(DocUtils::ToIndexDoc("layouts_", "i"))
       .func_call("push_back", "", "input_metas")
@@ -132,7 +134,7 @@ void TorchPluginCodeGen::CodeGenOpDefine(const Plugin& plugin) {
   stack_.cond_end();
   stack_.func_end("output_tensors").line();
   stack_.comment("define members")
-      .declare(AttrClsName(plugin), "meta_attrs_")
+      .declare(MetaAttrCls(plugin), "meta_attrs_")
       .declare("std::vector<MetaLayout>", "layouts_")
       .declare("std::string", "name_")
       .line();
@@ -155,31 +157,32 @@ void TorchPluginCodeGen::CodeGenOpRegister(const Plugin& plugin) {
   stack_.func_call("compute", outputs_doc, DocUtils::ToPtrDoc("instance")).call_arg("inputs");
   stack_.func_end("outputs");
   stack_.comment("Bind plugin " + plugin->name + " to python")
-      .scope_start("TORCH_LIBRARY(" + plugin->name + ", m) {")
-      .scope_start("m.class_<" + plugin->name + ">(\"" + plugin->name + "\")")
-      .line(".def(torch::init<const std::vector<std::string>>())")
-      .line(".def(\"compute\", &" + plugin->name + "::compute)")
-      .scope_start(".def_pickle(")
-      .scope_start("[](const c10::intrusive_ptr<" + plugin->name + ">& self)")
-      .scope_start("-> std::vector<std::string> {")
-      .line("return self->serialize();")
-      .scope_end()
-      .line("},")
-      .scope_end()
-      .scope_start("[](std::vector<std::string> state)")
-      .scope_start("-> c10::intrusive_ptr<" + plugin->name + "> {")
-      .line("return c10::make_intrusive<" + plugin->name + ">(std::move(state));")
-      .scope_end()
-      .line("}")
-      .scope_end()
-      .scope_end()
-      .line(");")
-      .scope_end()
+      .func_def("TORCH_LIBRARY", DocSymbol::Empty())
+      .func_arg(plugin->name, DocSymbol::Empty())
+      .func_arg("m", DocSymbol::Empty())
+      .func_start()
+      .lambda_def("serialize")
+      .lambda_arg("op", "const c10::intrusive_ptr<" + plugin->name + ">&")
+      .lambda_start()
+      .lambda_end(DocUtils::ToAttrAccessDoc(DocUtils::ToPtrDoc("op"), "serialize()"))
+      .lambda_def("deserialize")
+      .lambda_arg("state", "std::vector<std::string>")
+      .lambda_start()
+      .lambda_end("c10::make_intrusive<" + plugin->name + ">(std::move(state))")
+      .func_call("class_<" + plugin->name + ">", "", "m")
+      .call_arg(DocUtils::ToStrDoc(plugin->name))
+      .method_call("def", true)
+      .call_arg("torch::init<const std::vector<std::string>>()")
+      .method_call("def", true)
+      .call_arg(DocUtils::ToStrDoc("compute"))
+      .call_arg("&" + plugin->name + "::compute")
+      .method_call("def_pickle", true)
+      .call_arg("serialize")
+      .call_arg("deserialize")
       .func_call("def", "", "m")
       .call_arg(DocUtils::ToStrDoc(entry_name))
       .call_arg(entry_name)
-      .scope_end()
-      .line("}");
+      .func_end();
 }
 
 void TorchPluginCodeGen::CodeGenCmake(const std::set<String>& devices) {
@@ -222,7 +225,7 @@ void TorchPluginCodeGen::CodeGenCmake(const std::set<String>& devices) {
   stack_.line("target_link_libraries(msc_torch_plugin ${TORCH_LIBRARIES}" + libs + ")");
   if (config()->install_dir.size() > 0) {
     stack_.line("SET(LIBRARY_OUTPUT_PATH " + config()->install_dir + ")");
-    if (libs.size() > 0) {
+    if (config()->libs.size() > 0) {
       stack_.line("file(COPY " + libs + " DESTINATION " + config()->install_dir + ")");
     }
   }
@@ -340,7 +343,7 @@ void TorchPluginCodeGen::CodeGenMalloc(const Plugin& plugin, const Array<PluginT
   CodeGenSafeCall(plugin->externs["infer_" + collect], call_args, collect + "_metas");
   for (size_t i = 0; i < tensors.size(); i++) {
     const auto& var_name = "t_" + tensors[i]->name;
-    stack_.func_call("TorchUtils::MallocTorchTensor", "auto " + var_name)
+    stack_.func_call("TorchUtils::MallocTorchTensor", DocUtils::ToDeclareDoc("auto", var_name))
         .call_arg(DocUtils::ToIndexDoc(collect + "_metas", i));
     int device_idx = plugin->FindDeviceRefIdx(tensors[i]);
     if (device_idx >= 0) {
@@ -397,7 +400,8 @@ void TorchPluginCodeGen::CodeGenCompute(const Plugin& plugin, const String& devi
       }
       compute_args.push_back("meta_attrs_");
       if (device == "cuda") {
-        stack_.func_call("at::cuda::getCurrentCUDAStream", "cudaStream_t stream");
+        stack_.func_call("at::cuda::getCurrentCUDAStream",
+                         DocUtils::ToDeclareDoc("cudaStream_t", "stream"));
         compute_args.push_back("stream");
       }
       CodeGenSafeCall(plugin->externs[device + "_compute"], compute_args);

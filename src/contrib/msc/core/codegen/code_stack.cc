@@ -238,6 +238,56 @@ void BaseStack::ConstructorEnd() {
   PushDoc(ConstructorDoc(func->name, func->args, body));
 }
 
+void BaseStack::LambdaDef(const String& lambda_name) {
+  PushDoc(LambdaDoc(IdDoc(lambda_name), Array<AssignDoc>(), Array<ExprDoc>(), Array<StmtDoc>()));
+}
+
+void BaseStack::LambdaArg(const String& arg, const String& annotation, const String& value) {
+  const auto& lambda = PopCheckedDoc<LambdaDoc, LambdaDocNode>();
+  Optional<ExprDoc> value_doc;
+  if (value.size() > 0) {
+    value_doc = IdDoc(value);
+  } else {
+    value_doc = NullOpt;
+  }
+  Optional<ExprDoc> annotation_doc;
+  if (annotation.size() > 0) {
+    annotation_doc = IdDoc(annotation);
+  } else {
+    annotation_doc = NullOpt;
+  }
+  Array<AssignDoc> args = lambda->args;
+  args.push_back(AssignDoc(IdDoc(arg), value_doc, annotation_doc));
+  PushDoc(LambdaDoc(lambda->name, args, lambda->refs, lambda->body));
+}
+
+void BaseStack::LambdaRef(const String& ref) {
+  const auto& lambda = PopCheckedDoc<LambdaDoc, LambdaDocNode>();
+  Array<ExprDoc> refs = lambda->refs;
+  refs.push_back(DocUtils::ToDoc(ref));
+  PushDoc(LambdaDoc(lambda->name, lambda->args, refs, lambda->body));
+}
+
+void BaseStack::LambdaStart() {
+  ICHECK(TopDoc()->IsInstance<LambdaDocNode>()) << "LambdaDoc is not saved";
+  BlockStart();
+}
+
+void BaseStack::LambdaEnd(const String& ret_val) {
+  if (ret_val.size() > 0) {
+    PushDoc(ReturnDoc(IdDoc(ret_val)));
+  }
+  const auto& block = PopBlock();
+  const auto& lambda = PopCheckedDoc<LambdaDoc, LambdaDocNode>();
+  const auto& body = DocUtils::ToStmts(block);
+  PushDoc(LambdaDoc(lambda->name, lambda->args, lambda->refs, body));
+}
+
+void BaseStack::LambdaEnd(const ExprDoc& ret_val) {
+  PushDoc(ReturnDoc(ret_val));
+  LambdaEnd("");
+}
+
 void BaseStack::PopNest(const String& key) {
   const auto& last = PopDoc();
   if (last->IsInstance<CallDocNode>()) {
@@ -307,23 +357,6 @@ void BaseStack::ConditionEnd() {
   } else {
     PushDoc(IfDoc(if_doc->predicate, if_doc->then_branch, branch));
   }
-}
-
-void BaseStack::ForStart(const String& lhs, const String& rhs) {
-  PushDoc(ForDoc(IdDoc(lhs), IdDoc(rhs), Array<StmtDoc>()));
-  BlockStart();
-}
-
-void BaseStack::ForStart(const String& lhs, size_t start, size_t end) {
-  Array<ExprDoc> range{DocUtils::ToDoc(start), DocUtils::ToDoc(end)};
-  PushDoc(ForDoc(IdDoc(lhs), TupleDoc(range), Array<StmtDoc>()));
-  BlockStart();
-}
-
-void BaseStack::ForStart(const String& lhs, const String& start, const String& end) {
-  Array<ExprDoc> range{DocUtils::ToDoc(start), DocUtils::ToDoc(end)};
-  PushDoc(ForDoc(IdDoc(lhs), TupleDoc(range), Array<StmtDoc>()));
-  BlockStart();
 }
 
 void BaseStack::ForEnd() {

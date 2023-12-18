@@ -88,6 +88,8 @@ void MSCBasePrinter::PrintDoc(const Doc& doc, bool new_line) {
     PrintTypedDoc(doc_node.value());
   } else if (auto doc_node = doc.as<SwitchDoc>()) {
     PrintTypedDoc(doc_node.value());
+  } else if (auto doc_node = doc.as<LambdaDoc>()) {
+    PrintTypedDoc(doc_node.value());
   } else {
     LOG(FATAL) << "Do not know how to print " << doc->GetTypeKey();
     throw;

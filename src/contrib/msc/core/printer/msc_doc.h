@@ -285,8 +285,60 @@ class SwitchDoc : public StmtDoc {
                      Array<StmtDoc> default_branch);
   TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(SwitchDoc, StmtDoc, SwitchDocNode);
 };
+
+/*!
+ * \brief Doc that represents lambda definition.
+ *
+ * \sa LambdaDoc
+ */
+class LambdaDocNode : public StmtDocNode {
+ public:
+  /*! \brief The name of lambda. */
+  IdDoc name{nullptr};
+  /*!
+   * \brief The arguments of lambda.
+   *
+   * The `lhs` means argument name,
+   * `annotation` means argument type,
+   * and `rhs` means default value.
+   */
+  Array<AssignDoc> args;
+  /*! \brief References of lambda. */
+  Array<ExprDoc> refs;
+  /*! \brief The body of lambda. */
+  Array<StmtDoc> body;
+
+  void VisitAttrs(AttrVisitor* v) {
+    StmtDocNode::VisitAttrs(v);
+    v->Visit("name", &name);
+    v->Visit("args", &args);
+    v->Visit("refs", &refs);
+    v->Visit("body", &body);
+  }
+
+  static constexpr const char* _type_key = "script.printer.LambdaDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(LambdaDocNode, StmtDocNode);
+};
+
+/*!
+ * \brief Reference type of LambdaDocNode.
+ *
+ * \sa LambdaDoc
+ */
+class LambdaDoc : public StmtDoc {
+ public:
+  /*!
+   * \brief Constructor of LambdaDoc.
+   * \param name The name of lambda.
+   * \param args The arguments of lambda.
+   * \param refs The references of lambda.
+   * \param body The body of lambda.
+   */
+  explicit LambdaDoc(IdDoc name, Array<AssignDoc> args, Array<ExprDoc> refs, Array<StmtDoc> body);
+  TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(LambdaDoc, StmtDoc, LambdaDocNode);
+};
+
 }  // namespace msc
 }  // namespace contrib
 }  // namespace tvm
-
 #endif  // TVM_CONTRIB_MSC_CORE_PRINTER_MSC_DOC_H_

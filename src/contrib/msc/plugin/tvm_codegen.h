@@ -94,7 +94,7 @@ class TVMPluginCodeGen : public BasePluginCodeGen<TVMPluginCodeGenConfig> {
 
  private:
   /*! \brief Class name of relax op attr*/
-  const String RelaxAttrClsName(const Plugin& plugin) { return plugin->name + "RelaxAttrs"; }
+  const String RelaxMetaAttrCls(const Plugin& plugin) { return plugin->name + "Attrs"; }
 
   /*! \brief Codegen compute*/
   void CodeGenCompute(const Plugin& plugin, const String& device);
@@ -104,6 +104,9 @@ class TVMPluginCodeGen : public BasePluginCodeGen<TVMPluginCodeGenConfig> {
     if (type == "string") {
       return "String";
     }
+    if (type == "float" || type == "float32" || type == "float64") {
+      return "FloatImm";
+    }
     if (type == "list(int)") {
       return "Array<Integer>";
     }
@@ -112,14 +115,6 @@ class TVMPluginCodeGen : public BasePluginCodeGen<TVMPluginCodeGenConfig> {
     }
     if (type == "list(bool)") {
       return "Array<Bool>";
-    }
-    return BasePluginCodeGen<TVMPluginCodeGenConfig>::ToCppType(type);
-  }
-
-  /*! \brief Type name from tvm args to cpp*/
-  const String FromTVMArgType(const String& type) {
-    if (type == "float") {
-      return "double";
     }
     return BasePluginCodeGen<TVMPluginCodeGenConfig>::ToCppType(type);
   }

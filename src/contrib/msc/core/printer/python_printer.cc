@@ -242,6 +242,7 @@ void PythonPrinter::MaybePrintComment(const StmtDoc& stmt, bool multi_lines) {
     }
     NewLine();
     output_ << "\"\"\"";
+    NewLine();
   } else {
     MSCBasePrinter::MaybePrintComment(stmt, multi_lines);
   }

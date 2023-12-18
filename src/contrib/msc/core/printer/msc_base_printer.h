@@ -194,6 +194,9 @@ class MSCBasePrinter {
   /*! \brief Virtual method to print a SwitchDoc*/
   virtual void PrintTypedDoc(const SwitchDoc& doc) { LOG(FATAL) << "SwitchDoc is not implemented"; }
 
+  /*! \brief Virtual method to print a LambdaDoc*/
+  virtual void PrintTypedDoc(const LambdaDoc& doc) { LOG(FATAL) << "LambdaDoc is not implemented"; }
+
   /*! \brief Print docs to joined doc */
   template <typename DocType>
   void PrintJoinedDocs(const Array<DocType>& docs, const String& separator = ", ") {

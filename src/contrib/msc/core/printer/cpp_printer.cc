@@ -285,6 +285,30 @@ void CppPrinter::PrintTypedDoc(const ConstructorDoc& doc) {
   NewLine(false);
 }
 
+void CppPrinter::PrintTypedDoc(const LambdaDoc& doc) {
+  MaybePrintComment(doc, true);
+  for (const AssignDoc& arg_doc : doc->args) {
+    ICHECK(arg_doc->comment == nullptr) << "Function arg cannot have comment attached to them.";
+  }
+  output_ << "auto ";
+  PrintDoc(doc->name, false);
+  output_ << " = [";
+  PrintJoinedDocs(doc->refs, ", ");
+  output_ << "](";
+  PrintJoinedDocs(doc->args, ", ");
+  output_ << ")";
+  if (doc->body.size() > 0) {
+    output_ << " {";
+    PrintIndentedBlock(doc->body);
+    Endline();
+    NewLine();
+    output_ << "};";
+  } else {
+    Endline();
+  }
+  NewLine(false);
+}
+
 bool CppPrinter::IsEmptyDoc(const ExprDoc& doc) {
   if (!doc->IsInstance<IdDocNode>()) {
     return false;

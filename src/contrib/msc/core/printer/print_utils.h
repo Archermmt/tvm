@@ -77,8 +77,22 @@ class DocUtils {
    * \brief Change object to DeclareDoc.
    * \return The DeclareDoc.
    */
-  TVM_DLL static const DeclareDoc ToDeclareDoc(const String& type, const String& variable,
-                                               size_t len = 0, bool use_constructor = true);
+  template <typename T>
+  TVM_DLL static const DeclareDoc ToDeclareDoc(const String& type, const T& variable,
+                                               size_t len = 0, bool use_constructor = true) {
+    Optional<ExprDoc> type_doc;
+    if (type.size() == 0) {
+      type_doc = NullOpt;
+    } else {
+      type_doc = IdDoc(type);
+    }
+    if (len == 0) {
+      return DeclareDoc(type_doc, ToDoc(variable), Array<ExprDoc>(), use_constructor);
+    }
+    Array<Doc> doc_indices{DocUtils::ToDoc(len)};
+    return DeclareDoc(type_doc, IndexDoc(ToDoc(variable), doc_indices), Array<ExprDoc>(),
+                      use_constructor);
+  }
 
   /*!
    * \brief Change object to AttrAccessDoc.
@@ -134,27 +148,27 @@ class DocUtils {
    * \brief Change object to IndexDoc.
    * \return The IndexDoc.
    */
-  template <typename T>
-  TVM_DLL static const IndexDoc ToIndexDoc(const String& value, T index) {
+  template <typename VT, typename IT>
+  TVM_DLL static const IndexDoc ToIndexDoc(const VT& value, const IT& index) {
     Array<Doc> doc_indices;
     doc_indices.push_back(ToDoc(index));
-    return IndexDoc(IdDoc(value), doc_indices);
+    return IndexDoc(ToDoc(value), doc_indices);
   }
-  template <typename T>
-  TVM_DLL static const IndexDoc ToIndicesDoc(const String& value, const std::vector<T>& indices) {
+  template <typename VT, typename IT>
+  TVM_DLL static const IndexDoc ToIndicesDoc(const VT& value, const std::vector<IT>& indices) {
     Array<Doc> doc_indices;
     for (const auto& i : indices) {
       doc_indices.push_back(ToDoc(i));
     }
-    return IndexDoc(IdDoc(value), doc_indices);
+    return IndexDoc(ToDoc(value), doc_indices);
   }
-  template <typename T>
-  TVM_DLL static const IndexDoc ToIndicesDoc(const String& value, const Array<T>& indices) {
+  template <typename VT, typename IT>
+  TVM_DLL static const IndexDoc ToIndicesDoc(const VT& value, const Array<IT>& indices) {
     Array<Doc> doc_indices;
     for (const auto& i : indices) {
       doc_indices.push_back(ToDoc(i));
     }
-    return IndexDoc(IdDoc(value), doc_indices);
+    return IndexDoc(ToDoc(value), doc_indices);
   }
 
   /*!
