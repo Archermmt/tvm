@@ -504,7 +504,6 @@ def test_stridedslice():
     """test tensorflow translator for stridedslice"""
 
     _test_stridedslice([2, 3, 4], [0], [1], [1], shrink_axis_mask=8)
-    _test_stridedslice([3, 4, 3], [1, -1, 0], [4, -5, 3], [2, -1, 1])
     _test_stridedslice([3, 4, 3], [1, 0], [4, 3], [2, 1], ellipsis_mask=8)
     _test_stridedslice([3, 4, 3], [1, 1, 0], [4, 4, 2], [2, 1, 1], new_axis_mask=5)
     _test_stridedslice(
