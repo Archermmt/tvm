@@ -28,15 +28,16 @@ namespace tvm {
 namespace contrib {
 namespace msc {
 
-#define PLUGIN_CODEGEN_CONFIG_MEMBERS   \
-  bool need_convert{false};             \
-  bool with_runtime{false};             \
-  std::string cmake_version{"3.5"};     \
-  std::string install_dir;              \
-  std::vector<size_t> version{0, 0, 0}; \
-  std::vector<std::string> includes;    \
-  std::vector<std::string> libs;        \
-  std::unordered_map<std::string, std::string> flags;
+#define PLUGIN_CODEGEN_CONFIG_MEMBERS                 \
+  bool need_convert{false};                           \
+  bool with_runtime{false};                           \
+  std::string cmake_version{"3.5"};                   \
+  std::string install_dir;                            \
+  std::vector<size_t> version{0, 0, 0};               \
+  std::vector<std::string> includes;                  \
+  std::vector<std::string> libs;                      \
+  std::unordered_map<std::string, std::string> flags; \
+  std::unordered_map<std::string, std::string> ops_info;
 
 #define PLUGIN_CODEGEN_CONFIG_PARSE             \
   if (key == "need_convert") {                  \
@@ -55,6 +56,8 @@ namespace msc {
     reader->Read(&libs);                        \
   } else if (key == "flags") {                  \
     reader->Read(&flags);                       \
+  } else if (key == "ops_info") {               \
+    reader->Read(&ops_info);                    \
   } else {                                      \
     LOG(FATAL) << "Do not support key " << key; \
   }

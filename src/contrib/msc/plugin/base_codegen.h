@@ -125,7 +125,7 @@ class BasePluginCodeGen {
     CodeGenManagerImports();
     this->stack_.line();
     CodeGenManagerUtils();
-    this->stack_.line().class_def("PluginManager(object)").class_start();
+    this->stack_.class_def("PluginManager(object)").class_start();
     CodeGenManagerMethods();
     for (const auto& name : ListPluginNames()) {
       CodeGenPluginManager(GetPlugin(name));
@@ -257,15 +257,8 @@ class BasePluginCodeGen {
 
   /*! \brief Codegen manager methods*/
   virtual void CodeGenManagerMethods() {
-    this->stack_.func_def("op_names", "List[str]")
-        .func_arg("self", "object")
-        .func_start()
-        .assign("names", "[]");
-    for (const auto& name : ListPluginNames()) {
-      this->stack_.func_call("append", "", "names").call_arg(DocUtils::ToStrDoc(name));
-    }
-    this->stack_.func_end("names")
-        .func_def("copy_libs")
+    // copy the libs
+    this->stack_.func_def("copy_libs")
         .func_arg("self", "object")
         .func_arg("dst", "str")
         .func_start()
@@ -279,6 +272,26 @@ class BasePluginCodeGen {
         .call_arg("os.path.join(dst, lib)")
         .for_end()
         .func_end();
+    // get op names
+    this->stack_.func_def("get_op_names", "List[str]")
+        .func_arg("self", "object")
+        .func_start()
+        .assign("names", "[]");
+    for (const auto& name : ListPluginNames()) {
+      this->stack_.func_call("append", "", "names").call_arg(DocUtils::ToStrDoc(name));
+    }
+    this->stack_.func_end("names");
+    // get ops info
+    this->stack_.func_def("get_ops_info", "dict")
+        .func_arg("self", "object")
+        .func_start()
+        .assign("info", "{}");
+    for (const auto& name : ListPluginNames()) {
+      ICHECK(this->config()->ops_info.count(name)) << "Can not find op info for " << name;
+      const auto& info = this->config()->ops_info[name];
+      this->stack_.assign(DocUtils::ToIndexDoc("info", DocUtils::ToStrDoc(name)), info);
+    }
+    this->stack_.func_end("info");
   };
 
   /*! \brief Codegen manager for plugin*/

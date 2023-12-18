@@ -77,4 +77,9 @@ def register_plugin(
         if file_path:
             extern_libs[os.path.basename(file_path)] = file_path
     _ffi_api.RegisterPlugin(name, msc_utils.dump_dict(plugin))
-    return extern_sources, extern_libs
+    # remove needless keys
+    for key in ["name", "support_dtypes", "externs"]:
+        plugin.pop(key)
+    plugin["inputs"] = [{"name": i["name"]} for i in plugin["inputs"]]
+    plugin["outputs"] = [{"name": o["name"]} for o in plugin["outputs"]]
+    return extern_sources, extern_libs, plugin

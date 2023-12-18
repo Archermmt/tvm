@@ -30,7 +30,7 @@ def build_plugins(
     cpp_print_config: Optional[Dict[str, str]] = None,
     py_print_config: Optional[Dict[str, str]] = None,
     externs_dir: msc_utils.MSCDirectory = None,
-    on_debug:bool=False
+    on_debug: bool = False,
 ):
     """Build the plugins
 
@@ -55,17 +55,20 @@ def build_plugins(
     """
 
     workspace = workspace or msc_utils.msc_dir("msc_plugin")
-    
+
     # register the plugins
-    extern_sources, extern_libs = {}, {}
+    extern_sources, extern_libs, ops_info = {}, {}, {}
     for name, plugin in plugins.items():
-        sources, libs = register_plugin(name, plugin, externs_dir)
+        sources, libs, info = register_plugin(name, plugin, externs_dir)
         extern_sources.update(sources)
         extern_libs.update(libs)
+        ops_info[name] = info
     # build plugins for frameworks
     codegens = {}
     for framework in frameworks:
-        build_folder = workspace.create_dir("source_"+framework,keep_history=on_debug, cleanup=not on_debug)
+        build_folder = workspace.create_dir(
+            "source_" + framework, keep_history=on_debug, cleanup=not on_debug
+        )
         codegen = get_codegen(
             framework,
             codegen_config,
@@ -76,10 +79,10 @@ def build_plugins(
             extern_sources=extern_sources,
             extern_libs=extern_libs,
         )
-        if len(codegen.lib_folder.listdir())==0:
+        if len(codegen.lib_folder.listdir()) == 0:
             codegen.build_libs()
-        if codegen.need_manager and len(codegen.manager_folder.listdir())==0:
-            codegen.build_manager()
+        if codegen.need_manager and len(codegen.manager_folder.listdir()) == 0:
+            codegen.build_manager(ops_info)
         codegens[framework] = codegen
     return codegens
 
@@ -92,7 +95,7 @@ def build_plugins_manager(
     cpp_print_config: Optional[Dict[str, str]] = None,
     py_print_config: Optional[Dict[str, str]] = None,
     externs_dir: msc_utils.MSCDirectory = None,
-    on_debug:bool=False
+    on_debug: bool = False,
 ) -> Dict[str, Any]:
     """Build the plugins and load plugin manager
 
@@ -131,11 +134,11 @@ def build_plugins_manager(
         externs_dir=externs_dir,
         on_debug=on_debug,
     )
-    managers={}
+    managers = {}
     for name, codegen in codegens.items():
-        manager_file=codegen.manager_folder.relpath("manager.py")
-        manager_cls = msc_utils.load_callable(manager_file + ":PluginManager" )                    
-        managers[name]=manager_cls(codegen.lib_folder.path)
+        manager_file = codegen.manager_folder.relpath("manager.py")
+        manager_cls = msc_utils.load_callable(manager_file + ":PluginManager")
+        managers[name] = manager_cls(codegen.lib_folder.path)
     return managers
 
 
@@ -148,7 +151,7 @@ def pack_plugins_wheel(
     cpp_print_config: Optional[Dict[str, str]] = None,
     py_print_config: Optional[Dict[str, str]] = None,
     externs_dir: msc_utils.MSCDirectory = None,
-    on_debug:bool=False,
+    on_debug: bool = False,
 ) -> str:
     """Build the plugins and build to wheel
 

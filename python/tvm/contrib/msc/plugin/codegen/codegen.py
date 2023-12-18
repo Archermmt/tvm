@@ -113,8 +113,13 @@ class BasePluginCodeGen(object):
             self._libs.extend([os.path.basename(l) for l in self._lib_folder.listdir()])
         return self._lib_folder.listdir(as_abs=True)
 
-    def build_manager(self) -> List[str]:
+    def build_manager(self, ops_info: dict) -> List[str]:
         """Generate manager source for plugin
+
+        Parameters
+        ----------
+        ops_info: dict
+            The info of ops.
 
         Returns
         -------
@@ -123,6 +128,7 @@ class BasePluginCodeGen(object):
         """
 
         self._codegen_config["libs"] = self._libs
+        self._codegen_config["ops_info"] = {n: msc_utils.dump_dict(i) for n, i in ops_info.items()}
         codegen_config = msc_utils.dump_dict(self._codegen_config)
         sources = self.source_getter(codegen_config, self._py_print_config, "manager")
         manager_files = []
