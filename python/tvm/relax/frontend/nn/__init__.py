@@ -15,16 +15,11 @@
 # specific language governing permissions and limitations
 # under the License.
 """A PyTorch-like API to build IRModules."""
+# pylint: disable=redefined-builtin
 from . import op, spec
-from .core import (
-    Effect,
-    ExternModule,
-    Module,
-    ModuleList,
-    Parameter,
-    SourceModule,
-    Tensor,
-)
+from .core import Effect, Module, ModuleList, Parameter, Tensor
+from .exporter import add_extern
+from .extern import ExternModule, ObjectModule, SourceModule
 from .modules import (
     GELU,
     Conv1D,
@@ -34,7 +29,6 @@ from .modules import (
     KVCache,
     LayerNorm,
     Linear,
-    MultiLinear,
     ReLU,
     RMSNorm,
     SiLU,

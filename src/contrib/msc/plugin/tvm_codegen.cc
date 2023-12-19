@@ -375,7 +375,7 @@ void TVMPluginCodeGen::CodeGenOpRegister(const Plugin& plugin) {
 
 void TVMPluginCodeGen::CodeGenOpRuntime(const Plugin& plugin) {
   const auto& attr_name = MetaAttrCls(plugin);
-  const auto& func_name =ComputeName(plugin);
+  const auto& func_name = ComputeName(plugin);
   String device_cond = "";
   for (size_t i = 0; i < plugin->inputs.size(); i++) {
     if (plugin->inputs[i]->device == "cuda" || plugin->inputs[i]->device == "default") {
@@ -552,9 +552,8 @@ void TVMPluginCodeGen::CodeGenPluginManager(const Plugin& plugin) {
 void TVMPluginCodeGen::CodeGenCompute(const Plugin& plugin, const String& device) {
   if (plugin->externs.count(device + "_compute")) {
     // compute with dtype
-    auto prepare_tensor = [this, &device](const PluginTensor& tensor,
-                                          const Map<String, String>& dtypes, size_t idx,
-                                          const String& collect) {
+    auto prepare_tensor = [this](const PluginTensor& tensor, const Map<String, String>& dtypes,
+                                 size_t idx, const String& collect) {
       const String& t_name = "d_" + tensor->name;
       const String& t_dtype = dtypes.count(tensor->name) ? dtypes[tensor->name] : tensor->dtype;
       const String& tensor_type = "DataTensor<" + t_dtype + ">";
