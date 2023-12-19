@@ -27,6 +27,7 @@ import tvm.testing
 from tvm import relax
 from tvm.relax.transform import BindParams
 from tvm.script import relax as R
+from tvm.contrib.msc.pipeline import MSCManager
 from tvm.contrib.msc.plugin import build_plugins_manager
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
@@ -43,7 +44,7 @@ def _get_externs_header():
     return """#ifndef EXTERNS_H_
 #define EXTERNS_H_
 
-#include "utils/plugin_utils.h"
+#include "utils/plugin_base.h"
 
 #ifdef PLUGIN_ENABLE_CUDA
 #include <cuda_runtime.h>
@@ -250,9 +251,12 @@ def _build_plugin(frameworks):
     return managers
 
 
-def _run_relax(relax_mod, target, data):
-    target = tvm.target.Target(target)
+def _run_relax(relax_mod, target_name, data):
+    target = tvm.target.Target(target_name)
     relax_mod = tvm.relax.transform.LegalizeOps()(relax_mod)
+    if target_name == "cuda":
+        with target:
+            relax_mod = tvm.tir.transform.DefaultGPUSchedule()(relax_mod)
     with tvm.transform.PassContext(opt_level=3):
         relax_exec = tvm.relax.build(relax_mod, target)
         runnable = tvm.relax.VirtualMachine(relax_exec, tvm.cpu())
@@ -283,25 +287,52 @@ def test_tvm_plugin_gpu():
     _test_tvm_plugin("cuda")
 
 
-@pytest.mark.parametrize("compile_type", ["", MSCFramework.TORCH, MSCFramework.TVM])
-def test_torch_plugin(compile_type):
+def test_torch_plugin():
     """Test plugin in torch"""
 
-    frameworks = [MSCFramework.TORCH]
-    if compile_type:
-        frameworks.append(MSCFramework.TVM)
-    managers = _build_plugin(frameworks)
+    managers = _build_plugin([MSCFramework.TORCH])
     model = _get_torch_model(managers[MSCFramework.TORCH])
     torch_data = torch.from_numpy(np.random.rand(1, 3, 224, 224).astype("float32"))
     if torch.cuda.is_available():
         model = model.to(torch.device("cuda:0"))
         torch_data = torch_data.to(torch.device("cuda:0"))
+    outputs = model(torch_data)
+    print("outputs " + str(msc_utils.inspect_array(outputs)))
+    assert outputs.min() >= 0 and outputs.max() <= 0.5
 
-    golden = model(torch_data)
-    print("golden " + str(msc_utils.inspect_array(golden)))
-    assert golden.min() >= 0 and golden.max() <= 0.5
-    if compile_type:
-        print("test compile on " + str(compile_type))
+
+@pytest.mark.parametrize(
+    "compile_type", [MSCFramework.TORCH, MSCFramework.TVM, MSCFramework.TENSORRT]
+)
+def test_manager_plugin(compile_type):
+    frameworks = [MSCFramework.TORCH, MSCFramework.TVM]
+    if compile_type not in frameworks:
+        frameworks.append(compile_type)
+    managers = _build_plugin(frameworks)
+    model = _get_torch_model(managers[MSCFramework.TORCH])
+    config = {
+        "model_type": MSCFramework.TORCH,
+        "inputs": [["input_0", [1, 3, 224, 224], "float32"]],
+        "outputs": ["output"],
+        "dataset": {"loader": "from_random", "max_iter": 5},
+        "prepare": {"profile": {"benchmark": {"repeat": 10}}},
+        "baseline": {
+            "profile": {"check": {"atol": 1e-2, "rtol": 1e-2}, "benchmark": {"repeat": 10}},
+        },
+        "compile": {
+            "run_type": compile_type,
+            "profile": {"check": {"atol": 1e-2, "rtol": 1e-2}, "benchmark": {"repeat": 10}},
+        },
+    }
+    manager = MSCManager(model, config, plugins=managers)
+    report = manager.run_pipe()
+    assert report["success"], "Failed to run pipe for torch -> {}".format(compile_type)
+    model_info = manager.runner.model_info
+    expected_info = {}
+    assert msc_utils.dict_equal(
+        model_info, expected_info
+    ), "Model info {} mismatch with expected {}".format(model_info, expected_info)
+    manager.destory()
 
 
 if __name__ == "__main__":
