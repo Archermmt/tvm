@@ -324,26 +324,29 @@ def get_plugin_utils_h_code() -> str:
 #ifdef PLUGIN_ENABLE_CUDA
 #include <cuda.h>
 #include <cuda_runtime.h>
-#endif
+#endif  // PLUGIN_ENABLE_CUDA
 
 #ifdef PLUGIN_SUPPORT_TVM
 #include <tvm/relax/expr.h>
 
-#include "tvm/../../src/contrib/msc/core/utils.h"
 #include "tvm/../../src/contrib/msc/core/transform/layout_utils.h"
-#endif
+#include "tvm/../../src/contrib/msc/core/utils.h"
+#ifdef PLUGIN_ENABLE_CUDA
+#include "tvm/../../src/runtime/cuda/cuda_common.h"
+#endif  // PLUGIN_ENABLE_CUDA
+#endif  // PLUGIN_SUPPORT_TVM
 
 #ifdef PLUGIN_SUPPORT_TORCH
 #include <torch/custom_class.h>
 #include <torch/script.h>
 #ifdef PLUGIN_ENABLE_CUDA
 #include <c10/cuda/CUDAStream.h>
-#endif
-#endif
+#endif  // PLUGIN_ENABLE_CUDA
+#endif  // PLUGIN_SUPPORT_TORCH
 
 #ifdef PLUGIN_SUPPORT_TENSORRT
 #include "NvInfer.h"
-#endif
+#endif  // PLUGIN_SUPPORT_TENSORRT
 
 namespace tvm {
 namespace contrib {
@@ -572,11 +575,12 @@ class TVMUtils {
     return MetaShape(dims);
   }
 
-  static MetaTensor ToMetaTensor(const Expr& expr, const LayoutDecision& layout_dec = LayoutDecision()) {
+  static MetaTensor ToMetaTensor(const Expr& expr,
+                                 const LayoutDecision& layout_dec = LayoutDecision()) {
     const auto* sinfo = GetStructInfoAs<TensorStructInfoNode>(expr);
     if (layout_dec.defined() && layout_dec->layout.defined()) {
       const auto& layout = MetaLayout(layout_dec->layout.name());
-      return MetaTensor(ToMetaShape(sinfo->GetShape()), ToMetaType(sinfo->dtype), layout);    
+      return MetaTensor(ToMetaShape(sinfo->GetShape()), ToMetaType(sinfo->dtype), layout);
     }
     const auto& layout = MetaLayout(SpanUtils::GetAttr(expr->span, "layout"));
     return MetaTensor(ToMetaShape(sinfo->GetShape()), ToMetaType(sinfo->dtype), layout);
@@ -712,8 +716,7 @@ class TorchUtils {
       return DataTensor<T>(meta.shape(), meta.data_type(), meta.layout(),
                            (const T*)(tensor.data_ptr()));
     } else {
-      return DataTensor<T>(meta.shape(), meta.data_type(), meta.layout(),
-                           (T*)(tensor.data_ptr()));
+      return DataTensor<T>(meta.shape(), meta.data_type(), meta.layout(), (T*)(tensor.data_ptr()));
     }
   }
 

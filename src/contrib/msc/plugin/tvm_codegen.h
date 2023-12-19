@@ -93,8 +93,8 @@ class TVMPluginCodeGen : public BasePluginCodeGen<TVMPluginCodeGenConfig> {
   void CodeGenPluginManager(const Plugin& plugin) final;
 
  private:
-  /*! \brief Class name of relax op attr*/
-  const String RelaxMetaAttrCls(const Plugin& plugin) { return plugin->name + "Attrs"; }
+  /*! \brief Func name of compute*/
+  const String ComputeName(const Plugin& plugin) { return plugin->name + "_compute"; }
 
   /*! \brief Codegen compute*/
   void CodeGenCompute(const Plugin& plugin, const String& device);

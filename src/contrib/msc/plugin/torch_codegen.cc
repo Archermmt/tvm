@@ -127,7 +127,16 @@ void TorchPluginCodeGen::CodeGenOpDefine(const Plugin& plugin) {
     CodeGenMalloc(plugin, plugin->buffers, "buffer");
   }
   // do the compute
-  stack_.line().comment("do the compute").cond_if("input_tensors[0].is_cuda()");
+  String device_cond = "";
+  for (size_t i = 0; i < plugin->inputs.size(); i++) {
+    if (plugin->inputs[i]->device == "cuda" || plugin->inputs[i]->device == "default") {
+      device_cond = device_cond + "input_tensors[" + std::to_string(i) + "].is_cuda()";
+    } else {
+      device_cond = device_cond + "!input_tensors[" + std::to_string(i) + "].is_cuda()";
+    }
+    device_cond = device_cond + (i == plugin->inputs.size() - 1 ? "" : " && ");
+  }
+  stack_.line().comment("do the compute").cond_if(device_cond);
   CodeGenCompute(plugin, "cuda");
   stack_.cond_else();
   CodeGenCompute(plugin, "cpu");
