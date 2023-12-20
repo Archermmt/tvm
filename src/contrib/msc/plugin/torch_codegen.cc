@@ -47,13 +47,14 @@ void TorchPluginCodeGen::CodeGenAttrDefine(const Plugin& plugin) {
       .func_arg("meta_attrs", "const " + attr_name + "&")
       .func_start()
       .declare("std::vector<std::string>", "attrs");
-  for (const auto& attr : plugin->attrs) {
+  for (const auto& a : plugin->attrs) {
+    const String& convert = IsListType(a->type) ? "VecToString" : "ToString";
     stack_
-        .func_call("SerializeUtils::ToString",
-                   DocUtils::ToDeclareDoc("std::string", "str_" + attr->name))
-        .call_arg(DocUtils::ToAttrAccessDoc("meta_attrs", attr->name))
+        .func_call("SerializeUtils::" + convert,
+                   DocUtils::ToDeclareDoc("std::string", "str_" + a->name))
+        .call_arg(DocUtils::ToAttrAccessDoc("meta_attrs", a->name))
         .func_call("push_back", "", "attrs")
-        .call_arg("str_" + attr->name);
+        .call_arg("str_" + a->name);
   }
   stack_.func_end("attrs");
   // deserialize method for attr
@@ -62,7 +63,8 @@ void TorchPluginCodeGen::CodeGenAttrDefine(const Plugin& plugin) {
       .func_arg("meta_attrs", attr_name + "&")
       .func_start();
   for (size_t i = 0; i < plugin->attrs.size(); i++) {
-    stack_.func_call("SerializeUtils::FromString")
+    const String& convert = IsListType(plugin->attrs[i]->type) ? "VecFromString" : "FromString";
+    stack_.func_call("SerializeUtils::" + convert)
         .call_arg(DocUtils::ToIndexDoc("attrs", i))
         .call_arg(DocUtils::ToAttrAccessDoc("meta_attrs", plugin->attrs[i]->name));
   }
@@ -417,7 +419,7 @@ void TorchPluginCodeGen::CodeGenCompute(const Plugin& plugin, const String& devi
       stack_.cond_end();
     }
   } else {
-    stack_.comment("skip " + device + " compute");
+    stack_.comment("Skip compute on " + device);
   }
 }
 

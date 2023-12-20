@@ -83,6 +83,9 @@ class TVMPluginCodeGen : public BasePluginCodeGen<TVMPluginCodeGenConfig> {
   /*! \brief Codegen cmake file*/
   void CodeGenCmake(const std::set<String>& devices) final;
 
+  /*! \brief Codegen manager utils*/
+  void CodeGenManagerUtils() final;
+
   /*! \brief Codegen manager imports*/
   void CodeGenManagerImports() final;
 
@@ -102,19 +105,16 @@ class TVMPluginCodeGen : public BasePluginCodeGen<TVMPluginCodeGenConfig> {
   /*! \brief Type name in tvm*/
   const String ToTVMType(const String& type) {
     if (type == "string") {
-      return "String";
+      return "StringImm";
     }
-    if (type == "float" || type == "float32" || type == "float64") {
+    if (StringUtils::StartsWith(type, "float")) {
       return "FloatImm";
     }
-    if (type == "list(int)") {
-      return "Array<Integer>";
+    if (type == "bool" || StringUtils::StartsWith(type, "int")) {
+      return "IntImm";
     }
-    if (type == "list(float)") {
-      return "Array<FloatImm>";
-    }
-    if (type == "list(bool)") {
-      return "Array<Bool>";
+    if (IsListType(type)) {
+      return "Tuple";
     }
     return BasePluginCodeGen<TVMPluginCodeGenConfig>::ToCppType(type);
   }

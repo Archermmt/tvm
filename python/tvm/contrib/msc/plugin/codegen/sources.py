@@ -495,6 +495,54 @@ using namespace tvm::relax;
 using namespace tvm::runtime;
 class TVMUtils {
  public:
+  static void AttrFromPrim(const PrimExpr& expr, std::string& target) {
+    ICHECK(expr->IsInstance<StringImmNode>()) << "Expr is not StringImm";
+    target = Downcast<StringImm>(expr)->value;
+  }
+
+  static void AttrFromPrim(const PrimExpr& expr, bool& target) {
+    ICHECK(expr->IsInstance<IntImmNode>()) << "Expr is not IntImm";
+    target = Downcast<IntImm>(expr)->value;
+  }
+
+  static void AttrFromPrim(const PrimExpr& expr, int& target) {
+    ICHECK(expr->IsInstance<IntImmNode>()) << "Expr is not IntImm";
+    target = Downcast<IntImm>(expr)->value;
+  }
+
+  static void AttrFromPrim(const PrimExpr& expr, size_t& target) {
+    ICHECK(expr->IsInstance<IntImmNode>()) << "Expr is not IntImm";
+    target = Downcast<IntImm>(expr)->value;
+  }
+
+  static void AttrFromPrim(const PrimExpr& expr, long& target) {
+    ICHECK(expr->IsInstance<IntImmNode>()) << "Expr is not IntImm";
+    target = Downcast<IntImm>(expr)->value;
+  }
+
+  static void AttrFromPrim(const PrimExpr& expr, long long& target) {
+    ICHECK(expr->IsInstance<IntImmNode>()) << "Expr is not IntImm";
+    target = Downcast<IntImm>(expr)->value;
+  }
+
+  static void AttrFromPrim(const PrimExpr& expr, float& target) {
+    ICHECK(expr->IsInstance<FloatImmNode>()) << "Expr is not FloatImm";
+    target = Downcast<IntImm>(expr)->value;
+  }
+
+  static void AttrFromPrim(const PrimExpr& expr, double& target) {
+    ICHECK(expr->IsInstance<FloatImmNode>()) << "Expr is not FloatImm";
+    target = Downcast<IntImm>(expr)->value;
+  }
+
+  template <typename T>
+  static void AttrFromTuple(const Tuple& tuple, std::vector<T>& target) {
+    for (size_t i = 0; i < tuple->fields.size(); i++) {
+      ICHECK(tuple->fields[i]->IsInstance<PrimExprNode>()) << "Field is not PrimExpr";
+      AttrFromPrim(tuple->fields[i], target[i]);
+    }
+  }
+
   static MetaDataType ToMetaType(const DataType& dtype) {
     MetaDataType meta_type;
     if (dtype.code() == 0 && dtype.bits() == 8) {
