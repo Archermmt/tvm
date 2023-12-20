@@ -81,16 +81,16 @@ class TorchPluginCodeGen : public BasePluginCodeGen<TorchPluginCodeGenConfig> {
   void CodeGenCmake(const std::set<String>& devices) final;
 
   /*! \brief Codegen manager imports*/
-  void CodeGenManagerImports() final;
+  void CodeGenManagerDepends() final;
 
   /*! \brief Codegen manager methods*/
   void CodeGenManagerMethods() final;
 
   /*! \brief Codegen manager member for plugin*/
-  void CodeGenPluginManager(const Plugin& plugin) final;
+  void CodeGenOpBuilder(const Plugin& plugin) final;
 
   /*! \brief Codegen convert function for plugin*/
-  const String CodeGenPluginConvert(const Plugin& plugin) final;
+  const String CodeGenOpConvert(const Plugin& plugin) final;
 
  private:
   /*! \brief Codegen malloc for outputs/buffers*/

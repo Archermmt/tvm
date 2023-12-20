@@ -96,9 +96,9 @@ def _test_from_torch(runner_cls, device, is_training=False, atol=1e-3, rtol=1e-3
         runner.build()
         outputs = runner.run(datas, ret_type="list")
         golden = [msc_utils.cast_array(golden)]
+        workspace.destory()
         for gol_r, out_r in zip(golden, outputs):
             tvm.testing.assert_allclose(gol_r, out_r, atol=atol, rtol=rtol)
-        workspace.destory()
 
 
 def test_tvm_runner_cpu():
@@ -153,9 +153,9 @@ def test_tensorflow_runner():
         runner = TensorflowRunner(mod)
         runner.build()
         outputs = runner.run([data], ret_type="list")
+        workspace.destory()
         for gol_r, out_r in zip(golden, outputs):
             tvm.testing.assert_allclose(gol_r, out_r, atol=1e-3, rtol=1e-3)
-        workspace.destory()
 
 
 if __name__ == "__main__":

@@ -271,6 +271,7 @@ def _test_tvm_plugin(target):
     print("model " + str(model))
     tvm_data = tvm.nd.array(np.random.rand(1, 3, 224, 224).astype("float32"))
     outputs = _run_relax(model, target, tvm_data)
+    print("tvm outputs " + str(msc_utils.inspect_array(outputs)))
     assert outputs.min() >= 0 and outputs.max() <= 0.5
 
 
@@ -297,7 +298,7 @@ def test_torch_plugin():
         model = model.to(torch.device("cuda:0"))
         torch_data = torch_data.to(torch.device("cuda:0"))
     outputs = model(torch_data)
-    print("outputs " + str(msc_utils.inspect_array(outputs)))
+    print("torch outputs " + str(msc_utils.inspect_array(outputs)))
     assert outputs.min() >= 0 and outputs.max() <= 0.5
 
 
@@ -326,16 +327,16 @@ def test_manager_plugin(compile_type):
     }
     manager = MSCManager(model, config, plugins=managers)
     report = manager.run_pipe()
-    assert report["success"], "Failed to run pipe for torch -> {}".format(compile_type)
-    model_info = manager.runner.model_info
     expected_info = {}
+    model_info = manager.runner.model_info
+    manager.destory()
+    assert report["success"], "Failed to run pipe for torch -> {}".format(compile_type)
     assert msc_utils.dict_equal(
         model_info, expected_info
     ), "Model info {} mismatch with expected {}".format(model_info, expected_info)
-    manager.destory()
 
 
 if __name__ == "__main__":
     # tvm.testing.main()
     test_tvm_plugin_cpu()
-    # test_torch_plugin("")
+    # test_torch_plugin()

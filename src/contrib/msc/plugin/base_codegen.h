@@ -122,13 +122,11 @@ class BasePluginCodeGen {
     Map<String, String> sources;
     this->stack_.comment("Auto generated manager of msc plugin");
     sources.Set("__init__.py", ToPySource(print_options));
-    CodeGenManagerImports();
-    this->stack_.line();
-    CodeGenManagerUtils();
+    CodeGenManagerDepends();
     this->stack_.class_def("PluginManager(object)").class_start();
     CodeGenManagerMethods();
     for (const auto& name : ListPluginNames()) {
-      CodeGenPluginManager(GetPlugin(name));
+      CodeGenOpBuilder(GetPlugin(name));
     }
     if (this->config()->need_convert) {
       Map<Plugin, String> symbols;
@@ -138,7 +136,7 @@ class BasePluginCodeGen {
           .func_start();
       for (const auto& name : ListPluginNames()) {
         const auto& plugin = GetPlugin(name);
-        const auto& symbol = CodeGenPluginConvert(plugin);
+        const auto& symbol = CodeGenOpConvert(plugin);
         symbols.Set(plugin, symbol);
       }
       this->stack_.assign("converters", "{}");
@@ -207,7 +205,7 @@ class BasePluginCodeGen {
         .comment("print method")
         .func_def("operator<<", "friend std::ostream&")
         .func_arg("out", "std::ostream&")
-        .func_arg("attrs", MetaAttrCls(plugin) + "&")
+        .func_arg("attrs", "const " + MetaAttrCls(plugin) + "&")
         .func_start()
         .line("out << \"[" + MetaAttrCls(plugin) + "] : \";");
     for (const auto& attr : plugin->attrs) {
@@ -232,27 +230,13 @@ class BasePluginCodeGen {
   /*! \brief Codegen cmake file*/
   virtual void CodeGenCmake(const std::set<String>& devices) {}
 
-  /*! \brief Codegen manager utils*/
-  virtual void CodeGenManagerUtils() {
-    this->stack_.func_def("to_string", "str")
-        .func_arg("value", "Any")
-        .func_start()
-        .switch_start("isinstance(value, (list, tuple))")
-        .assign("str_value", "\",\".join([str(len(value))] + [_str_string(v) for v in value])")
-        .switch_case("isinstance(value, bool)")
-        .assign("str_value", "\"1\" if value else \"0\"")
-        .switch_case()
-        .assign("str_value", "str(value)")
-        .switch_end()
-        .func_end("str_value");
-  }
-
   /*! \brief Codegen manager imports*/
-  virtual void CodeGenManagerImports() {
+  virtual void CodeGenManagerDepends() {
     this->stack_.line("import os")
         .line("import shutil")
         .line("import ctypes")
-        .line("from typing import Any, List");
+        .line("from typing import Any, List")
+        .line();
   }
 
   /*! \brief Codegen manager methods*/
@@ -295,10 +279,10 @@ class BasePluginCodeGen {
   };
 
   /*! \brief Codegen manager for plugin*/
-  virtual void CodeGenPluginManager(const Plugin& plugin) = 0;
+  virtual void CodeGenOpBuilder(const Plugin& plugin) = 0;
 
   /*! \brief Codegen convert function for plugin*/
-  virtual const String CodeGenPluginConvert(const Plugin& plugin) { return plugin->name; }
+  virtual const String CodeGenOpConvert(const Plugin& plugin) { return plugin->name; }
 
   /*! \brief Change code stack to cpp source*/
   const String ToCppSource(const std::string& print_options = "") {

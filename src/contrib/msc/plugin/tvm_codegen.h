@@ -83,17 +83,14 @@ class TVMPluginCodeGen : public BasePluginCodeGen<TVMPluginCodeGenConfig> {
   /*! \brief Codegen cmake file*/
   void CodeGenCmake(const std::set<String>& devices) final;
 
-  /*! \brief Codegen manager utils*/
-  void CodeGenManagerUtils() final;
-
   /*! \brief Codegen manager imports*/
-  void CodeGenManagerImports() final;
+  void CodeGenManagerDepends() final;
 
   /*! \brief Codegen manager methods*/
   void CodeGenManagerMethods() final;
 
   /*! \brief Codegen manager member for plugin*/
-  void CodeGenPluginManager(const Plugin& plugin) final;
+  void CodeGenOpBuilder(const Plugin& plugin) final;
 
  private:
   /*! \brief Func name of compute*/

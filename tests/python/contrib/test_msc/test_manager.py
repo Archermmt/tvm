@@ -103,12 +103,12 @@ def _test_from_torch(compile_type, expected_info, is_training=False, atol=1e-2, 
         )
         manager = MSCManager(torch_model, config)
         report = manager.run_pipe()
-        assert report["success"], "Failed to run pipe for torch -> {}".format(compile_type)
         model_info = manager.runner.model_info
+        manager.destory()
+        assert report["success"], "Failed to run pipe for torch -> {}".format(compile_type)
         assert msc_utils.dict_equal(
             model_info, expected_info
         ), "Model info {} mismatch with expected {}".format(model_info, expected_info)
-        manager.destory()
 
 
 def _test_from_tf(compile_type, expected_info, atol=1e-2, rtol=1e-2):

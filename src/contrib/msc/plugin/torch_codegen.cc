@@ -48,9 +48,8 @@ void TorchPluginCodeGen::CodeGenAttrDefine(const Plugin& plugin) {
       .func_start()
       .declare("std::vector<std::string>", "attrs");
   for (const auto& a : plugin->attrs) {
-    const String& convert = IsListType(a->type) ? "VecToString" : "ToString";
     stack_
-        .func_call("SerializeUtils::" + convert,
+        .func_call("SerializeUtils::ToString",
                    DocUtils::ToDeclareDoc("std::string", "str_" + a->name))
         .call_arg(DocUtils::ToAttrAccessDoc("meta_attrs", a->name))
         .func_call("push_back", "", "attrs")
@@ -63,8 +62,7 @@ void TorchPluginCodeGen::CodeGenAttrDefine(const Plugin& plugin) {
       .func_arg("meta_attrs", attr_name + "&")
       .func_start();
   for (size_t i = 0; i < plugin->attrs.size(); i++) {
-    const String& convert = IsListType(plugin->attrs[i]->type) ? "VecFromString" : "FromString";
-    stack_.func_call("SerializeUtils::" + convert)
+    stack_.func_call("SerializeUtils::FromString")
         .call_arg(DocUtils::ToIndexDoc("attrs", i))
         .call_arg(DocUtils::ToAttrAccessDoc("meta_attrs", plugin->attrs[i]->name));
   }
@@ -143,12 +141,11 @@ void TorchPluginCodeGen::CodeGenOpDefine(const Plugin& plugin) {
   stack_.cond_else();
   CodeGenCompute(plugin, "cpu");
   stack_.cond_end();
-  stack_.func_end("output_tensors").line();
+  stack_.func_end("output_tensors");
   stack_.comment("define members")
       .declare(MetaAttrCls(plugin), "meta_attrs_")
       .declare("std::vector<MetaLayout>", "layouts_")
-      .declare("std::string", "name_")
-      .line();
+      .declare("std::string", "name_");
   stack_.struct_end();
 }
 
@@ -242,9 +239,21 @@ void TorchPluginCodeGen::CodeGenCmake(const std::set<String>& devices) {
   }
 }
 
-void TorchPluginCodeGen::CodeGenManagerImports() {
-  stack_.line("import torch");
-  BasePluginCodeGen<TorchPluginCodeGenConfig>::CodeGenManagerImports();
+void TorchPluginCodeGen::CodeGenManagerDepends() {
+  BasePluginCodeGen<TorchPluginCodeGenConfig>::CodeGenManagerDepends();
+  stack_.line("import torch")
+      .line()
+      .func_def("to_string", "str")
+      .func_arg("value", "Any")
+      .func_start()
+      .switch_start("isinstance(value, (list, tuple))")
+      .assign("str_value", "\",\".join([str(len(value))] + [_str_string(v) for v in value])")
+      .switch_case("isinstance(value, bool)")
+      .assign("str_value", "\"1\" if value else \"0\"")
+      .switch_case()
+      .assign("str_value", "str(value)")
+      .switch_end()
+      .func_end("str_value");
 }
 
 void TorchPluginCodeGen::CodeGenManagerMethods() {
@@ -273,7 +282,7 @@ void TorchPluginCodeGen::CodeGenManagerMethods() {
   BasePluginCodeGen<TorchPluginCodeGenConfig>::CodeGenManagerMethods();
 }
 
-void TorchPluginCodeGen::CodeGenPluginManager(const Plugin& plugin) {
+void TorchPluginCodeGen::CodeGenOpBuilder(const Plugin& plugin) {
   const auto& entry_name = EntryName(plugin);
   stack_.func_def(plugin->name).func_arg("self", "object");
   for (const auto& attr : plugin->attrs) {
@@ -342,7 +351,7 @@ void TorchPluginCodeGen::CodeGenPluginManager(const Plugin& plugin) {
   stack_.call_arg("name").call_arg("layouts").func_end("op").comment(GetPyComment(plugin), true);
 }
 
-const String TorchPluginCodeGen::CodeGenPluginConvert(const Plugin& plugin) {
+const String TorchPluginCodeGen::CodeGenOpConvert(const Plugin& plugin) {
   stack_.func_def(ConverterName(plugin)).func_start().func_end();
   return plugin->name + "::" + EntryName(plugin);
 }

@@ -409,7 +409,7 @@ class SerializeUtils {
   static std::string ToString(const std::string& value) { return value; }
 
   template <typename T>
-  static std::string VecToString(const std::vector<T>& value) {
+  static std::string ToString(const std::vector<T>& value) {
     std::string str = std::to_string(value.size());
     for (const auto& v : value) {
       str += "," + std::to_string(v);
@@ -436,7 +436,7 @@ class SerializeUtils {
   static void FromString(const std::string& src, double& target) { target = std::stof(src); }
 
   template <typename T>
-  static void VecFromString(const std::string& src, std::vector<T>& target) {
+  static void FromString(const std::string& src, std::vector<T>& target) {
     std::string left_str = src;
     int pos = left_str.find(",");
     if (pos == std::string::npos) {
@@ -453,9 +453,9 @@ class SerializeUtils {
     }
   }
 
-  static void VecFromString(const std::string& src, std::vector<bool>& target) {
+  static void FromString(const std::string& src, std::vector<bool>& target) {
     std::vector<int> values;
-    VecFromString(src, values);
+    FromString(src, values);
     target.resize(values.size());
     for (size_t i = 0; i < values.size(); i++) {
       target[i] = values[i] > 0 ? true : false;
@@ -527,19 +527,44 @@ class TVMUtils {
 
   static void AttrFromPrim(const PrimExpr& expr, float& target) {
     ICHECK(expr->IsInstance<FloatImmNode>()) << "Expr is not FloatImm";
-    target = Downcast<IntImm>(expr)->value;
+    target = Downcast<FloatImm>(expr)->value;
   }
 
   static void AttrFromPrim(const PrimExpr& expr, double& target) {
     ICHECK(expr->IsInstance<FloatImmNode>()) << "Expr is not FloatImm";
-    target = Downcast<IntImm>(expr)->value;
+    target = Downcast<FloatImm>(expr)->value;
   }
 
   template <typename T>
-  static void AttrFromTuple(const Tuple& tuple, std::vector<T>& target) {
+  static void AttrFromPrims(const Tuple& tuple, std::vector<T>& target) {
     for (size_t i = 0; i < tuple->fields.size(); i++) {
       ICHECK(tuple->fields[i]->IsInstance<PrimExprNode>()) << "Field is not PrimExpr";
       AttrFromPrim(tuple->fields[i], target[i]);
+    }
+  }
+
+  static void AttrFromArg(const TVMArgValue& arg, std::string& target) {
+    target = arg.operator std::string();
+  }
+
+  static void AttrFromArg(const TVMArgValue& arg, bool& target) { target = arg; }
+
+  static void AttrFromArg(const TVMArgValue& arg, int& target) { target = arg; }
+
+  static void AttrFromArg(const TVMArgValue& arg, size_t& target) { target = int(arg); }
+
+  static void AttrFromArg(const TVMArgValue& arg, long& target) { target = int64_t(arg); }
+
+  static void AttrFromArg(const TVMArgValue& arg, long long& target) { target = int64_t(arg); }
+
+  static void AttrFromArg(const TVMArgValue& arg, float& target) { target = double(arg); }
+
+  static void AttrFromArg(const TVMArgValue& arg, double& target) { target = arg; }
+
+  template <typename T>
+  static void AttrFromArgs(const TVMArgs& args, size_t start, size_t num, std::vector<T>& target) {
+    for (size_t i = 0; i < num; i++) {
+      AttrFromArg(args[start + i], target[i]);
     }
   }
 
@@ -701,6 +726,10 @@ class TVMUtils {
   static TensorStructInfo ToTensorStructInfo(const MetaTensor& tensor, const Expr& expr) {
     const auto* sinfo = GetStructInfoAs<TensorStructInfoNode>(expr);
     return ToTensorStructInfo(tensor, sinfo->vdevice);
+  }
+
+  static bool OnDevice(DLTensor* tensor, DLDeviceType device) {
+    return tensor->device.device_type == device;
   }
 
   static void CheckDevice(DLTensor* tensor, DLDeviceType device) {

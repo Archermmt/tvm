@@ -258,6 +258,7 @@ void CppPrinter::PrintTypedDoc(const StructDoc& doc) {
     PrintDoc(d);
   }
   DecreaseIndent();
+  NewLine(false);
   output_ << "}";
   Endline();
   output_ << "  // struct ";
