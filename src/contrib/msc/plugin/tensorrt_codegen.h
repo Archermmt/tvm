@@ -37,7 +37,7 @@ namespace msc {
  * \brief CodeGen config for tensorrt plugin
  */
 struct TensorRTPluginCodeGenConfig {
-  std::string tensorrt_root{"tensorrt"};
+  std::string tensorrt_root{"/usr/local/cuda"};
   PLUGIN_CODEGEN_CONFIG_MEMBERS
   void Load(dmlc::JSONReader* reader) {
     std::string key;

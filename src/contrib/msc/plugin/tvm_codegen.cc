@@ -253,53 +253,21 @@ void TVMPluginCodeGen::CodeGenOpRuntime(const Plugin& plugin) {
 }
 
 void TVMPluginCodeGen::CodeGenCmake(const std::set<String>& devices) {
-  stack_.line("cmake_minimum_required(VERSION " + config()->cmake_version + " FATAL_ERROR)")
-      .line("project(msc_tvm_plugin)");
-  if (devices.count("cuda")) {
-    stack_.line("find_package(CUDA)").line("add_definitions(-DPLUGIN_ENABLE_CUDA)");
-  }
-  stack_.line("set(CMAKE_CXX_STANDARD 17)");
-  stack_.line("set(CMAKE_CXX_FLAGS \"${CMAKE_CXX_FLAGS} -Wno-macro-redefined\")");
-  stack_.line("add_definitions(-DPLUGIN_SUPPORT_TVM)");
-  for (const auto& pair : config()->flags) {
-    if (pair.second == "") {
-      stack_.line("add_definitions(-D" + pair.first + ")");
-    } else {
-      stack_.line("add_definitions(-D" + pair.first + "=" + pair.second + ")");
-    }
-  }
-  stack_.line("file(GLOB_RECURSE TVM_CC_SRCS src/*.cc)");
-  if (devices.count("cuda")) {
-    stack_.line("file(GLOB_RECURSE TVM_CU_SRCS src/*.cu)");
-  }
-  if (devices.count("cuda")) {
-    stack_.line("cuda_add_library(msc_tvm_plugin SHARED ${TVM_CC_SRCS} ${TVM_CU_SRCS})");
-  } else {
-    stack_.line("add_library(msc_tvm_plugin SHARED ${TVM_CC_SRCS})");
-  }
-  stack_.line("set(TVM_ROOT " + config()->tvm_root + ")");
-  String includes = "${TVM_ROOT}/include";
-  includes = includes + " ${TVM_ROOT}/3rdparty/dmlc-core/include";
-  includes = includes + " ${TVM_ROOT}/3rdparty/dlpack/include";
-  includes = includes + " ${TVM_ROOT}/3rdparty/compiler-rt";
-  if (config()->includes.size() > 0) {
-    for (const auto& include : config()->includes) {
-      includes = includes + " " + include;
-    }
-  }
-  stack_.line("target_include_directories(msc_tvm_plugin PUBLIC " + includes + ")")
+  Map<String, String> flags;
+  flags.Set("PLUGIN_SUPPORT_TVM", "");
+  CodeGenPreCmake(devices, flags);
+  stack_.line("set(CMAKE_CXX_STANDARD 17)")
+      .line("set(CMAKE_CXX_FLAGS \"${CMAKE_CXX_FLAGS} -Wno-macro-redefined\")")
+      .line()
+      .line("set(TVM_ROOT " + config()->tvm_root + ")")
       .line("find_library(TVM_LIB NAMES tvm HINTS ${TVM_ROOT}/build NO_DEFAULT_PATH)");
-  String libs = "";
-  for (const auto& lib : config()->libs) {
-    libs = libs + " " + lib;
-  }
-  stack_.line("target_link_libraries(msc_tvm_plugin ${TVM_LIB}" + libs + ")");
-  if (config()->install_dir.size() > 0) {
-    stack_.line("SET(LIBRARY_OUTPUT_PATH " + config()->install_dir + ")");
-    if (config()->libs.size() > 0) {
-      stack_.line("file(COPY " + libs + " DESTINATION " + config()->install_dir + ")");
-    }
-  }
+  Array<String> includes, libs;
+  includes.push_back("${TVM_ROOT}/include");
+  includes.push_back("${TVM_ROOT}/3rdparty/dmlc-core/include");
+  includes.push_back("${TVM_ROOT}/3rdparty/dlpack/include");
+  includes.push_back("${TVM_ROOT}/3rdparty/compiler-rt");
+  libs.push_back("${TVM_LIB}");
+  CodeGenPostCmake(devices, includes, libs);
 }
 
 void TVMPluginCodeGen::CodeGenManagerDepends() {

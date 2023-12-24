@@ -210,49 +210,16 @@ void TorchPluginCodeGen::CodeGenOpDefine(const Plugin& plugin) {
 }
 
 void TorchPluginCodeGen::CodeGenCmake(const std::set<String>& devices) {
-  stack_.line("cmake_minimum_required(VERSION " + config()->cmake_version + " FATAL_ERROR)")
-      .line("project(msc_torch_plugin)");
-  if (devices.count("cuda")) {
-    stack_.line("find_package(CUDA)").line("add_definitions(-DPLUGIN_ENABLE_CUDA)");
-  }
-  stack_.line("set(CMAKE_CXX_STANDARD 14)")
+  Map<String, String> flags;
+  flags.Set("PLUGIN_SUPPORT_TORCH", "");
+  CodeGenPreCmake(devices, flags);
+  stack_.line()
+      .line("set(CMAKE_CXX_STANDARD 14)")
       .line("list(APPEND CMAKE_PREFIX_PATH \"" + config()->torch_prefix + "\")")
       .line("find_package(Torch REQUIRED)");
-  stack_.line("add_definitions(-DPLUGIN_SUPPORT_TORCH)");
-  for (const auto& pair : config()->flags) {
-    if (pair.second == "") {
-      stack_.line("add_definitions(-D" + pair.first + ")");
-    } else {
-      stack_.line("add_definitions(-D" + pair.first + "=" + pair.second + ")");
-    }
-  }
-  stack_.line("file(GLOB_RECURSE TORCH_CC_SRCS src/*.cc)");
-  if (devices.count("cuda")) {
-    stack_.line("file(GLOB_RECURSE TORCH_CU_SRCS src/*.cu)");
-  }
-  if (devices.count("cuda")) {
-    stack_.line("cuda_add_library(msc_torch_plugin SHARED ${TORCH_CC_SRCS} ${TORCH_CU_SRCS})");
-  } else {
-    stack_.line("add_library(msc_torch_plugin SHARED ${TORCH_CC_SRCS})");
-  }
-  if (config()->includes.size() > 0) {
-    String includes = "";
-    for (const auto& include : config()->includes) {
-      includes = includes + " " + include;
-    }
-    stack_.line("target_include_directories(msc_torch_plugin PUBLIC " + includes + ")");
-  }
-  String libs = "";
-  for (const auto& lib : config()->libs) {
-    libs = libs + " " + lib;
-  }
-  stack_.line("target_link_libraries(msc_torch_plugin ${TORCH_LIBRARIES}" + libs + ")");
-  if (config()->install_dir.size() > 0) {
-    stack_.line("SET(LIBRARY_OUTPUT_PATH " + config()->install_dir + ")");
-    if (config()->libs.size() > 0) {
-      stack_.line("file(COPY " + libs + " DESTINATION " + config()->install_dir + ")");
-    }
-  }
+  Array<String> includes, libs;
+  libs.push_back("${TORCH_LIBRARIES}");
+  CodeGenPostCmake(devices, includes, libs);
 }
 
 void TorchPluginCodeGen::CodeGenManagerDepends() {
@@ -286,7 +253,7 @@ void TorchPluginCodeGen::CodeGenManagerMethods() {
       .line("assert os.path.isdir(self._lib_folder), \"lib_folder not exist\"")
       .for_start("lib", "os.listdir(self._lib_folder)")
       .assign("lib_file", "os.path.join(self._lib_folder, lib)")
-      .cond_if("\"msc_torch_plugin\" in lib")
+      .cond_if("\"" + config()->project_name + "\" in lib")
       .func_call("load_library", "", "torch.classes")
       .call_arg("lib_file")
       .cond_else()

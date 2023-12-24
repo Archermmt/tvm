@@ -438,21 +438,21 @@ void TensorRTCodeGen::CodeGenCmake() {
   stack_.line("cmake_minimum_required(VERSION " + config()->cmake_version + " FATAL_ERROR)")
       .line("project(" + graph()->name + ")")
       .line("find_package(CUDA)")
-      .line("find_path(TENSORRT_INCLUDE_DIR NvInfer.h HINTS " + config()->tensorrt_root +
+      .line("find_path(TRT_INCLUDE_DIR NvInfer.h HINTS " + config()->tensorrt_root +
             " PATH_SUFFIXES include)")
-      .line("find_library(TENSORRT_LIB_DIR nvinfer HINTS " + config()->tensorrt_root +
+      .line("find_library(TRT_LIBS nvinfer HINTS " + config()->tensorrt_root +
             " PATH_SUFFIXES lib)")
       .line(
-          "message(STATUS \"Build project with TENSORRT_INCLUDE_DIR ${TENSORRT_INCLUDE_DIR} and "
-          "TENSORRT_LIB_DIR "
-          "${TENSORRT_LIB_DIR}\")")
+          "message(STATUS \"Build project with TRT_INCLUDE_DIR ${TRT_INCLUDE_DIR} and "
+          "TRT_LIBS "
+          "${TRT_LIBS}\")")
       .line("add_definitions(-DTRT_MAJOR=" + std::to_string(config()->version[0]) + ")")
       .line("add_definitions(-DTRT_MINOR=" + std::to_string(config()->version[1]) + ")")
       .line("add_definitions(-DTRT_PATCH=" + std::to_string(config()->version[2]) + ")")
       .line("file(GLOB_RECURSE TRT_SRCS *.cc)")
       .line("cuda_add_executable(" + graph()->name + " ${TRT_SRCS})")
-      .line("target_include_directories(" + graph()->name + " PUBLIC ${TENSORRT_INCLUDE_DIR})")
-      .line("target_link_libraries(" + graph()->name + " ${TENSORRT_LIB_DIR})");
+      .line("target_include_directories(" + graph()->name + " PUBLIC ${TRT_INCLUDE_DIR})")
+      .line("target_link_libraries(" + graph()->name + " ${TRT_LIBS})");
 }
 
 const String TensorRTCodeGen::IdxTensor(const MSCTensor& tensor) {

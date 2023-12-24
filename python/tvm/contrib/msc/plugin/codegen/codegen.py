@@ -74,7 +74,25 @@ class BasePluginCodeGen(object):
         self._manager_folder = self._output_folder.create_dir(self.framework)
         self._libs = [os.path.basename(l) for l in self._extern_libs.values()]
         self._libs.extend([os.path.basename(l) for l in self._lib_folder.listdir()])
-        self._codegen_config.update({"install_dir": self._lib_folder.path})
+        self._project_name = "msc_{}_plugin".format(self.framework)
+        self._codegen_config.update(
+            {
+                "install_dir": self._lib_folder.path,
+                "project_name": self._project_name,
+                "version": msc_utils.get_version(self.framework),
+            }
+        )
+
+    def libs_built(self) -> bool:
+        """Check if the libs are built
+
+        Returns
+        -------
+        libs_built: bool
+            Whether libs are built.
+        """
+
+        return any(self._project_name in f for f in self._lib_folder.listdir())
 
     def build_libs(self) -> List[str]:
         """Generate source and build the lib
@@ -112,6 +130,17 @@ class BasePluginCodeGen(object):
                 )
             self._libs.extend([os.path.basename(l) for l in self._lib_folder.listdir()])
         return self._lib_folder.listdir(as_abs=True)
+
+    def manager_built(self) -> bool:
+        """Check if the manager are built
+
+        Returns
+        -------
+        manager_built: bool
+            Whether manager is built.
+        """
+
+        return os.path.isfile(self._manager_folder.relpath("manager.py"))
 
     def build_manager(self, ops_info: dict) -> List[str]:
         """Generate manager source for plugin
@@ -168,6 +197,19 @@ class TVMPluginCodegen(BasePluginCodeGen):
             {"need_convert": False, "with_runtime": True, "tvm_root": tvm_root}
         )
 
+    def has_libs(self) -> bool:
+        """Check if the libs are built
+
+        Returns
+        -------
+        has_libs: bool
+            Whether has libs.
+        """
+
+        if not super().has_libs():
+            return False
+        return any("msc_tvm_plugin" in f for f in self._lib_folder.listdir())
+
     @property
     def source_getter(self):
         return _ffi_api.GetTVMPluginSources
@@ -204,9 +246,16 @@ class TorchPluginCodegen(BasePluginCodeGen):
 class TensorRTPluginCodegen(BasePluginCodeGen):
     def setup(self):
         """Set up the codegen"""
+        from tvm.contrib.msc.framework.tensorrt import _ffi_api as _trt_api
 
         super().setup()
-        self._codegen_config.update({"need_convert": False, "with_runtime": False})
+        self._codegen_config.update(
+            {
+                "need_convert": False,
+                "with_runtime": False,
+                "tensorrt_root": _trt_api.GetTensorRTRoot(),
+            }
+        )
 
     @property
     def source_getter(self):

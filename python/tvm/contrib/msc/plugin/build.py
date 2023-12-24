@@ -79,9 +79,9 @@ def build_plugins(
             extern_sources=extern_sources,
             extern_libs=extern_libs,
         )
-        if len(codegen.lib_folder.listdir()) == 0:
+        if not codegen.libs_built():
             codegen.build_libs()
-        if codegen.need_manager and len(codegen.manager_folder.listdir()) == 0:
+        if codegen.need_manager and not codegen.manager_built():
             codegen.build_manager(ops_info)
         codegens[framework] = codegen
     return codegens

@@ -31,6 +31,7 @@ namespace msc {
 #define PLUGIN_CODEGEN_CONFIG_MEMBERS                 \
   bool need_convert{false};                           \
   bool with_runtime{false};                           \
+  std::string project_name{"msc_plugin"};             \
   std::string cmake_version{"3.5"};                   \
   std::string install_dir;                            \
   std::vector<size_t> version{0, 0, 0};               \
@@ -46,6 +47,8 @@ namespace msc {
     reader->Read(&with_runtime);                \
   } else if (key == "cmake_version") {          \
     reader->Read(&cmake_version);               \
+  } else if (key == "project_name") {           \
+    reader->Read(&project_name);                \
   } else if (key == "install_dir") {            \
     reader->Read(&install_dir);                 \
   } else if (key == "version") {                \

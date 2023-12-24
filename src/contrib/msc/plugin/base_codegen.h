@@ -236,7 +236,83 @@ class BasePluginCodeGen {
   virtual void CodeGenOpRuntime(const Plugin& plugin) {}
 
   /*! \brief Codegen cmake file*/
-  virtual void CodeGenCmake(const std::set<String>& devices) {}
+  virtual void CodeGenCmake(const std::set<String>& devices) {
+    CodeGenPreCmake(devices);
+    CodeGenPostCmake(devices);
+  }
+
+  /*! \brief Codegen cmake start*/
+  void CodeGenPreCmake(const std::set<String>& devices,
+                       const Map<String, String>& extra_flags = Map<String, String>()) {
+    const auto& p_name = this->config()->project_name;
+    stack_.line("cmake_minimum_required(VERSION " + this->config()->cmake_version + " FATAL_ERROR)")
+        .line("project(" + p_name + ")");
+    if (devices.count("cuda")) {
+      stack_.line("find_package(CUDA)").line("add_definitions(-DPLUGIN_ENABLE_CUDA)");
+    }
+    stack_.line();
+    for (const auto& pair : extra_flags) {
+      if (pair.second.size() == 0) {
+        stack_.line("add_definitions(-D" + pair.first + ")");
+      } else {
+        stack_.line("add_definitions(-D" + pair.first + "=" + pair.second + ")");
+      }
+    }
+    for (const auto& pair : this->config()->flags) {
+      if (pair.second.size() == 0) {
+        stack_.line("add_definitions(-D" + pair.first + ")");
+      } else {
+        stack_.line("add_definitions(-D" + pair.first + "=" + pair.second + ")");
+      }
+    }
+    stack_.line();
+  }
+
+  /*! \brief Codegen cmake end*/
+  void CodeGenPostCmake(const std::set<String>& devices,
+                        const Array<String>& extra_includes = Array<String>(),
+                        const Array<String>& extra_libs = Array<String>()) {
+    const auto& p_name = this->config()->project_name;
+    stack_.line().line("file(GLOB_RECURSE PLUGIN_CC_SRCS src/*.cc)");
+    if (devices.count("cuda")) {
+      stack_.line("file(GLOB_RECURSE PLUGIN_CU_SRCS src/*.cu)");
+    }
+    if (devices.count("cuda")) {
+      stack_.line("cuda_add_library(" + p_name + " SHARED ${PLUGIN_CC_SRCS} ${PLUGIN_CU_SRCS})");
+    } else {
+      stack_.line("add_library(" + p_name + " SHARED ${PLUGIN_CC_SRCS})");
+    }
+    // define includes
+    String includes = "";
+    for (const auto& include : extra_includes) {
+      includes = includes + " " + include;
+    }
+    for (const auto& include : this->config()->includes) {
+      includes = includes + " " + include;
+    }
+    if (includes.size() > 0) {
+      stack_.line("target_include_directories(" + p_name + " PUBLIC " + includes + ")");
+    }
+    // define libs
+    String e_libs = "";
+    for (const auto& lib : extra_libs) {
+      e_libs = e_libs + " " + lib;
+    }
+    String libs = "";
+    for (const auto& lib : this->config()->libs) {
+      libs = libs + " " + lib;
+    }
+    if (e_libs.size() > 0 || libs.size() > 0) {
+      stack_.line("target_link_libraries(" + p_name + e_libs + libs + ")");
+    }
+    const auto& install_dir = this->config()->install_dir;
+    if (install_dir.size() > 0) {
+      stack_.line().line("SET(LIBRARY_OUTPUT_PATH " + install_dir + ")");
+      if (this->config()->libs.size() > 0) {
+        stack_.line("file(COPY " + libs + " DESTINATION " + install_dir + ")");
+      }
+    }
+  }
 
   /*! \brief Codegen manager imports*/
   virtual void CodeGenManagerDepends() {
@@ -328,7 +404,6 @@ class BasePluginCodeGen {
         condidates.push_back(pair.second);
       }
       for (const auto& t_dtypes : ArrayUtils::Product(condidates)) {
-        std::cout << "t_dtypes " << t_dtypes << std::endl;
         std::unordered_map<int, String> dtypes;
         for (size_t i = 0; i < templates.size(); i++) {
           for (size_t in_idx = 0; in_idx < plugin->inputs.size(); in_idx++) {

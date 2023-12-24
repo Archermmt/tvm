@@ -417,46 +417,21 @@ void TensorRTPluginCodeGen::CodeGenOpDefine(const Plugin& plugin) {
 }
 
 void TensorRTPluginCodeGen::CodeGenCmake(const std::set<String>& devices) {
-  stack_.line("cmake_minimum_required(VERSION " + config()->cmake_version + " FATAL_ERROR)")
-      .line("project(msc_tensorrt_plugin)");
-  if (devices.count("cuda")) {
-    stack_.line("find_package(CUDA)").line("add_definitions(-DPLUGIN_ENABLE_CUDA)");
-  }
-  stack_.line("add_definitions(-DPLUGIN_SUPPORT_TENSORRT)");
-  for (const auto& pair : config()->flags) {
-    if (pair.second == "") {
-      stack_.line("add_definitions(-D" + pair.first + ")");
-    } else {
-      stack_.line("add_definitions(-D" + pair.first + "=" + pair.second + ")");
-    }
-  }
-  stack_.line("file(GLOB_RECURSE TRT_CC_SRCS src/*.cc)");
-  if (devices.count("cuda")) {
-    stack_.line("file(GLOB_RECURSE TRT_CU_SRCS src/*.cu)");
-  }
-  if (devices.count("cuda")) {
-    stack_.line("cuda_add_library(msc_torch_plugin SHARED ${TRT_CC_SRCS} ${TRT_CU_SRCS})");
-  } else {
-    stack_.line("add_library(msc_torch_plugin SHARED ${TRT_CC_SRCS})");
-  }
-  if (config()->includes.size() > 0) {
-    String includes = "";
-    for (const auto& include : config()->includes) {
-      includes = includes + " " + include;
-    }
-    stack_.line("target_include_directories(msc_tensorrt_plugin PUBLIC " + includes + ")");
-  }
-  String libs = "";
-  for (const auto& lib : config()->libs) {
-    libs = libs + " " + lib;
-  }
-  stack_.line("target_link_libraries(msc_tensorrt_plugin ${TORCH_LIBRARIES}" + libs + ")");
-  if (config()->install_dir.size() > 0) {
-    stack_.line("SET(LIBRARY_OUTPUT_PATH " + config()->install_dir + ")");
-    if (config()->libs.size() > 0) {
-      stack_.line("file(COPY " + libs + " DESTINATION " + config()->install_dir + ")");
-    }
-  }
+  Map<String, String> flags;
+  flags.Set("PLUGIN_SUPPORT_TENSORRT", "");
+  flags.Set("TRT_MAJOR", std::to_string(config()->version[0]));
+  flags.Set("TRT_MINOR", std::to_string(config()->version[1]));
+  flags.Set("TRT_PATCH", std::to_string(config()->version[2]));
+  CodeGenPreCmake(devices, flags);
+  stack_
+      .line("find_path(TRT_INCLUDE_DIR NvInfer.h HINTS " + config()->tensorrt_root +
+            " PATH_SUFFIXES include)")
+      .line("find_library(TRT_LIBS nvinfer HINTS " + config()->tensorrt_root +
+            " PATH_SUFFIXES lib)");
+  Array<String> includes, libs;
+  includes.push_back("${TRT_INCLUDE_DIR}");
+  libs.push_back("${TRT_LIBS}");
+  CodeGenPostCmake(devices, includes, libs);
 }
 
 void TensorRTPluginCodeGen::CodeGenManagerMethods() {
