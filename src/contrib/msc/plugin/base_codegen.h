@@ -128,8 +128,6 @@ class BasePluginCodeGen {
   /*! \brief Get manager sources*/
   virtual const Map<String, String> GetManagerSources(const std::string& print_options = "") {
     Map<String, String> sources;
-    this->stack_.comment("Auto generated manager of msc plugin");
-    sources.Set("__init__.py", ToPySource(print_options));
     CodeGenManagerDepends();
     this->stack_.class_def("PluginManager(object)").class_start();
     CodeGenManagerMethods();
