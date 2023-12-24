@@ -107,6 +107,9 @@ class CppPrinter : public MSCBasePrinter {
   /*! * \brief Print a LambdaDoc to cpp format*/
   void PrintTypedDoc(const LambdaDoc& doc) final;
 
+  /*! * \brief Print a SwitchDoc to cpp format*/
+  void PrintTypedDoc(const SwitchDoc& doc) final;
+
  private:
   /*! \brief endline scopes*/
   std::vector<bool> endlines_;

@@ -65,19 +65,19 @@ class TVMPluginCodeGen : public BasePluginCodeGen<TVMPluginCodeGenConfig> {
       : BasePluginCodeGen<TVMPluginCodeGenConfig>(config) {}
 
  protected:
-  /*! \brief Codegen attr struct declare for plugin*/
+  /*! \brief Codegen plugin attr declare*/
   void CodeGenAttrDeclare(const Plugin& plugin) final;
 
-  /*! \brief Get plugin attr define for plugin*/
+  /*! \brief Codegen plugin attr define*/
   void CodeGenAttrDefine(const Plugin& plugin) final;
 
-  /*! \brief Codegen define for plugin*/
+  /*! \brief Codegen plugin op declare*/
+  void CodeGenOpDeclare(const Plugin& plugin) final;
+
+  /*! \brief Codegen plugin op define*/
   void CodeGenOpDefine(const Plugin& plugin) final;
 
-  /*! \brief Codegen register for plugin*/
-  void CodeGenOpRegister(const Plugin& plugin) final;
-
-  /*! \brief Get plugin runtime source*/
+  /*! \brief Codegen plugin runtime*/
   void CodeGenOpRuntime(const Plugin& plugin) final;
 
   /*! \brief Codegen cmake file*/

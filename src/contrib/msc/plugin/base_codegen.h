@@ -69,16 +69,16 @@ class BasePluginCodeGen {
     for (const auto& name : ListPluginNames()) {
       const auto& plugin = GetPlugin(name);
       // attr declare
-      const String& macro = "TVM_CONTRIB_MSC_" + StringUtils::Upper(MetaAttrCls(plugin)) + "_H_";
-      this->stack_.line("#ifndef " + macro)
-          .line("#define " + macro)
+      const String& attr_macro = "TVM_CONTRIB_MSC_" + StringUtils::Upper(plugin->name) + "_ATTR_H_";
+      this->stack_.line("#ifndef " + attr_macro)
+          .line("#define " + attr_macro)
           .line()
           .line("#include \"utils/plugin_utils.h\"")
           .line();
       StartNamespace();
       CodeGenAttrDeclare(plugin);
       EndNamespace();
-      this->stack_.line("#endif  // " + macro);
+      this->stack_.line("#endif  // " + attr_macro);
       sources.Set(plugin->name + "_attr.h", ToCppSource(print_options));
       // attr define
       this->stack_.line("#include \"" + plugin->name + "_attr.h\"").line();
@@ -86,11 +86,19 @@ class BasePluginCodeGen {
       CodeGenAttrDefine(plugin);
       EndNamespace();
       sources.Set(plugin->name + "_attr.cc", ToCppSource(print_options));
-      // op define and register
+      // op decalre
+      const String& op_macro = "TVM_CONTRIB_MSC_" + StringUtils::Upper(plugin->name) + "_OP_H_";
+      this->stack_.line("#ifndef " + op_macro).line("#define " + op_macro).line();
       CodeGenOpHeader(plugin);
       StartNamespace();
+      CodeGenOpDeclare(plugin);
+      EndNamespace();
+      this->stack_.line("#endif  // " + op_macro);
+      sources.Set(plugin->name + "_op.h", ToCppSource(print_options));
+      // op define
+      this->stack_.line("#include \"" + plugin->name + "_op.h\"").line();
+      StartNamespace();
       CodeGenOpDefine(plugin);
-      CodeGenOpRegister(plugin);
       EndNamespace();
       sources.Set(plugin->name + "_op.cc", ToCppSource(print_options));
       // op runtime
@@ -192,7 +200,7 @@ class BasePluginCodeGen {
         .line("}");
   }
 
-  /*! \brief Codegen attr struct declare for plugin*/
+  /*! \brief Codegen plugin attr declare*/
   virtual void CodeGenAttrDeclare(const Plugin& plugin) {
     this->stack_.struct_start(MetaAttrCls(plugin)).comment("define attributes");
     for (const auto& attr : plugin->attrs) {
@@ -215,16 +223,16 @@ class BasePluginCodeGen {
     this->stack_.func_end("out").struct_end();
   }
 
-  /*! \brief Get plugin attr define for plugin*/
+  /*! \brief Codegen plugin attr define*/
   virtual void CodeGenAttrDefine(const Plugin& plugin) {}
 
-  /*! \brief Codegen define for plugin*/
+  /*! \brief Codegen plugin op declare*/
+  virtual void CodeGenOpDeclare(const Plugin& plugin) = 0;
+
+  /*! \brief Codegen plugin op define*/
   virtual void CodeGenOpDefine(const Plugin& plugin) = 0;
 
-  /*! \brief Codegen register for plugin*/
-  virtual void CodeGenOpRegister(const Plugin& plugin) = 0;
-
-  /*! \brief Get plugin runtime source*/
+  /*! \brief Codegen plugin runtime*/
   virtual void CodeGenOpRuntime(const Plugin& plugin) {}
 
   /*! \brief Codegen cmake file*/
@@ -279,7 +287,7 @@ class BasePluginCodeGen {
   };
 
   /*! \brief Codegen manager for plugin*/
-  virtual void CodeGenOpBuilder(const Plugin& plugin) = 0;
+  virtual void CodeGenOpBuilder(const Plugin& plugin){};
 
   /*! \brief Codegen convert function for plugin*/
   virtual const String CodeGenOpConvert(const Plugin& plugin) { return plugin->name; }
@@ -304,11 +312,48 @@ class BasePluginCodeGen {
     return printer.GetString();
   }
 
+  std::vector<std::unordered_map<int, String>> GetDtypeMatrix(const Plugin& plugin) {
+    std::vector<std::unordered_map<int, String>> matrix;
+    if (plugin->support_dtypes.size() == 0) {
+      std::unordered_map<int, String> dtypes;
+      for (size_t i = 0; i < plugin->inputs.size(); i++) {
+        dtypes[i] = plugin->inputs[i]->dtype;
+      }
+      matrix.push_back(dtypes);
+    } else {
+      Array<String> templates;
+      Array<Array<String>> condidates;
+      for (const auto& pair : plugin->support_dtypes) {
+        templates.push_back(pair.first);
+        condidates.push_back(pair.second);
+      }
+      for (const auto& t_dtypes : ArrayUtils::Product(condidates)) {
+        std::cout << "t_dtypes " << t_dtypes << std::endl;
+        std::unordered_map<int, String> dtypes;
+        for (size_t i = 0; i < templates.size(); i++) {
+          for (size_t in_idx = 0; in_idx < plugin->inputs.size(); in_idx++) {
+            if (plugin->inputs[in_idx]->dtype == templates[i]) {
+              dtypes[in_idx] = t_dtypes[i];
+            }
+          }
+        }
+        for (size_t i = 0; i < plugin->inputs.size(); i++) {
+          if (dtypes.count(i)) {
+            continue;
+          }
+          dtypes[i] = plugin->inputs[i]->dtype;
+        }
+        matrix.push_back(dtypes);
+      }
+    }
+    return matrix;
+  }
+
   const Map<String, String> GetTensorDtypes(const Plugin& plugin,
-                                            const Map<Integer, String>& dtypes) {
+                                            const std::unordered_map<int, String>& dtypes) {
     Map<String, String> tensor_dtypes;
     for (const auto& pair : dtypes) {
-      const String& ref_dtype = plugin->inputs[pair.first->value]->dtype;
+      const String& ref_dtype = plugin->inputs[pair.first]->dtype;
       for (const auto& t : plugin->inputs) {
         if (t->dtype == ref_dtype) {
           tensor_dtypes.Set(t->name, pair.second);
@@ -348,7 +393,7 @@ class BasePluginCodeGen {
   }
 
   /*! \brief Get class name for meta attrs*/
-  const String MetaAttrCls(const Plugin& plugin) const { return plugin->name + "MetaAttrs"; }
+  const String MetaAttrCls(const Plugin& plugin) const { return plugin->name + "MetaAttr"; }
 
   /*! \brief Get converter name for plugin*/
   const String ConverterName(const Plugin& plugin) const { return plugin->name + "Converter"; }

@@ -181,6 +181,10 @@ void CppPrinter::PrintTypedDoc(const FunctionDoc& doc) {
   output_ << "(";
   PrintJoinedDocs(doc->args, ", ");
   output_ << ")";
+  if (doc->decorators.size() > 0) {
+    output_ << " ";
+    PrintJoinedDocs(doc->decorators, " ");
+  }
   if (doc->body.size() > 0) {
     output_ << " {";
     PrintIndentedBlock(doc->body);
@@ -308,6 +312,31 @@ void CppPrinter::PrintTypedDoc(const LambdaDoc& doc) {
     Endline();
   }
   NewLine(false);
+}
+
+void CppPrinter::PrintTypedDoc(const SwitchDoc& doc) {
+  MaybePrintComment(doc, true);
+  ICHECK_EQ(doc->predicates.size(), doc->branchs.size())
+      << "predicates " << doc->predicates.size() << " mismatch with branchs "
+      << doc->branchs.size();
+  for (size_t i = 0; i < doc->predicates.size(); i++) {
+    if (i == 0) {
+      output_ << "if (";
+    } else {
+      NewLine();
+      output_ << "} else if (";
+    }
+    PrintDoc(doc->predicates[i], false);
+    output_ << ") {";
+    PrintIndentedBlock(doc->branchs[i]);
+  }
+  if (!doc->default_branch.empty()) {
+    NewLine();
+    output_ << "} else {";
+    PrintIndentedBlock(doc->default_branch);
+  }
+  NewLine();
+  output_ << "}";
 }
 
 bool CppPrinter::IsEmptyDoc(const ExprDoc& doc) {

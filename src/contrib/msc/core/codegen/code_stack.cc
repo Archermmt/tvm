@@ -108,19 +108,11 @@ void BaseStack::FuncStart() {
   BlockStart();
 }
 
-void BaseStack::FuncEnd(const String& ret_val) {
-  if (ret_val.size() > 0) {
-    PushDoc(ReturnDoc(IdDoc(ret_val)));
-  }
+void BaseStack::FuncEnd() {
   const auto& block = PopBlock();
   const auto& func = PopCheckedDoc<FunctionDoc, FunctionDocNode>();
   const auto& body = DocUtils::ToStmts(block);
   PushDoc(FunctionDoc(func->name, func->args, func->decorators, func->return_type, body));
-}
-
-void BaseStack::FuncEnd(const ExprDoc& ret_val) {
-  PushDoc(ReturnDoc(ret_val));
-  FuncEnd("");
 }
 
 void BaseStack::ClassDef(const String& class_name) {

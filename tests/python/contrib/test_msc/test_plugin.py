@@ -302,10 +302,9 @@ def test_torch_plugin():
     assert outputs.min() >= 0 and outputs.max() <= 0.5
 
 
-@pytest.mark.parametrize(
-    "compile_type", [MSCFramework.TORCH, MSCFramework.TVM, MSCFramework.TENSORRT]
-)
-def test_manager_plugin(compile_type):
+def _test_with_manager(compile_type):
+    """Test the plugin with manager"""
+
     frameworks = [MSCFramework.TORCH, MSCFramework.TVM]
     if compile_type not in frameworks:
         frameworks.append(compile_type)
@@ -336,7 +335,17 @@ def test_manager_plugin(compile_type):
     ), "Model info {} mismatch with expected {}".format(model_info, expected_info)
 
 
+@pytest.mark.parametrize("compile_type", [MSCFramework.TORCH, MSCFramework.TVM])
+def test_manager_plugin(compile_type):
+    _test_with_manager(compile_type)
+
+
+def test_tensorrt_plugin():
+    _test_with_manager(MSCFramework.TENSORRT)
+
+
 if __name__ == "__main__":
     # tvm.testing.main()
-    test_tvm_plugin_cpu()
     # test_torch_plugin()
+    # test_tvm_plugin_cpu()
+    managers = _build_plugin([MSCFramework.TENSORRT])

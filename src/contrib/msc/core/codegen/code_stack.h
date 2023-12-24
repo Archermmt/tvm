@@ -127,8 +127,13 @@ class BaseStack {
   void FuncStart();
 
   /*! \brief End function body block*/
-  void FuncEnd(const String& ret_val = "");
-  void FuncEnd(const ExprDoc& ret_val);
+  void FuncEnd();
+
+  template <typename T>
+  void FuncEnd(const T& ret_val) {
+    PushDoc(ReturnDoc(DocUtils::ToDoc(ret_val)));
+    FuncEnd();
+  }
 
   /*! \brief Push call and maybe assign Doc*/
   void FuncCall(const String& callee, Optional<DeclareDoc> assign_to,
@@ -342,11 +347,12 @@ class BaseStack {
     FuncStart();                                                                                  \
     return *this;                                                                                 \
   }                                                                                               \
-  Stack& func_end(const String& ret_val = "") {                                                   \
-    FuncEnd(ret_val);                                                                             \
+  Stack& func_end() {                                                                             \
+    FuncEnd();                                                                                    \
     return *this;                                                                                 \
   }                                                                                               \
-  Stack& func_end(const ExprDoc& ret_val) {                                                       \
+  template <typename T>                                                                           \
+  Stack& func_end(const T& ret_val) {                                                             \
     FuncEnd(ret_val);                                                                             \
     return *this;                                                                                 \
   }                                                                                               \

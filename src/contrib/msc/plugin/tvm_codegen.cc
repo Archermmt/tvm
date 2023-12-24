@@ -29,13 +29,14 @@ namespace msc {
 void TVMPluginCodeGen::CodeGenAttrDeclare(const Plugin& plugin) {
   BasePluginCodeGen<TVMPluginCodeGenConfig>::CodeGenAttrDeclare(plugin);
   const auto& attr_name = MetaAttrCls(plugin);
-  // exprs to meta_attrs
+  // exprs to meta_attr
   stack_.comment("convert exprs to meta attrs method")
       .func_def(attr_name + "_from_exprs", "const " + attr_name);
   for (const auto& a : plugin->attrs) {
-    stack_.func_arg(a->name, "const " + ToTVMType(a->type) + "&");
+    const String& anno = IsListType(a->type) ? "Tuple" : "PrimValue";
+    stack_.func_arg(a->name, "const " + anno + "&");
   }
-  // args to meta_attrs
+  // args to meta_attr
   stack_.comment("convert args to meta attrs method")
       .func_def(attr_name + "_from_args", "const " + attr_name)
       .func_arg("args", "TVMArgs")
@@ -44,26 +45,27 @@ void TVMPluginCodeGen::CodeGenAttrDeclare(const Plugin& plugin) {
 
 void TVMPluginCodeGen::CodeGenAttrDefine(const Plugin& plugin) {
   const auto& attr_name = MetaAttrCls(plugin);
-  // exprs to meta_attrs
+  // exprs to meta_attr
   stack_.func_def(attr_name + "_from_exprs", "const " + attr_name);
   for (const auto& a : plugin->attrs) {
-    stack_.func_arg(a->name, "const " + ToTVMType(a->type) + "&");
+    const String& anno = IsListType(a->type) ? "Tuple" : "PrimValue";
+    stack_.func_arg(a->name, "const " + anno + "&");
   }
-  stack_.func_start().declare(attr_name, "meta_attrs");
+  stack_.func_start().declare(attr_name, "meta_attr");
   for (const auto& a : plugin->attrs) {
     const String& convert = IsListType(a->type) ? "AttrFromPrims" : "AttrFromPrim";
     stack_.func_call("TVMUtils::" + convert)
         .call_arg(a->name)
-        .call_arg(DocUtils::ToAttrAccessDoc("meta_attrs", a->name));
+        .call_arg(DocUtils::ToAttrAccessDoc("meta_attr", a->name));
   }
-  stack_.func_end("meta_attrs");
-  // args to meta_attrs
+  stack_.func_end("meta_attr");
+  // args to meta_attr
   stack_.comment("convert args to meta attrs method")
       .func_def(attr_name + "_from_args", "const " + attr_name)
       .func_arg("args", "TVMArgs")
       .func_arg("pos", "size_t&")
       .func_start()
-      .declare(attr_name, "meta_attrs");
+      .declare(attr_name, "meta_attr");
   for (const auto& a : plugin->attrs) {
     if (IsListType(a->type)) {
       // TODO(meng.tong): support list atribute
@@ -74,32 +76,49 @@ void TVMPluginCodeGen::CodeGenAttrDefine(const Plugin& plugin) {
           .call_arg("args")
           .call_arg("pos")
           .call_arg(a->name + "_size")
-          .call_arg(DocUtils::ToAttrAccessDoc("meta_attrs", a->name))
+          .call_arg(DocUtils::ToAttrAccessDoc("meta_attr", a->name))
           .assign("pos", "pos + 1 + " + a->name + "_size");
     } else {
       stack_.func_call("TVMUtils::AttrFromArg")
           .call_arg(DocUtils::ToIndexDoc("args", "pos"))
-          .call_arg(DocUtils::ToAttrAccessDoc("meta_attrs", a->name))
+          .call_arg(DocUtils::ToAttrAccessDoc("meta_attr", a->name))
           .assign("pos", "pos + 1");
     }
   }
-  stack_.func_end("meta_attrs");
+  stack_.func_end("meta_attr");
 }
 
-void TVMPluginCodeGen::CodeGenOpDefine(const Plugin& plugin) {
-  const auto& attr_name = MetaAttrCls(plugin);
+void TVMPluginCodeGen::CodeGenOpDeclare(const Plugin& plugin) {
   // infer struct info
-  Array<String> infer_args{"input_metas", "meta_attrs", "false"};
   stack_.func_def("InferStructInfo" + plugin->name, "Array<TensorStructInfo>");
   for (const auto& t : plugin->inputs) {
     stack_.func_arg(t->name, "const Expr&");
   }
   for (const auto& a : plugin->attrs) {
-    stack_.func_arg(a->name, "const " + ToTVMType(a->type) + "&");
+    const String& anno = IsListType(a->type) ? "Tuple" : "PrimValue";
+    stack_.func_arg(a->name, "const " + anno + "&");
+  }
+  // infer layout
+  stack_.func_def("InferLayout" + plugin->name, "InferLayoutOutput")
+      .func_arg("inputs", "const Array<Expr>&")
+      .func_arg("var_layout_map", "const VarLayoutMap&");
+}
+
+void TVMPluginCodeGen::CodeGenOpDefine(const Plugin& plugin) {
+  const auto& attr_name = MetaAttrCls(plugin);
+  // infer struct info
+  Array<String> infer_args{"input_metas", "meta_attr", "false"};
+  stack_.func_def("InferStructInfo" + plugin->name, "Array<TensorStructInfo>");
+  for (const auto& t : plugin->inputs) {
+    stack_.func_arg(t->name, "const Expr&");
+  }
+  for (const auto& a : plugin->attrs) {
+    const String& anno = IsListType(a->type) ? "Tuple" : "PrimValue";
+    stack_.func_arg(a->name, "const " + anno + "&");
   }
   stack_.func_start()
       .comment("extract meta attrs")
-      .func_call(attr_name + "_from_exprs", DocUtils::ToDeclareDoc("const auto&", "meta_attrs"));
+      .func_call(attr_name + "_from_exprs", DocUtils::ToDeclareDoc("const auto&", "meta_attr"));
   for (const auto& a : plugin->attrs) {
     stack_.call_arg(a->name);
   }
@@ -135,15 +154,16 @@ void TVMPluginCodeGen::CodeGenOpDefine(const Plugin& plugin) {
       .comment("define attrs");
   for (size_t i = 0; i < plugin->attrs.size(); i++) {
     const auto& attr = plugin->attrs[i];
+    const String& anno = IsListType(attr->type) ? "Tuple" : "PrimValue";
     stack_
-        .func_call("Downcast<" + ToTVMType(attr->type) + ">",
+        .func_call("Downcast<" + anno + ">",
                    DocUtils::ToDeclareDoc("const auto&", "attr_" + attr->name))
         .call_arg(DocUtils::ToIndexDoc("inputs", i + plugin->inputs.size()));
   }
   stack_.declare("Array<NLayout>", "input_layouts")
       .declare("Array<NLayout>", "output_layouts")
       .comment("extract meta attrs")
-      .func_call(attr_name + "_from_exprs", "const " + attr_name + "& meta_attrs");
+      .func_call(attr_name + "_from_exprs", "const " + attr_name + "& meta_attr");
   for (const auto& a : plugin->attrs) {
     stack_.call_arg("attr_" + a->name);
   }
@@ -176,9 +196,8 @@ void TVMPluginCodeGen::CodeGenOpDefine(const Plugin& plugin) {
       .call_arg("output_layouts")
       .call_arg("Attrs()");
   stack_.func_end("infer_output");
-}
 
-void TVMPluginCodeGen::CodeGenOpRegister(const Plugin& plugin) {
+  // register funcs
   stack_.func_call("TVM_REGISTER_GLOBAL")
       .call_arg(DocUtils::ToStrDoc("msc.plugin.op.InferStructInfo" + plugin->name))
       .method_call("set_body_typed")
@@ -192,6 +211,7 @@ void TVMPluginCodeGen::CodeGenOpRegister(const Plugin& plugin) {
 }
 
 void TVMPluginCodeGen::CodeGenOpRuntime(const Plugin& plugin) {
+  ICHECK(!plugin->externs.count("infer_buffer")) << "infer_buffer is not supported for tvm runtime";
   const auto& attr_name = MetaAttrCls(plugin);
   const auto& func_name = ComputeName(plugin);
   String device_cond = "";
@@ -212,7 +232,7 @@ void TVMPluginCodeGen::CodeGenOpRuntime(const Plugin& plugin) {
   }
   stack_.comment("extract meta attrs")
       .assign("pos", plugin->inputs.size(), "size_t")
-      .func_call(attr_name + "_from_args", "const " + attr_name + "& meta_attrs")
+      .func_call(attr_name + "_from_args", "const " + attr_name + "& meta_attr")
       .call_arg("args")
       .call_arg("pos");
   for (size_t i = 0; i < plugin->outputs.size(); i++) {
@@ -362,7 +382,7 @@ void TVMPluginCodeGen::CodeGenOpBuilder(const Plugin& plugin) {
     stack_.call_arg(t->name);
   }
   for (const auto& a : plugin->attrs) {
-    stack_.call_arg(DocUtils::ToAttrAccessDoc(a->name, "value"));
+    stack_.call_arg(a->name);
   }
   stack_.func_call("call_dps_packed", "op")
       .call_arg(DocUtils::ToStrDoc(plugin->name))
@@ -382,20 +402,18 @@ void TVMPluginCodeGen::CodeGenCompute(const Plugin& plugin, const String& device
       const String& anno = collect == "input" ? "const " + tensor_type + "&" : tensor_type;
       stack_.func_call("TVMUtils::To" + tensor_type, DocUtils::ToDeclareDoc(anno, t_name))
           .call_arg(tensor->name)
-          .call_arg(collect == "input" ? "true" : "false");
+          .call_arg(collect == "input");
       return t_name;
     };
-    for (const auto& dtypes : plugin->GetDtypeMatrix()) {
-      Array<String> compute_args;
+    for (const auto& dtypes : GetDtypeMatrix(plugin)) {
       const auto& tensor_dtypes = GetTensorDtypes(plugin, dtypes);
+      Array<String> compute_args;
       String dtype_cond = "";
-      size_t cnt = 0;
-      for (const auto& pair : dtypes) {
-        const auto& t_name = plugin->inputs[pair.first->value]->name;
+      for (size_t i = 0; i < plugin->inputs.size(); i++) {
+        const auto& t_name = plugin->inputs[i]->name;
         dtype_cond = dtype_cond + "TVMUtils::ToMetaType(" + t_name +
-                     "->dtype) == DataUtils::ToMetaType(\"" + pair.second + "\")";
-        dtype_cond = dtype_cond + (cnt == dtypes.size() - 1 ? "" : " && ");
-        cnt++;
+                     "->dtype) == DataUtils::ToMetaType(\"" + dtypes.at(i) + "\")";
+        dtype_cond = dtype_cond + (i == plugin->inputs.size() - 1 ? "" : " && ");
       }
       // prepare compute datas
       stack_.cond_if(dtype_cond).comment("prepare compute datas");
@@ -408,7 +426,7 @@ void TVMPluginCodeGen::CodeGenCompute(const Plugin& plugin, const String& device
         compute_args.push_back(t_name);
       }
       ICHECK(plugin->buffers.size() == 0) << "Plugin with buffers is not supported in tvm";
-      compute_args.push_back("meta_attrs");
+      compute_args.push_back("meta_attr");
       if (device == "cuda") {
         stack_.assign("stream", "runtime::CUDAThreadEntry::ThreadLocal()->stream", "auto");
         compute_args.push_back("stream");

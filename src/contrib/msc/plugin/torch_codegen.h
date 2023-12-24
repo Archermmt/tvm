@@ -65,17 +65,17 @@ class TorchPluginCodeGen : public BasePluginCodeGen<TorchPluginCodeGenConfig> {
       : BasePluginCodeGen<TorchPluginCodeGenConfig>(config) {}
 
  protected:
-  /*! \brief Codegen attr struct declare for plugin*/
+  /*! \brief Codegen plugin attr declare*/
   void CodeGenAttrDeclare(const Plugin& plugin) final;
 
-  /*! \brief Get plugin attr define for plugin*/
+  /*! \brief Codegen plugin attr define*/
   void CodeGenAttrDefine(const Plugin& plugin) final;
 
-  /*! \brief Codegen define for plugin*/
-  void CodeGenOpDefine(const Plugin& plugin) final;
+  /*! \brief Codegen plugin op declare*/
+  void CodeGenOpDeclare(const Plugin& plugin) final;
 
-  /*! \brief Codegen register for plugin*/
-  void CodeGenOpRegister(const Plugin& plugin) final;
+  /*! \brief Codegen plugin op define*/
+  void CodeGenOpDefine(const Plugin& plugin) final;
 
   /*! \brief Codegen cmake file*/
   void CodeGenCmake(const std::set<String>& devices) final;

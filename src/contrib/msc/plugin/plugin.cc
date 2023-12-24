@@ -298,47 +298,6 @@ int PluginNode::FindDeviceRefIdx(const PluginTensor& tensor) const {
   return -1;
 }
 
-Array<Map<Integer, String>> PluginNode::GetDtypeMatrix() const {
-  Array<Map<Integer, String>> flatten_dtypes;
-  if (support_dtypes.size() == 0) {
-    Map<Integer, String> dtypes;
-    dtypes.Set(Integer(0), inputs[0]->dtype);
-    flatten_dtypes.push_back(dtypes);
-  } else {
-    Array<String> symbols;
-    for (const auto& pair : support_dtypes) {
-      symbols.push_back(pair.first);
-    }
-    std::vector<size_t> strides;
-    for (size_t i = 0; i < symbols.size(); i++) {
-      size_t stride = 1;
-      for (size_t j = i; j < symbols.size(); j++) {
-        stride *= support_dtypes[symbols[j]].size();
-      }
-      strides.push_back(stride);
-    }
-    size_t total_num = strides[0] * support_dtypes[symbols[0]].size();
-    for (size_t idx = 0; idx < total_num; idx++) {
-      Map<Integer, String> dtypes;
-      for (size_t i = 0; i < symbols.size(); i++) {
-        size_t pos = i == 0 ? (idx / strides[i]) : ((idx % strides[i - 1]) / strides[i]);
-        const auto& dtype = support_dtypes[symbols[i]][pos];
-        bool find_input = false;
-        for (size_t in_idx = 0; in_idx < inputs.size(); in_idx++) {
-          if (inputs[in_idx]->dtype == symbols[i]) {
-            find_input = true;
-            dtypes.Set(Integer(in_idx), dtype);
-            break;
-          }
-        }
-        ICHECK(find_input) << "Can not find dtype for symbol " << symbols[i];
-      }
-      flatten_dtypes.push_back(dtypes);
-    }
-  }
-  return flatten_dtypes;
-}
-
 const Array<String> ListPluginNames() { return PluginRegistry::Global()->ListAllNames(); }
 
 const Plugin GetPlugin(const String& name) { return PluginRegistry::Global()->Get(name); }

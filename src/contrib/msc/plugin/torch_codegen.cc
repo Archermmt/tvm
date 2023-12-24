@@ -32,26 +32,26 @@ void TorchPluginCodeGen::CodeGenAttrDeclare(const Plugin& plugin) {
   // serialize method for attr
   stack_.comment("serialize method")
       .func_def(attr_name + "_serialize", "std::vector<std::string>")
-      .func_arg("meta_attrs", "const " + attr_name + "&");
+      .func_arg("meta_attr", "const " + attr_name + "&");
   // deserialize method for attr
   stack_.comment("deserialize method")
       .func_def(attr_name + "_deserialize")
       .func_arg("attrs", "const std::vector<std::string>&")
-      .func_arg("meta_attrs", attr_name + "&");
+      .func_arg("meta_attr", attr_name + "&");
 }
 
 void TorchPluginCodeGen::CodeGenAttrDefine(const Plugin& plugin) {
   const auto& attr_name = MetaAttrCls(plugin);
   // serialize method for attr
   stack_.func_def(attr_name + "_serialize", "std::vector<std::string>")
-      .func_arg("meta_attrs", "const " + attr_name + "&")
+      .func_arg("meta_attr", "const " + attr_name + "&")
       .func_start()
       .declare("std::vector<std::string>", "attrs");
   for (const auto& a : plugin->attrs) {
     stack_
         .func_call("SerializeUtils::ToString",
                    DocUtils::ToDeclareDoc("std::string", "str_" + a->name))
-        .call_arg(DocUtils::ToAttrAccessDoc("meta_attrs", a->name))
+        .call_arg(DocUtils::ToAttrAccessDoc("meta_attr", a->name))
         .func_call("push_back", "", "attrs")
         .call_arg("str_" + a->name);
   }
@@ -59,27 +59,52 @@ void TorchPluginCodeGen::CodeGenAttrDefine(const Plugin& plugin) {
   // deserialize method for attr
   stack_.func_def(attr_name + "_deserialize")
       .func_arg("attrs", "const std::vector<std::string>&")
-      .func_arg("meta_attrs", attr_name + "&")
+      .func_arg("meta_attr", attr_name + "&")
       .func_start();
   for (size_t i = 0; i < plugin->attrs.size(); i++) {
     stack_.func_call("SerializeUtils::FromString")
         .call_arg(DocUtils::ToIndexDoc("attrs", i))
-        .call_arg(DocUtils::ToAttrAccessDoc("meta_attrs", plugin->attrs[i]->name));
+        .call_arg(DocUtils::ToAttrAccessDoc("meta_attr", plugin->attrs[i]->name));
   }
   stack_.func_end();
 }
 
+void TorchPluginCodeGen::CodeGenOpDeclare(const Plugin& plugin) {
+  stack_.struct_start(plugin->name + " : torch::CustomClassHolder");
+  // constructor
+  stack_.constructor_def(plugin->name).constructor_arg("attrs", "const std::vector<std::string>&");
+  // serialize method
+  stack_.comment("serialize method").func_def("serialize", "const std::vector<std::string>");
+  // compute method
+  stack_.comment("main compute")
+      .func_def("compute", "std::vector<torch::Tensor>")
+      .func_arg("input_tensors", "const std::vector<torch::Tensor>&");
+  // members
+  stack_.comment("members")
+      .declare(MetaAttrCls(plugin), "meta_attr_")
+      .declare("std::vector<MetaLayout>", "layouts_")
+      .declare("std::string", "name_");
+  stack_.struct_end();
+  // entry method
+  const auto& entry_name = EntryName(plugin);
+  stack_.comment("Entry method for plugin " + plugin->name)
+      .func_def(entry_name, "std::vector<torch::Tensor>")
+      .func_arg("instance", "const c10::intrusive_ptr<" + plugin->name + ">&");
+  for (const auto& input : plugin->inputs) {
+    stack_.func_arg(input->name, "const torch::Tensor&");
+  }
+}
+
 void TorchPluginCodeGen::CodeGenOpDefine(const Plugin& plugin) {
   const auto& attr_name = MetaAttrCls(plugin);
-  stack_.struct_start(plugin->name + " : torch::CustomClassHolder");
   // define constructor
-  stack_.constructor_def(plugin->name)
+  stack_.constructor_def(plugin->name + "::" + plugin->name)
       .constructor_arg("attrs", "const std::vector<std::string>&")
       .constructor_start()
       .comment("get attributes")
       .func_call(attr_name + "_deserialize")
       .call_arg("attrs")
-      .call_arg("meta_attrs_")
+      .call_arg("meta_attr_")
       .comment("get extra info")
       .assign("name_", DocUtils::ToIndexDoc("attrs", plugin->attrs.size()))
       .for_start("i", 1 + plugin->attrs.size(), 1 + plugin->attrs.size() + plugin->inputs.size())
@@ -90,10 +115,9 @@ void TorchPluginCodeGen::CodeGenOpDefine(const Plugin& plugin) {
       .for_end()
       .constructor_end();
   // define serialize
-  stack_.comment("serialize method")
-      .func_def("serialize", "const std::vector<std::string>")
+  stack_.func_def(plugin->name + "::serialize", "const std::vector<std::string>")
       .func_start()
-      .assign("attrs", attr_name + "_serialize(meta_attrs_)", "std::vector<std::string>")
+      .assign("attrs", attr_name + "_serialize(meta_attr_)", "std::vector<std::string>")
       .func_call("push_back", "", "attrs")
       .call_arg("name_")
       .for_start("i", 0, plugin->inputs.size())
@@ -101,9 +125,8 @@ void TorchPluginCodeGen::CodeGenOpDefine(const Plugin& plugin) {
       .call_arg(DocUtils::ToAttrAccessDoc(DocUtils::ToIndexDoc("layouts_", "i"), "name()"))
       .for_end()
       .func_end("attrs");
-  // malloc outputs/buffers
-  stack_.comment("main compute")
-      .func_def("compute", "std::vector<torch::Tensor>")
+  // compute method
+  stack_.func_def(plugin->name + "::compute", "std::vector<torch::Tensor>")
       .func_arg("input_tensors", "const std::vector<torch::Tensor>&")
       .func_start()
       .declare("std::vector<torch::Tensor>", "output_tensors");
@@ -142,17 +165,10 @@ void TorchPluginCodeGen::CodeGenOpDefine(const Plugin& plugin) {
   CodeGenCompute(plugin, "cpu");
   stack_.cond_end();
   stack_.func_end("output_tensors");
-  stack_.comment("define members")
-      .declare(MetaAttrCls(plugin), "meta_attrs_")
-      .declare("std::vector<MetaLayout>", "layouts_")
-      .declare("std::string", "name_");
-  stack_.struct_end();
-}
 
-void TorchPluginCodeGen::CodeGenOpRegister(const Plugin& plugin) {
+  // register op
   const auto& entry_name = EntryName(plugin);
-  stack_.comment("Python wrapper for plugin " + plugin->name)
-      .func_def(entry_name, "std::vector<torch::Tensor>")
+  stack_.func_def(entry_name, "std::vector<torch::Tensor>")
       .func_arg("instance", "const c10::intrusive_ptr<" + plugin->name + ">&");
   for (const auto& input : plugin->inputs) {
     stack_.func_arg(input->name, "const torch::Tensor&");
@@ -358,7 +374,7 @@ const String TorchPluginCodeGen::CodeGenOpConvert(const Plugin& plugin) {
 
 void TorchPluginCodeGen::CodeGenMalloc(const Plugin& plugin, const Array<PluginTensor>& tensors,
                                        const String& collect) {
-  Array<String> call_args{"input_metas", "meta_attrs_", "true"};
+  Array<String> call_args{"input_metas", "meta_attr_", "true"};
   stack_.line().comment("malloc " + collect).declare("std::vector<MetaTensor>", collect + "_metas");
   CodeGenSafeCall(plugin->externs["infer_" + collect], call_args, collect + "_metas");
   for (size_t i = 0; i < tensors.size(); i++) {
@@ -381,28 +397,24 @@ void TorchPluginCodeGen::CodeGenCompute(const Plugin& plugin, const String& devi
                                size_t idx, const String& collect) {
     const String& t_name = "d_" + tensor->name;
     const String& t_dtype = dtypes.count(tensor->name) ? dtypes[tensor->name] : tensor->dtype;
-    String assign_to = "DataTensor<" + t_dtype + "> " + t_name;
-    if (collect == "input") {
-      assign_to = "const " + assign_to;
-    }
-    stack_.func_call("TorchUtils::ToDataTensor<" + t_dtype + ">", assign_to)
+    const String& tensor_type = "DataTensor<" + t_dtype + ">";
+    const String& anno = collect == "input" ? "const " + tensor_type + "&" : tensor_type;
+    stack_.func_call("TorchUtils::To" + tensor_type, DocUtils::ToDeclareDoc(anno, t_name))
         .call_arg(DocUtils::ToIndexDoc(collect + "_tensors", idx))
         .call_arg(DocUtils::ToIndexDoc(collect + "_metas", idx))
-        .call_arg(collect == "input" ? "true" : "false");
+        .call_arg(collect == "input");
     return t_name;
   };
 
   if (plugin->externs.count(device + "_compute")) {
-    for (const auto& dtypes : plugin->GetDtypeMatrix()) {
-      Array<String> compute_args;
+    for (const auto& dtypes : GetDtypeMatrix(plugin)) {
       const auto& tensor_dtypes = GetTensorDtypes(plugin, dtypes);
+      Array<String> compute_args;
       String dtype_cond = "";
-      size_t cnt = 0;
-      for (const auto& pair : dtypes) {
-        dtype_cond = dtype_cond + "input_metas[" + std::to_string(pair.first->value) +
-                     "].data_type() == DataUtils::ToMetaType(\"" + pair.second + "\")";
-        dtype_cond = dtype_cond + (cnt == dtypes.size() - 1 ? "" : " && ");
-        cnt++;
+      for (size_t i = 0; i < plugin->inputs.size(); i++) {
+        dtype_cond = dtype_cond + "input_metas[" + std::to_string(i) +
+                     "].data_type() == DataUtils::ToMetaType(\"" + dtypes.at(i) + "\")";
+        dtype_cond = dtype_cond + (i == plugin->inputs.size() - 1 ? "" : " && ");
       }
       // prepare compute datas
       stack_.cond_if(dtype_cond).comment("prepare compute datas");
@@ -418,7 +430,7 @@ void TorchPluginCodeGen::CodeGenCompute(const Plugin& plugin, const String& devi
         const String& t_name = prepare_tensor(plugin->buffers[i], tensor_dtypes, i, "buffer");
         compute_args.push_back(t_name);
       }
-      compute_args.push_back("meta_attrs_");
+      compute_args.push_back("meta_attr_");
       if (device == "cuda") {
         stack_.func_call("at::cuda::getCurrentCUDAStream",
                          DocUtils::ToDeclareDoc("cudaStream_t", "stream"));
