@@ -221,13 +221,15 @@ class MetaLayout {
 
 class MetaTensor {
  public:
+  MetaTensor() {}
+
   MetaTensor(const MetaShape& shape, const MetaDataType& data_type,
              const MetaLayout& layout = MetaLayout())
       : shape_(shape), data_type_(data_type), layout_(layout) {}
 
   inline const MetaShape shape() const { return shape_; }
 
-  inline const MetaDataType data_type() const { return data_type_; }
+  inline MetaDataType data_type() const { return data_type_; }
 
   inline const std::vector<int64_t> meta_shape() const { return shape_.shape(); }
 
@@ -881,9 +883,9 @@ class TRTUtils {
   static const PluginField ToField(const std::string& name, const std::string& dtype) {
     const auto& ele_type = DataUtils::GetEleType(dtype);
     if (ele_type.size() == 0) {
-      return PluginField(name, nullptr, ToFieldType(dtype), 1);
+      return PluginField(name.c_str(), nullptr, ToFieldType(dtype), 1);
     }
-    return PluginField(name, nullptr, ToFieldType(ele_type), 11);
+    return PluginField(name.c_str(), nullptr, ToFieldType(ele_type), 11);
   }
 
   static void FromField(const PluginField& field, std::string& val) {
@@ -909,8 +911,8 @@ class TRTUtils {
   }
 
   static void FromField(const PluginField& field, long& val) {
-    assert(field.type == PluginFieldType::kINT64);
-    val = *(static_cast<const int64_t*>(field.data));
+    assert(field.type == PluginFieldType::kINT32);
+    val = *(static_cast<const int*>(field.data));
   }
 
   static void FromField(const PluginField& field, float& val) {
@@ -925,9 +927,7 @@ class TRTUtils {
 
   static MetaDataType ToMetaType(const DataType& dtype) {
     MetaDataType meta_type;
-    if (dtype == DataType::kUINT8) {
-      meta_type = MetaDataType::kUINT8;
-    } else if (dtype == DataType::kINT8) {
+    if (dtype == DataType::kINT8) {
       meta_type = MetaDataType::kINT8;
     } else if (dtype == DataType::kINT32) {
       meta_type = MetaDataType::kINT32;
@@ -979,19 +979,17 @@ class TRTUtils {
     return MetaTensor(ToMetaShape(dims), ToMetaType(dtype), MetaLayout(layout));
   }
 
-  static MetaTensor ToMetaTensor(const PluginTensorDesc& desc, , const std::string& layout) {
-    return ToMetaTensor(desc.dims, desc.dtype, layout, true);
+  static MetaTensor ToMetaTensor(const PluginTensorDesc& desc, const std::string& layout) {
+    return ToMetaTensor(desc.dims, desc.type, layout, true);
   }
 
-  static MetaTensor ToMetaTensor(const DynamicPluginTensorDesc& desc, , const std::string& layout) {
+  static MetaTensor ToMetaTensor(const DynamicPluginTensorDesc& desc, const std::string& layout) {
     return ToMetaTensor(desc.desc, layout);
   }
 
   static DataType ToDataType(const MetaDataType& dtype) {
     DataType data_type;
-    if (dtype == MetaDataType::kUINT8) {
-      data_type = DataType::kUINT8;
-    } else if (dtype == MetaDataType::kINT8) {
+    if (dtype == MetaDataType::kINT8) {
       data_type = DataType::kINT8;
     } else if (dtype == MetaDataType::kINT32) {
       data_type = DataType::kINT32;
@@ -1000,9 +998,13 @@ class TRTUtils {
     } else if (dtype == MetaDataType::kFLOAT32) {
       data_type = DataType::kFLOAT;
     } else {
-      data_type = DataType::kUNKNOWN;
+      data_type = DataType::kFLOAT;
     }
     return data_type;
+  }
+
+  static DataType ToDataType(const std::string& dtype) {
+    return ToDataType(DataUtils::ToMetaType(dtype));
   }
 
   static Dims ToDims(const MetaShape& meta_shape, bool dynamic = false) {
@@ -1045,27 +1047,26 @@ class TRTUtils {
   template <typename T>
   static DataTensor<T> ToDataTensor(const MetaTensor& tensor, int batch_size, const void* data) {
     const auto& shape = SetBatch(tensor, batch_size);
-    return DataTensor<T>(shape, tensor.data_dtype(), tensor.layout(), (const T*)(data));
+    return DataTensor<T>(shape, tensor.data_type(), tensor.layout(), (const T*)(data));
   }
 
   template <typename T>
   static DataTensor<T> ToDataTensor(const MetaTensor& tensor, int batch_size, void* data) {
     const auto& shape = SetBatch(tensor, batch_size);
-    return DataTensor<T>(shape, tensor.data_dtype(), tensor.layout(), (const T*)(data));
+    return DataTensor<T>(shape, tensor.data_type(), tensor.layout(), (const T*)(data));
   }
 
   template <typename T>
   static DataTensor<T> ToDataTensor(const MetaTensor& tensor, const PluginTensorDesc& desc,
                                     const void* data) {
     return DataTensor<T>(ToMetaShape(desc), ToMetaType(desc.type), tensor.layout(),
-                         (const T*)(tensor->data));
+                         (const T*)(data));
   }
 
   template <typename T>
   static DataTensor<T> ToDataTensor(const MetaTensor& tensor, const PluginTensorDesc& desc,
                                     void* data) {
-    return DataTensor<T>(ToMetaShape(desc), ToMetaType(desc.type), tensor.layout(),
-                         (T*)(tensor->data));
+    return DataTensor<T>(ToMetaShape(desc), ToMetaType(desc.type), tensor.layout(), (T*)(data));
   }
 };
 #endif  // PLUGIN_SUPPORT_TENSORRT

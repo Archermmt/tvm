@@ -427,7 +427,8 @@ void TensorRTPluginCodeGen::CodeGenCmake(const std::set<String>& devices) {
       .line("find_path(TRT_INCLUDE_DIR NvInfer.h HINTS " + config()->tensorrt_root +
             " PATH_SUFFIXES include)")
       .line("find_library(TRT_LIBS nvinfer HINTS " + config()->tensorrt_root +
-            " PATH_SUFFIXES lib)");
+            " PATH_SUFFIXES lib)")
+      .line("set(CMAKE_CXX_FLAGS \"${CMAKE_CXX_FLAGS} -Wno-terminate\")");
   Array<String> includes, libs;
   includes.push_back("${TRT_INCLUDE_DIR}");
   libs.push_back("${TRT_LIBS}");
@@ -493,7 +494,7 @@ void TensorRTPluginCodeGen::CodegenOpCommonMethods(const Plugin& plugin, bool dy
         .func_decorator("noexcept override")
         .func_def("terminate")
         .func_decorator("noexcept override")
-        .func_def("destory")
+        .func_def("destroy")
         .func_decorator("noexcept override")
         .func_def("clone", plugin_cls + "*")
         .func_decorator("const noexcept override");
@@ -611,8 +612,8 @@ void TensorRTPluginCodeGen::CodegenOpCommonMethods(const Plugin& plugin, bool dy
         .func_start()
         .comment("Ignore teminate for " + plugin->name)
         .func_end();
-    // destory
-    stack_.func_def(op_cls + "::destory")
+    // destroy
+    stack_.func_def(op_cls + "::destroy")
         .func_decorator("noexcept")
         .func_start()
         .line("delete this;")
@@ -748,12 +749,14 @@ void TensorRTPluginCodeGen::CodegenCreator(const Plugin& plugin, bool dynamic, b
         .func_arg("name", "const char*")
         .func_arg("collection", "const PluginFieldCollection*")
         .func_start()
-        .line("assert(collection->nbFields == " + std::to_string(fields_size) + ")")
+        .line("assert(collection->nbFields == " + std::to_string(fields_size) + ");")
         .assign("fields", DocUtils::ToAttrAccessDoc(DocUtils::ToPtrDoc("collection"), "fields"),
                 "const PluginField*")
         .func_call(attr_name + "_from_fields", DocUtils::ToDeclareDoc("const auto&", "meta_attr"))
         .call_arg("fields")
-        .declare("std::vector<std::string>", "layouts", plugin->inputs.size())
+        .declare("std::vector<std::string>", "layouts")
+        .func_call("resize", "", "layouts")
+        .call_arg(plugin->inputs.size())
         .for_start("i", plugin->attrs.size(), fields_size);
     for (size_t i = 0; i < plugin->inputs.size(); i++) {
       const auto& tensor = plugin->inputs[i];
@@ -825,7 +828,7 @@ void TensorRTPluginCodeGen::CodegenBufferInfer(const Plugin& plugin) {
 }
 
 void TensorRTPluginCodeGen::CodegenEnqueue(const Plugin& plugin, bool dynamic) {
-  // ICHECK(plugin->externs.count("cuda_compute")) << "cuda_compute is needed fo TensorRT plugin";
+  ICHECK(plugin->externs.count("cuda_compute")) << "cuda_compute is needed fo TensorRT plugin";
   auto prepare_tensor = [this, &dynamic](const PluginTensor& tensor,
                                          const Map<String, String>& dtypes, size_t idx,
                                          const String& collect) {
@@ -887,7 +890,7 @@ void TensorRTPluginCodeGen::CodegenEnqueue(const Plugin& plugin, bool dynamic) {
     }
     compute_args.push_back("meta_attr_");
     compute_args.push_back("stream");
-    CodeGenSafeCall(plugin->externs["cpu_compute"], compute_args);
+    CodeGenSafeCall(plugin->externs["cuda_compute"], compute_args);
     stack_.cond_end();
   }
 }
