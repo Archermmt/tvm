@@ -24,6 +24,7 @@
 #ifndef TVM_CONTRIB_MSC_PLUGIN_TENSORRT_CODEGEN_H_
 #define TVM_CONTRIB_MSC_PLUGIN_TENSORRT_CODEGEN_H_
 
+#include <set>
 #include <string>
 
 #include "base_codegen.h"

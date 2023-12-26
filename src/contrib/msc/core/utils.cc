@@ -23,6 +23,7 @@
 
 #include "utils.h"
 
+#include <algorithm>
 #include <string>
 namespace tvm {
 namespace contrib {

@@ -27,6 +27,7 @@
 #include <map>
 #include <queue>
 #include <set>
+#include <utility>
 
 namespace tvm {
 namespace contrib {

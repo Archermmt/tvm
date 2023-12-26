@@ -118,7 +118,7 @@ class BasePluginCodeGen(object):
                     folder.add_file(name, source)
                 else:
                     folder.add_file(os.path.join("src", name), source)
-            with folder.create_dir("build") as build_folder:
+            with folder.create_dir("build"):
                 command = "cmake ../ && make"
                 with open("codegen.log", "w") as log_f:
                     process = subprocess.Popen(command, stdout=log_f, stderr=log_f, shell=True)
@@ -188,6 +188,8 @@ class BasePluginCodeGen(object):
 
 
 class TVMPluginCodegen(BasePluginCodeGen):
+    """Plugin codegen for tvm"""
+
     def setup(self):
         """Set up the codegen"""
 
@@ -220,9 +222,11 @@ class TVMPluginCodegen(BasePluginCodeGen):
 
 
 class TorchPluginCodegen(BasePluginCodeGen):
+    """Plugin codegen for torch"""
+
     def setup(self):
         """Set up the codegen"""
-
+        # pylint: disable=import-outside-toplevel
         import torch.utils
 
         super().setup()
@@ -244,8 +248,11 @@ class TorchPluginCodegen(BasePluginCodeGen):
 
 
 class TensorRTPluginCodegen(BasePluginCodeGen):
+    """Plugin codegen for tensorrt"""
+
     def setup(self):
         """Set up the codegen"""
+        # pylint: disable=import-outside-toplevel
         from tvm.contrib.msc.framework.tensorrt import _ffi_api as _trt_api
 
         super().setup()

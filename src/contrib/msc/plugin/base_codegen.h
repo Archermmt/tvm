@@ -27,8 +27,11 @@
 #include <dmlc/json.h>
 #include <tvm/script/printer/doc.h>
 
+#include <memory>
 #include <set>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 #include "../core/codegen/code_stack.h"
 #include "../core/printer/cpp_printer.h"
@@ -365,10 +368,10 @@ class BasePluginCodeGen {
       this->stack_.assign(DocUtils::ToIndex("info", DocUtils::ToStr(name)), info);
     }
     this->stack_.func_end("info");
-  };
+  }
 
   /*! \brief Codegen manager for plugin*/
-  virtual void CodeGenOpBuilder(const Plugin& plugin){};
+  virtual void CodeGenOpBuilder(const Plugin& plugin) {}
 
   /*! \brief Codegen convert function for plugin*/
   virtual const String CodeGenOpConvert(const Plugin& plugin) { return plugin->name; }

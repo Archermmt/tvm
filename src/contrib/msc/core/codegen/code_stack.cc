@@ -253,7 +253,7 @@ void BaseStack::InplaceStart(const String& callee, const String& assign_to, cons
 void BaseStack::InplaceEnd() {
   const auto& last = PopDoc();
   // get args and kwargs
-  if (const auto* call = last.as<CallDocNode>()) {
+  if (last->IsInstance<CallDocNode>()) {
     CallArgBase(Downcast<CallDoc>(last));
   } else if (const auto* assign = last.as<AssignDocNode>()) {
     const auto& call = Downcast<CallDoc>(assign->rhs);

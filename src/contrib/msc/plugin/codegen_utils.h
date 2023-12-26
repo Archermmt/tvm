@@ -24,6 +24,10 @@
 #ifndef TVM_CONTRIB_MSC_PLUGIN_CODEGEN_UTILS_H_
 #define TVM_CONTRIB_MSC_PLUGIN_CODEGEN_UTILS_H_
 
+#include <string>
+#include <unordered_map>
+#include <vector>
+
 namespace tvm {
 namespace contrib {
 namespace msc {

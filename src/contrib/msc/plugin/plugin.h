@@ -21,11 +21,15 @@
  * \file src/contrib/msc/plugin/plugin.h
  * \brief Plugin builder for msc.
  */
-#ifndef TVM_CONTRIB_MSC_PLUGIN_PLUGIN_PLUGIN_H_
-#define TVM_CONTRIB_MSC_PLUGIN_PLUGIN_PLUGIN_H_
+#ifndef TVM_CONTRIB_MSC_PLUGIN_PLUGIN_H_
+#define TVM_CONTRIB_MSC_PLUGIN_PLUGIN_H_
 
 #include <dmlc/json.h>
 #include <tvm/tir/data_layout.h>
+
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 #include "../../../node/attr_registry.h"
 #include "../core/utils.h"
@@ -663,4 +667,4 @@ const Plugin GetPlugin(const String& name);
 }  // namespace msc
 }  // namespace contrib
 }  // namespace tvm
-#endif  // TVM_CONTRIB_MSC_PLUGIN_PLUGIN_PLUGIN_H_
+#endif  // TVM_CONTRIB_MSC_PLUGIN_PLUGIN_H_

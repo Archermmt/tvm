@@ -22,6 +22,7 @@
  */
 #include "tensorrt_codegen.h"
 
+#include <set>
 namespace tvm {
 namespace contrib {
 namespace msc {
