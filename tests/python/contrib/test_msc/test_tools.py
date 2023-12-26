@@ -219,12 +219,12 @@ def _test_from_torch(
         manager = MSCManager(torch_model, config)
         report = manager.run_pipe()
         model_info = manager.runner.model_info
-        manager.destory()
-        assert report["success"], "Failed to run pipe for torch -> {}".format(compile_type)
         for t_type, config in tools_config.items():
             assert os.path.isfile(
                 msc_utils.get_config_dir().relpath(config["plan_file"])
             ), "Failed to find plan of " + str(t_type)
+        manager.destory()
+        assert report["success"], "Failed to run pipe for torch -> {}".format(compile_type)
         assert msc_utils.dict_equal(
             model_info, expected_info
         ), "Model info {} mismatch with expected {}".format(model_info, expected_info)
