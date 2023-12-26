@@ -147,7 +147,8 @@ class BasePluginCodeGen {
       }
       this->stack_.assign("converters", "{}");
       for (const auto& pair : symbols) {
-        this->stack_.assign("converters[\"" + pair.second + "\"]", ConverterName(pair.first));
+        this->stack_.assign(DocUtils::ToIndex("converters", DocUtils::ToStr(pair.second)),
+                            ConverterName(pair.first));
       }
       this->stack_.func_end("converters");
     }
@@ -334,8 +335,14 @@ class BasePluginCodeGen {
         .cond_end()
         .for_start("lib", "os.listdir(self._lib_folder)")
         .func_call("shutil.copyfile")
-        .call_arg("os.path.join(self._lib_folder, lib)")
-        .call_arg("os.path.join(dst, lib)")
+        .inplace_start("os.path.join")
+        .call_arg(DocUtils::ToAttrAccess("self", "_lib_folder"))
+        .call_arg("lib")
+        .inplace_end()
+        .inplace_start("os.path.join")
+        .call_arg("dst")
+        .call_arg("lib")
+        .inplace_end()
         .for_end()
         .func_end();
     // get op names
@@ -344,7 +351,7 @@ class BasePluginCodeGen {
         .func_start()
         .assign("names", "[]");
     for (const auto& name : ListPluginNames()) {
-      this->stack_.func_call("append", "", "names").call_arg(DocUtils::ToStrDoc(name));
+      this->stack_.func_call("append", "", "names").call_arg(DocUtils::ToStr(name));
     }
     this->stack_.func_end("names");
     // get ops info
@@ -355,7 +362,7 @@ class BasePluginCodeGen {
     for (const auto& name : ListPluginNames()) {
       ICHECK(this->config()->ops_info.count(name)) << "Can not find op info for " << name;
       const auto& info = this->config()->ops_info[name];
-      this->stack_.assign(DocUtils::ToIndexDoc("info", DocUtils::ToStrDoc(name)), info);
+      this->stack_.assign(DocUtils::ToIndex("info", DocUtils::ToStr(name)), info);
     }
     this->stack_.func_end("info");
   };

@@ -69,31 +69,23 @@ class BaseStack {
   /*! \brief Push Comment Doc*/
   void Comment(const String& comment, bool attach = false);
 
-  /*! \brief Push typed assign Doc*/
-  void AssignBase(const ExprDoc& lhs, const ExprDoc& rhs, const String& annotation = "");
-
+  /*! \brief Push Assign Doc*/
   template <typename LT, typename RT>
   inline void Assign(const LT& lhs, const RT& rhs, const String& annotation = "") {
-    const auto& doc_lhs = DocUtils::ToDoc(lhs);
-    const auto& doc_rhs = DocUtils::ToDoc(rhs);
-    if (doc_rhs.defined()) {
-      AssignBase(doc_lhs, doc_rhs, annotation);
-    }
+    PushDoc(DocUtils::ToAssign(lhs, rhs, annotation));
   }
 
-  /*! \brief Push declare for variable Doc*/
+  /*! \brief Push declare Doc*/
   void Declare(const String& type, const String& variable, size_t len = 0,
                bool use_constructor = true);
 
-  /*! \brief Cache declare typed argument*/
+  /*! \brief Cache declare argument*/
   void DeclareArgBase(const ExprDoc& value);
 
+  /*! \brief Cache declare typed argument*/
   template <typename T>
   inline void DeclareArg(const T& value) {
-    const auto& doc_value = DocUtils::ToDoc(value);
-    if (doc_value.defined()) {
-      DeclareArgBase(doc_value);
-    }
+    DeclareArgBase(DocUtils::ToDoc(value));
   }
 
   /*! \brief Cache class Doc*/
@@ -135,16 +127,6 @@ class BaseStack {
     FuncEnd();
   }
 
-  /*! \brief Push call and maybe assign Doc*/
-  void FuncCall(const String& callee, Optional<DeclareDoc> assign_to,
-                Optional<ExprDoc> caller = NullOpt);
-
-  /*! \brief Push call and maybe assign Doc*/
-  void FuncCall(const String& callee, const String& assign_to = "", const String& caller = "");
-
-  /*! \brief Push method call Doc*/
-  void MethodCall(const String& callee, bool new_line = false);
-
   /*! \brief Cache constructor Doc*/
   void ConstructorDef(const String& constructor_name);
 
@@ -172,6 +154,22 @@ class BaseStack {
   /*! \brief End lambda body block*/
   void LambdaEnd(const String& ret_val = "");
   void LambdaEnd(const ExprDoc& ret_val);
+
+  /*! \brief Push call and maybe assign Doc*/
+  void FuncCall(const String& callee, Optional<ExprDoc> assign_to,
+                Optional<ExprDoc> caller = NullOpt);
+  void FuncCall(const String& callee, const String& assign_to = "", const String& caller = "");
+
+  /*! \brief Push method call Doc*/
+  void MethodCall(const String& callee, bool new_line = false);
+
+  /*! \brief Push inplace call and maybe assign Doc*/
+  void InplaceStart(const String& callee, Optional<ExprDoc> assign_to,
+                    Optional<ExprDoc> caller = NullOpt);
+  void InplaceStart(const String& callee, const String& assign_to = "", const String& caller = "");
+
+  /*! \brief End inplace call*/
+  void InplaceEnd();
 
   /*! \brief Push nested expr to last Doc*/
   void PopNest(const String& key = "");
@@ -356,7 +354,7 @@ class BaseStack {
     FuncEnd(ret_val);                                                                             \
     return *this;                                                                                 \
   }                                                                                               \
-  Stack& func_call(const String& callee, Optional<DeclareDoc> assign_to,                          \
+  Stack& func_call(const String& callee, Optional<ExprDoc> assign_to,                             \
                    Optional<ExprDoc> caller = NullOpt) {                                          \
     FuncCall(callee, assign_to, caller);                                                          \
     return *this;                                                                                 \
@@ -368,6 +366,20 @@ class BaseStack {
   }                                                                                               \
   Stack& method_call(const String& callee, bool new_line = false) {                               \
     MethodCall(callee, new_line);                                                                 \
+    return *this;                                                                                 \
+  }                                                                                               \
+  Stack& inplace_start(const String& callee, Optional<ExprDoc> assign_to,                         \
+                       Optional<ExprDoc> caller = NullOpt) {                                      \
+    InplaceStart(callee, assign_to, caller);                                                      \
+    return *this;                                                                                 \
+  }                                                                                               \
+  Stack& inplace_start(const String& callee, const String& assign_to = "",                        \
+                       const String& caller = "") {                                               \
+    InplaceStart(callee, assign_to, caller);                                                      \
+    return *this;                                                                                 \
+  }                                                                                               \
+  Stack& inplace_end() {                                                                          \
+    InplaceEnd();                                                                                 \
     return *this;                                                                                 \
   }                                                                                               \
   Stack& constructor_def(const String& func_name) {                                               \
@@ -559,7 +571,7 @@ class OpCodeStack : public BaseStack {
     std::string attr_val;
     if (codegen_->node()->GetAttr(attr_key, &attr_val)) {
       const String& valid_key = key == "msc::auto" ? attr_key : key;
-      return call_arg(DocUtils::ToStrDoc(attr_val), valid_key);
+      return call_arg(DocUtils::ToStr(attr_val), valid_key);
     }
     return *this;
   }
@@ -571,7 +583,7 @@ class OpCodeStack : public BaseStack {
     std::vector<T> attr_val;
     if (codegen_->node()->GetAttr(attr_key, &attr_val)) {
       const String& valid_key = key == "msc::auto" ? attr_key : key;
-      return call_arg(DocUtils::ToListDoc(attr_val, allow_empty), valid_key);
+      return call_arg(DocUtils::ToList(attr_val, allow_empty), valid_key);
     }
     return *this;
   }
@@ -588,7 +600,7 @@ class OpCodeStack : public BaseStack {
       inputs.push_back(codegen_->IdxInput(i, true));
     }
     if (as_list) {
-      return call_arg(DocUtils::ToListDoc(inputs), key);
+      return call_arg(DocUtils::ToList(inputs), key);
     } else {
       return call_arg(DocUtils::ToDocList(inputs));
     }
@@ -612,7 +624,7 @@ class OpCodeStack : public BaseStack {
                                           const String& name = "msc::auto") {
     const String& valid_key = key == "msc::auto" ? "name" : key;
     const String& valid_name = name == "msc::auto" ? codegen_->node()->name : name;
-    return call_arg(DocUtils::ToStrDoc(valid_name), valid_key);
+    return call_arg(DocUtils::ToStr(valid_name), valid_key);
     return *this;
   }
 

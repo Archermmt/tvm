@@ -56,9 +56,9 @@ const ExprDoc DocUtils::ToDoc(bool val) { return LiteralDoc::Boolean(val, NullOp
 
 const ExprDoc DocUtils::ToDoc(const ExprDoc& val) { return val; }
 
-const ExprDoc DocUtils::ToStrDoc(const String& val) { return LiteralDoc::Str(val, NullOpt); }
+const ExprDoc DocUtils::ToStr(const String& val) { return LiteralDoc::Str(val, NullOpt); }
 
-const PointerDoc DocUtils::ToPtrDoc(const String& val) { return PointerDoc(val); }
+const PointerDoc DocUtils::ToPtr(const String& val) { return PointerDoc(val); }
 
 const Array<StmtDoc> DocUtils::ToStmts(const Array<Doc>& docs) {
   Array<StmtDoc> stmts;

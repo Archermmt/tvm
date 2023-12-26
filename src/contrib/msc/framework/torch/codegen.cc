@@ -92,7 +92,7 @@ void TorchCodeGen::CodeGenGraph() {
   if (idx_outputs.size() == 1) {
     stack_.assign("outputs", idx_outputs[0]);
   } else {
-    stack_.assign("outputs", DocUtils::ToListDoc(idx_outputs));
+    stack_.assign("outputs", DocUtils::ToList(idx_outputs));
   }
   stack_.func_end("outputs");
   stack_.class_end();
@@ -103,16 +103,16 @@ void TorchCodeGen::CodeGenInference() {
       .func_call(graph()->name, "model")
       .comment("Load weights")
       .func_call("torch.load", "weights")
-      .call_arg(DocUtils::ToStrDoc(graph()->name + ".pth"))
-      .func_call("model.load_state_dict")
+      .call_arg(DocUtils::ToStr(graph()->name + ".pth"))
+      .func_call("load_state_dict", "", "model")
       .call_arg("weights");
   if (config()->test_device == "gpu") {
-    stack_.func_call("model.to").func_call("torch.device").call_arg("cuda").pop_nest();
+    stack_.func_call("to", "", "model").func_call("torch.device").call_arg("cuda").pop_nest();
   }
   for (const auto& i : graph()->GetInputs()) {
     const auto& producer = graph()->FindProducer(i);
     stack_.func_call("torch.from_numpy", IdxNodeBase(producer))
-        .call_arg("inputs[\"" + i->alias + "\"]");
+        .call_arg(DocUtils::ToIndex("inputs", DocUtils::ToStr(i->alias)));
   }
   stack_.func_call("model", "outputs");
   for (const auto& i : graph()->GetInputs()) {

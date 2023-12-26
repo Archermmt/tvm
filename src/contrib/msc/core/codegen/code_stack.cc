@@ -47,17 +47,9 @@ void BaseStack::Comment(const String& comment, bool attach) {
   }
 }
 
-void BaseStack::AssignBase(const ExprDoc& lhs, const ExprDoc& rhs, const String& annotation) {
-  if (annotation.size() == 0) {
-    PushDoc(AssignDoc(lhs, rhs, NullOpt));
-  } else {
-    PushDoc(AssignDoc(lhs, rhs, IdDoc(annotation)));
-  }
-}
-
 void BaseStack::Declare(const String& type, const String& variable, size_t len,
                         bool use_constructor) {
-  PushDoc(DocUtils::ToDeclareDoc(type, variable, len, use_constructor));
+  PushDoc(DocUtils::ToDeclare(type, variable, len, use_constructor));
 }
 
 void BaseStack::DeclareArgBase(const ExprDoc& value) {
@@ -79,20 +71,8 @@ void BaseStack::FuncDef(const String& func_name, const String& ret_type) {
 
 void BaseStack::FuncArg(const String& arg, const String& annotation, const String& value) {
   const auto& func = PopCheckedDoc<FunctionDoc, FunctionDocNode>();
-  Optional<ExprDoc> value_doc;
-  if (value.size() > 0) {
-    value_doc = IdDoc(value);
-  } else {
-    value_doc = NullOpt;
-  }
-  Optional<ExprDoc> annotation_doc;
-  if (annotation.size() > 0) {
-    annotation_doc = IdDoc(annotation);
-  } else {
-    annotation_doc = NullOpt;
-  }
   Array<AssignDoc> args = func->args;
-  args.push_back(AssignDoc(IdDoc(arg), value_doc, annotation_doc));
+  args.push_back(DocUtils::ToAssign(arg, value, annotation));
   PushDoc(FunctionDoc(func->name, args, func->decorators, func->return_type, func->body));
 }
 
@@ -150,7 +130,68 @@ void BaseStack::StructEnd() {
   PushDoc(StructDoc(struct_doc->name, struct_doc->decorators, body));
 }
 
-void BaseStack::FuncCall(const String& callee, Optional<DeclareDoc> assign_to,
+void BaseStack::ConstructorDef(const String& constructor_name) {
+  PushDoc(ConstructorDoc(IdDoc(constructor_name), Array<AssignDoc>(), Array<StmtDoc>()));
+}
+
+void BaseStack::ConstructorArg(const String& arg, const String& annotation, const String& value) {
+  const auto& func = PopCheckedDoc<ConstructorDoc, ConstructorDocNode>();
+  Array<AssignDoc> args = func->args;
+  args.push_back(DocUtils::ToAssign(arg, value, annotation));
+  PushDoc(ConstructorDoc(func->name, args, func->body));
+}
+
+void BaseStack::ConstructorStart() {
+  ICHECK(TopDoc()->IsInstance<ConstructorDocNode>()) << "ConstructorDoc is not saved";
+  BlockStart();
+}
+
+void BaseStack::ConstructorEnd() {
+  const auto& block = PopBlock();
+  const auto& func = PopCheckedDoc<ConstructorDoc, ConstructorDocNode>();
+  const auto& body = DocUtils::ToStmts(block);
+  PushDoc(ConstructorDoc(func->name, func->args, body));
+}
+
+void BaseStack::LambdaDef(const String& lambda_name) {
+  PushDoc(LambdaDoc(IdDoc(lambda_name), Array<AssignDoc>(), Array<ExprDoc>(), Array<StmtDoc>()));
+}
+
+void BaseStack::LambdaArg(const String& arg, const String& annotation, const String& value) {
+  const auto& lambda = PopCheckedDoc<LambdaDoc, LambdaDocNode>();
+  Array<AssignDoc> args = lambda->args;
+  args.push_back(DocUtils::ToAssign(arg, value, annotation));
+  PushDoc(LambdaDoc(lambda->name, args, lambda->refs, lambda->body));
+}
+
+void BaseStack::LambdaRef(const String& ref) {
+  const auto& lambda = PopCheckedDoc<LambdaDoc, LambdaDocNode>();
+  Array<ExprDoc> refs = lambda->refs;
+  refs.push_back(IdDoc(ref));
+  PushDoc(LambdaDoc(lambda->name, lambda->args, refs, lambda->body));
+}
+
+void BaseStack::LambdaStart() {
+  ICHECK(TopDoc()->IsInstance<LambdaDocNode>()) << "LambdaDoc is not saved";
+  BlockStart();
+}
+
+void BaseStack::LambdaEnd(const String& ret_val) {
+  if (ret_val.size() > 0) {
+    PushDoc(ReturnDoc(IdDoc(ret_val)));
+  }
+  const auto& block = PopBlock();
+  const auto& lambda = PopCheckedDoc<LambdaDoc, LambdaDocNode>();
+  const auto& body = DocUtils::ToStmts(block);
+  PushDoc(LambdaDoc(lambda->name, lambda->args, lambda->refs, body));
+}
+
+void BaseStack::LambdaEnd(const ExprDoc& ret_val) {
+  PushDoc(ReturnDoc(ret_val));
+  LambdaEnd("");
+}
+
+void BaseStack::FuncCall(const String& callee, Optional<ExprDoc> assign_to,
                          Optional<ExprDoc> caller) {
   if (!caller.defined()) {
     PushDoc(CallDoc(IdDoc(callee), Array<ExprDoc>(), Array<String>(), Array<ExprDoc>()));
@@ -160,17 +201,22 @@ void BaseStack::FuncCall(const String& callee, Optional<DeclareDoc> assign_to,
   }
   if (assign_to.defined()) {
     const auto& last_call = PopCheckedDoc<CallDoc, CallDocNode>();
-    const auto& declare = Downcast<DeclareDoc>(assign_to.value());
-    PushDoc(AssignDoc(declare->variable, last_call, declare->type));
+    if (assign_to.value()->IsInstance<DeclareDocNode>()) {
+      const auto& declare = Downcast<DeclareDoc>(assign_to.value());
+      PushDoc(AssignDoc(declare->variable, last_call, declare->type));
+    } else {
+      const auto& declare = DocUtils::ToDeclare("", assign_to.value());
+      PushDoc(AssignDoc(declare->variable, last_call, declare->type));
+    }
   }
 }
 
 void BaseStack::FuncCall(const String& callee, const String& assign_to, const String& caller) {
-  Optional<DeclareDoc> assign_doc;
+  Optional<ExprDoc> assign_doc;
   if (assign_to.size() == 0) {
     assign_doc = NullOpt;
   } else {
-    assign_doc = DocUtils::ToDeclareDoc("", assign_to);
+    assign_doc = IdDoc(assign_to);
   }
   Optional<ExprDoc> caller_doc;
   if (caller.size() == 0) {
@@ -195,89 +241,29 @@ void BaseStack::MethodCall(const String& callee, bool new_line) {
   }
 }
 
-void BaseStack::ConstructorDef(const String& constructor_name) {
-  PushDoc(ConstructorDoc(IdDoc(constructor_name), Array<AssignDoc>(), Array<StmtDoc>()));
+void BaseStack::InplaceStart(const String& callee, Optional<ExprDoc> assign_to,
+                             Optional<ExprDoc> caller) {
+  FuncCall(callee, assign_to, caller);
 }
 
-void BaseStack::ConstructorArg(const String& arg, const String& annotation, const String& value) {
-  const auto& func = PopCheckedDoc<ConstructorDoc, ConstructorDocNode>();
-  Optional<ExprDoc> value_doc;
-  if (value.size() > 0) {
-    value_doc = IdDoc(value);
+void BaseStack::InplaceStart(const String& callee, const String& assign_to, const String& caller) {
+  FuncCall(callee, assign_to, caller);
+}
+
+void BaseStack::InplaceEnd() {
+  const auto& last = PopDoc();
+  // get args and kwargs
+  if (const auto* call = last.as<CallDocNode>()) {
+    CallArgBase(Downcast<CallDoc>(last));
+  } else if (const auto* assign = last.as<AssignDocNode>()) {
+    const auto& call = Downcast<CallDoc>(assign->rhs);
+    ICHECK(assign->lhs->IsInstance<IdDocNode>())
+        << "assign lhs should be IdDoc, get " << assign->lhs->GetTypeKey();
+    const auto& key = Downcast<IdDoc>(assign->lhs)->name;
+    CallArgBase(call, key);
   } else {
-    value_doc = NullOpt;
+    LOG(FATAL) << "Unexpected last type for call arg " << last->GetTypeKey();
   }
-  Optional<ExprDoc> annotation_doc;
-  if (annotation.size() > 0) {
-    annotation_doc = IdDoc(annotation);
-  } else {
-    annotation_doc = NullOpt;
-  }
-  Array<AssignDoc> args = func->args;
-  args.push_back(AssignDoc(IdDoc(arg), value_doc, annotation_doc));
-  PushDoc(ConstructorDoc(func->name, args, func->body));
-}
-
-void BaseStack::ConstructorStart() {
-  ICHECK(TopDoc()->IsInstance<ConstructorDocNode>()) << "ConstructorDoc is not saved";
-  BlockStart();
-}
-
-void BaseStack::ConstructorEnd() {
-  const auto& block = PopBlock();
-  const auto& func = PopCheckedDoc<ConstructorDoc, ConstructorDocNode>();
-  const auto& body = DocUtils::ToStmts(block);
-  PushDoc(ConstructorDoc(func->name, func->args, body));
-}
-
-void BaseStack::LambdaDef(const String& lambda_name) {
-  PushDoc(LambdaDoc(IdDoc(lambda_name), Array<AssignDoc>(), Array<ExprDoc>(), Array<StmtDoc>()));
-}
-
-void BaseStack::LambdaArg(const String& arg, const String& annotation, const String& value) {
-  const auto& lambda = PopCheckedDoc<LambdaDoc, LambdaDocNode>();
-  Optional<ExprDoc> value_doc;
-  if (value.size() > 0) {
-    value_doc = IdDoc(value);
-  } else {
-    value_doc = NullOpt;
-  }
-  Optional<ExprDoc> annotation_doc;
-  if (annotation.size() > 0) {
-    annotation_doc = IdDoc(annotation);
-  } else {
-    annotation_doc = NullOpt;
-  }
-  Array<AssignDoc> args = lambda->args;
-  args.push_back(AssignDoc(IdDoc(arg), value_doc, annotation_doc));
-  PushDoc(LambdaDoc(lambda->name, args, lambda->refs, lambda->body));
-}
-
-void BaseStack::LambdaRef(const String& ref) {
-  const auto& lambda = PopCheckedDoc<LambdaDoc, LambdaDocNode>();
-  Array<ExprDoc> refs = lambda->refs;
-  refs.push_back(DocUtils::ToDoc(ref));
-  PushDoc(LambdaDoc(lambda->name, lambda->args, refs, lambda->body));
-}
-
-void BaseStack::LambdaStart() {
-  ICHECK(TopDoc()->IsInstance<LambdaDocNode>()) << "LambdaDoc is not saved";
-  BlockStart();
-}
-
-void BaseStack::LambdaEnd(const String& ret_val) {
-  if (ret_val.size() > 0) {
-    PushDoc(ReturnDoc(IdDoc(ret_val)));
-  }
-  const auto& block = PopBlock();
-  const auto& lambda = PopCheckedDoc<LambdaDoc, LambdaDocNode>();
-  const auto& body = DocUtils::ToStmts(block);
-  PushDoc(LambdaDoc(lambda->name, lambda->args, lambda->refs, body));
-}
-
-void BaseStack::LambdaEnd(const ExprDoc& ret_val) {
-  PushDoc(ReturnDoc(ret_val));
-  LambdaEnd("");
 }
 
 void BaseStack::PopNest(const String& key) {

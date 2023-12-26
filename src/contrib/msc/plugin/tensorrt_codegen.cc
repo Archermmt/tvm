@@ -61,7 +61,7 @@ void TensorRTPluginCodeGen::CodeGenAttrDefine(const Plugin& plugin) {
       LOG_FATAL << "attribute type " << a->type << " is not supported";
       const auto& ele_type = GetEleType(a->type);
       stack_.assign("size", "size + sizeof(size_t)")
-          .for_start("a", DocUtils::ToAttrAccessDoc("meta_attr", a->name))
+          .for_start("a", DocUtils::ToAttrAccess("meta_attr", a->name))
           .assign("size", "size + sizeof(" + ToCppType(ele_type) + ")")
           .for_end();
     } else {
@@ -78,9 +78,9 @@ void TensorRTPluginCodeGen::CodeGenAttrDefine(const Plugin& plugin) {
   for (const auto& a : plugin->attrs) {
     stack_.func_call("TRTUtils::ValToBuffer")
         .call_arg("buffer")
-        .call_arg(DocUtils::ToAttrAccessDoc("meta_attr", a->name));
+        .call_arg(DocUtils::ToAttrAccess("meta_attr", a->name));
   }
-  stack_.func_call(attr_name + "_serialize_size", DocUtils::ToDeclareDoc("size_t", "expected"))
+  stack_.func_call(attr_name + "_serialize_size", DocUtils::ToDeclare("size_t", "expected"))
       .line("assert(buffer == start + expected);")
       .func_end("buffer");
   // deserialize method for attr
@@ -92,9 +92,9 @@ void TensorRTPluginCodeGen::CodeGenAttrDefine(const Plugin& plugin) {
   for (const auto& a : plugin->attrs) {
     stack_.func_call("TRTUtils::ValFromBuffer")
         .call_arg("buffer")
-        .call_arg(DocUtils::ToAttrAccessDoc("meta_attr", a->name));
+        .call_arg(DocUtils::ToAttrAccess("meta_attr", a->name));
   }
-  stack_.func_call(attr_name + "_serialize_size", DocUtils::ToDeclareDoc("size_t", "expected"))
+  stack_.func_call(attr_name + "_serialize_size", DocUtils::ToDeclare("size_t", "expected"))
       .line("assert(buffer == start + expected);")
       .func_end("buffer");
   // attr to field
@@ -102,11 +102,11 @@ void TensorRTPluginCodeGen::CodeGenAttrDefine(const Plugin& plugin) {
       .func_arg("fields", "std::vector<PluginField>&")
       .func_start();
   for (const auto& a : plugin->attrs) {
-    stack_.func_call("TRTUtils::ToField", DocUtils::ToDeclareDoc("const auto&", "f_" + a->name))
-        .call_arg(DocUtils::ToStrDoc(a->name))
-        .call_arg(DocUtils::ToStrDoc(a->type))
-        .func_call("emplace_back", "", "fields")
-        .call_arg("f_" + a->name);
+    stack_.func_call("emplace_back", "", "fields")
+        .inplace_start("TRTUtils::ToField")
+        .call_arg(DocUtils::ToStr(a->name))
+        .call_arg(DocUtils::ToStr(a->type))
+        .inplace_end();
   }
   stack_.func_end();
   // attr from field
@@ -124,8 +124,8 @@ void TensorRTPluginCodeGen::CodeGenAttrDefine(const Plugin& plugin) {
       stack_.switch_case(cond);
     }
     stack_.func_call("TRTUtils::FromField")
-        .call_arg(DocUtils::ToIndexDoc("fields", "i"))
-        .call_arg(DocUtils::ToAttrAccessDoc("meta_attr", attr->name));
+        .call_arg(DocUtils::ToIndex("fields", "i"))
+        .call_arg(DocUtils::ToAttrAccess("meta_attr", attr->name));
   }
   stack_.switch_end().for_end().func_end("meta_attr");
 }
@@ -243,9 +243,9 @@ void TensorRTPluginCodeGen::CodeGenOpDefine(const Plugin& plugin) {
         .func_start();
     CodegenOutputInfer(plugin, false);
     stack_
-        .func_call("shape", DocUtils::ToDeclareDoc("MetaShape", "out_shape"),
-                   DocUtils::ToIndexDoc("output_metas_", "index"))
-        .func_call("TRTUtils::ToDims", DocUtils::ToDeclareDoc("Dims", "out_dims"))
+        .func_call("shape", DocUtils::ToDeclare("MetaShape", "out_shape"),
+                   DocUtils::ToIndex("output_metas_", "index"))
+        .func_call("TRTUtils::ToDims", DocUtils::ToDeclare("Dims", "out_dims"))
         .call_arg("out_shape")
         .func_end("out_dims");
     // configureWithFormat
@@ -326,10 +326,10 @@ void TensorRTPluginCodeGen::CodeGenOpDefine(const Plugin& plugin) {
     }
     int ref = plugin->FindDtypeRefIdx(plugin->outputs[i]);
     if (ref >= 0) {
-      stack_.assign("dtype", DocUtils::ToIndexDoc("in_types", ref));
+      stack_.assign("dtype", DocUtils::ToIndex("in_types", ref));
     } else {
       stack_.func_call("TRTUtils::ToDataType", "dtype")
-          .call_arg(DocUtils::ToStrDoc(plugin->outputs[i]->dtype));
+          .call_arg(DocUtils::ToStr(plugin->outputs[i]->dtype));
     }
   }
   stack_.switch_end().func_end("dtype");
@@ -343,9 +343,9 @@ void TensorRTPluginCodeGen::CodeGenOpDefine(const Plugin& plugin) {
       .func_start();
   CodegenOutputInfer(plugin, false);
   stack_
-      .func_call("shape", DocUtils::ToDeclareDoc("MetaShape", "out_shape"),
-                 DocUtils::ToIndexDoc("output_metas_", "index"))
-      .func_call("TRTUtils::ToDimsExprs", DocUtils::ToDeclareDoc("DimsExprs", "out_dims"))
+      .func_call("shape", DocUtils::ToDeclare("MetaShape", "out_shape"),
+                 DocUtils::ToIndex("output_metas_", "index"))
+      .func_call("TRTUtils::ToDimsExprs", DocUtils::ToDeclare("DimsExprs", "out_dims"))
       .call_arg("out_shape")
       .call_arg("builder")
       .func_end("out_dims");
@@ -442,9 +442,9 @@ void TensorRTPluginCodeGen::CodeGenManagerMethods() {
       .func_start()
       .cond_if("lib_folder is None")
       .assign("root", "os.path.dirname(__file__)")
-      .assign(DocUtils::ToAttrAccessDoc("self", "_lib_folder"), "os.path.join(root, \"libs\")")
+      .assign(DocUtils::ToAttrAccess("self", "_lib_folder"), "os.path.join(root, \"libs\")")
       .cond_else()
-      .assign(DocUtils::ToAttrAccessDoc("self", "_lib_folder"), "lib_folder")
+      .assign(DocUtils::ToAttrAccess("self", "_lib_folder"), "lib_folder")
       .cond_end()
       .line("assert os.path.isdir(self._lib_folder), \"lib_folder not exist\"")
       .for_start("lib", "os.listdir(self._lib_folder)")
@@ -509,7 +509,7 @@ void TensorRTPluginCodeGen::CodegenOpCommonMethods(const Plugin& plugin, bool dy
         .constructor_start()
         .assign("name_", "name");
     for (const auto& a : plugin->attrs) {
-      stack_.assign(DocUtils::ToAttrAccessDoc("meta_attr_", a->name), a->name);
+      stack_.assign(DocUtils::ToAttrAccess("meta_attr_", a->name), a->name);
     }
     stack_.line("assert(layouts.size() == " + std::to_string(plugin->inputs.size()) + ");")
         .assign("layouts_", "layouts");
@@ -521,7 +521,7 @@ void TensorRTPluginCodeGen::CodegenOpCommonMethods(const Plugin& plugin, bool dy
         .constructor_arg("length", "size_t")
         .constructor_start()
         .assign("name_", "name")
-        .func_call("static_cast<const char*>", DocUtils::ToDeclareDoc("const char*", "char_buf"))
+        .func_call("static_cast<const char*>", DocUtils::ToDeclare("const char*", "char_buf"))
         .call_arg("buffer")
         .assign("start_buf", "char_buf", "const char*")
         .func_call(attr_name + "_deserialize", "char_buf")
@@ -557,7 +557,7 @@ void TensorRTPluginCodeGen::CodegenOpCommonMethods(const Plugin& plugin, bool dy
         .func_decorator("const noexcept")
         .func_arg("buffer", "void*")
         .func_start()
-        .func_call("static_cast<char*>", DocUtils::ToDeclareDoc("char*", "char_buf"))
+        .func_call("static_cast<char*>", DocUtils::ToDeclare("char*", "char_buf"))
         .call_arg("buffer")
         .assign("start_buf", "char_buf", "const char*")
         .func_call(attr_name + "_serialize", "char_buf")
@@ -576,17 +576,17 @@ void TensorRTPluginCodeGen::CodegenOpCommonMethods(const Plugin& plugin, bool dy
     stack_.func_def(op_cls + "::getPluginType", "const char*")
         .func_decorator("const noexcept")
         .func_start()
-        .func_end(DocUtils::ToStrDoc(plugin_type));
+        .func_end(DocUtils::ToStr(plugin_type));
     // getPluginVersion
     stack_.func_def(op_cls + "::getPluginVersion", "const char*")
         .func_decorator("const noexcept")
         .func_start()
-        .func_end(DocUtils::ToStrDoc("1"));
+        .func_end(DocUtils::ToStr("1"));
     // getPluginNamespace
     stack_.func_def(op_cls + "::getPluginNamespace", "const char*")
         .func_decorator("const noexcept")
         .func_start()
-        .func_call("c_str", DocUtils::ToDeclareDoc("const char*", "name"),
+        .func_call("c_str", DocUtils::ToDeclare("const char*", "name"),
                    DocUtils::ToDoc("name_space_"))
         .func_end("name");
     // getNbOutputs
@@ -622,10 +622,10 @@ void TensorRTPluginCodeGen::CodegenOpCommonMethods(const Plugin& plugin, bool dy
     stack_.func_def(op_cls + "::clone", plugin_cls + "*")
         .func_decorator("const noexcept")
         .func_start()
-        .func_call("new " + op_cls, DocUtils::ToDeclareDoc(plugin_cls + "*", "plugin"))
+        .func_call("new " + op_cls, DocUtils::ToDeclare(plugin_cls + "*", "plugin"))
         .call_arg("name_");
     for (const auto& a : plugin->attrs) {
-      stack_.call_arg(DocUtils::ToAttrAccessDoc("meta_attr_", a->name));
+      stack_.call_arg(DocUtils::ToAttrAccess("meta_attr_", a->name));
     }
     stack_.call_arg("layouts_").func_end("plugin");
   }
@@ -698,35 +698,33 @@ void TensorRTPluginCodeGen::CodegenCreator(const Plugin& plugin, bool dynamic, b
         .func_call(attr_name + "_to_fields")
         .call_arg("fields_");
     for (const auto& t : plugin->inputs) {
-      stack_.func_call("TRTUtils::ToField", DocUtils::ToDeclareDoc("const auto&", "l_" + t->name))
-          .call_arg(DocUtils::ToStrDoc("layout_" + t->name))
-          .call_arg(DocUtils::ToStrDoc("string"))
-          .func_call("emplace_back", "", "fields_")
-          .call_arg("l_" + t->name);
+      stack_.func_call("emplace_back", "", "fields_")
+          .inplace_start("TRTUtils::ToField")
+          .call_arg(DocUtils::ToStr("layout_" + t->name))
+          .call_arg(DocUtils::ToStr("string"))
+          .inplace_end();
     }
-    const auto& nb_fields_dec =
-        DocUtils::ToDeclareDoc("", DocUtils::ToAttrAccessDoc("collection_", "nbFields"));
-    const auto& fields_dec =
-        DocUtils::ToDeclareDoc("", DocUtils::ToAttrAccessDoc("collection_", "fields"));
-    stack_.func_call("size", nb_fields_dec, DocUtils::ToDoc("fields_"))
-        .func_call("data", fields_dec, DocUtils::ToDoc("fields_"))
+    const auto& nb_fields_doc = DocUtils::ToAttrAccess("collection_", "nbFields");
+    const auto& fields_doc = DocUtils::ToAttrAccess("collection_", "fields");
+    stack_.func_call("size", nb_fields_doc, DocUtils::ToDoc("fields_"))
+        .func_call("data", fields_doc, DocUtils::ToDoc("fields_"))
         .constructor_end();
     // getPluginName
     const String& plugin_type = plugin->name + (dynamic ? "_dynamic" : "");
     stack_.func_def(creator_cls + "::getPluginName", "const char*")
         .func_decorator("const noexcept")
         .func_start()
-        .func_end(DocUtils::ToStrDoc(plugin_type));
+        .func_end(DocUtils::ToStr(plugin_type));
     // getPluginVersion
     stack_.func_def(creator_cls + "::getPluginVersion", "const char*")
         .func_decorator("const noexcept")
         .func_start()
-        .func_end(DocUtils::ToStrDoc("1"));
+        .func_end(DocUtils::ToStr("1"));
     // getPluginNamespace
     stack_.func_def(creator_cls + "::getPluginNamespace", "const char*")
         .func_decorator("const noexcept")
         .func_start()
-        .func_call("c_str", DocUtils::ToDeclareDoc("const char*", "name"),
+        .func_call("c_str", DocUtils::ToDeclare("const char*", "name"),
                    DocUtils::ToDoc("name_space_"))
         .func_end("name");
     // getFieldNames
@@ -750,9 +748,9 @@ void TensorRTPluginCodeGen::CodegenCreator(const Plugin& plugin, bool dynamic, b
         .func_arg("collection", "const PluginFieldCollection*")
         .func_start()
         .line("assert(collection->nbFields == " + std::to_string(fields_size) + ");")
-        .assign("fields", DocUtils::ToAttrAccessDoc(DocUtils::ToPtrDoc("collection"), "fields"),
+        .assign("fields", DocUtils::ToAttrAccess(DocUtils::ToPtr("collection"), "fields"),
                 "const PluginField*")
-        .func_call(attr_name + "_from_fields", DocUtils::ToDeclareDoc("const auto&", "meta_attr"))
+        .func_call(attr_name + "_from_fields", DocUtils::ToDeclare("const auto&", "meta_attr"))
         .call_arg("fields")
         .declare("std::vector<std::string>", "layouts")
         .func_call("resize", "", "layouts")
@@ -767,21 +765,20 @@ void TensorRTPluginCodeGen::CodegenCreator(const Plugin& plugin, bool dynamic, b
         stack_.switch_case(cond);
       }
       stack_.func_call("TRTUtils::FromField")
-          .call_arg(DocUtils::ToIndexDoc("fields", "i"))
-          .call_arg(DocUtils::ToIndexDoc("layouts", i));
+          .call_arg(DocUtils::ToIndex("fields", "i"))
+          .call_arg(DocUtils::ToIndex("layouts", i));
     }
     stack_.switch_end()
         .for_end()
-        .func_call("new " + op_cls, DocUtils::ToDeclareDoc(op_cls + "*", "plugin"))
+        .func_call("new " + op_cls, DocUtils::ToDeclare(op_cls + "*", "plugin"))
         .call_arg("name");
     for (const auto& a : plugin->attrs) {
-      stack_.call_arg(DocUtils::ToAttrAccessDoc("meta_attr", a->name));
+      stack_.call_arg(DocUtils::ToAttrAccess("meta_attr", a->name));
     }
     stack_.call_arg("layouts")
-        .func_call("c_str", DocUtils::ToDeclareDoc("const char*", "name_space"),
-                   DocUtils::ToDoc("name_space_"))
-        .func_call("setPluginNamespace", NullOpt, DocUtils::ToPtrDoc("plugin"))
-        .call_arg("name_space")
+        .func_call("setPluginNamespace", NullOpt, DocUtils::ToPtr("plugin"))
+        .inplace_start("c_str", NullOpt, DocUtils::ToDoc("name_space_"))
+        .inplace_end()
         .func_end("plugin");
     // deserializePlugin
     stack_.func_def(creator_cls + "::deserializePlugin", plugin_cls + "*")
@@ -790,14 +787,13 @@ void TensorRTPluginCodeGen::CodegenCreator(const Plugin& plugin, bool dynamic, b
         .func_arg("data", "const void*")
         .func_arg("length", "size_t")
         .func_start()
-        .func_call("new " + op_cls, DocUtils::ToDeclareDoc(op_cls + "*", "plugin"))
+        .func_call("new " + op_cls, DocUtils::ToDeclare(op_cls + "*", "plugin"))
         .call_arg("name")
         .call_arg("data")
         .call_arg("length")
-        .func_call("c_str", DocUtils::ToDeclareDoc("const char*", "name_space"),
-                   DocUtils::ToDoc("name_space_"))
-        .func_call("setPluginNamespace", NullOpt, DocUtils::ToPtrDoc("plugin"))
-        .call_arg("name_space")
+        .func_call("setPluginNamespace", NullOpt, DocUtils::ToPtr("plugin"))
+        .inplace_start("c_str", NullOpt, DocUtils::ToDoc("name_space_"))
+        .inplace_end()
         .func_end("plugin");
   }
 }
@@ -808,14 +804,13 @@ void TensorRTPluginCodeGen::CodegenOutputInfer(const Plugin& plugin, bool as_des
       .func_call("resize", "", "input_metas_")
       .call_arg(plugin->inputs.size())
       .for_start("i", 0, plugin->inputs.size())
-      .func_call("TRTUtils::ToMetaTensor",
-                 DocUtils::ToDeclareDoc("", DocUtils::ToIndexDoc("input_metas_", "i")));
+      .func_call("TRTUtils::ToMetaTensor", DocUtils::ToIndex("input_metas_", "i"));
   if (as_desc) {
-    stack_.call_arg(DocUtils::ToIndexDoc("in_descs", "i"));
+    stack_.call_arg(DocUtils::ToIndex("in_descs", "i"));
   } else {
-    stack_.call_arg(DocUtils::ToIndexDoc("in_dims", "i")).call_arg("dtype_");
+    stack_.call_arg(DocUtils::ToIndex("in_dims", "i")).call_arg("dtype_");
   }
-  stack_.call_arg(DocUtils::ToIndexDoc("layouts_", "i")).for_end();
+  stack_.call_arg(DocUtils::ToIndex("layouts_", "i")).for_end();
   CodeGenSafeCall(plugin->externs["infer_output"], infer_args, "output_metas_");
 }
 
@@ -828,7 +823,7 @@ void TensorRTPluginCodeGen::CodegenBufferInfer(const Plugin& plugin) {
 }
 
 void TensorRTPluginCodeGen::CodegenEnqueue(const Plugin& plugin, bool dynamic) {
-  ICHECK(plugin->externs.count("cuda_compute")) << "cuda_compute is needed fo TensorRT plugin";
+  // ICHECK(plugin->externs.count("cuda_compute")) << "cuda_compute is needed fo TensorRT plugin";
   auto prepare_tensor = [this, &dynamic](const PluginTensor& tensor,
                                          const Map<String, String>& dtypes, size_t idx,
                                          const String& collect) {
@@ -836,17 +831,17 @@ void TensorRTPluginCodeGen::CodegenEnqueue(const Plugin& plugin, bool dynamic) {
     const String& t_dtype = dtypes.count(tensor->name) ? dtypes[tensor->name] : tensor->dtype;
     const String& tensor_type = "DataTensor<" + t_dtype + ">";
     const String& anno = collect == "input" ? "const " + tensor_type + "&" : tensor_type;
-    stack_.func_call("TRTUtils::To" + tensor_type, DocUtils::ToDeclareDoc(anno, t_name));
-    const auto& t_meta = DocUtils::ToIndexDoc(collect + "_metas_", idx);
+    stack_.func_call("TRTUtils::To" + tensor_type, DocUtils::ToDeclare(anno, t_name));
+    const auto& t_meta = DocUtils::ToIndex(collect + "_metas_", idx);
     if (dynamic) {
-      stack_.call_arg(t_meta).call_arg(DocUtils::ToIndexDoc(collect + "_descs", idx));
+      stack_.call_arg(t_meta).call_arg(DocUtils::ToIndex(collect + "_descs", idx));
     } else {
       stack_.call_arg(t_meta).call_arg("batch_size");
     }
     if (collect == "input") {
-      stack_.call_arg(DocUtils::ToIndexDoc("inputs", idx));
+      stack_.call_arg(DocUtils::ToIndex("inputs", idx));
     } else if (collect == "output") {
-      stack_.call_arg(DocUtils::ToIndexDoc("outputs", idx));
+      stack_.call_arg(DocUtils::ToIndex("outputs", idx));
     } else {
       stack_.call_arg("workspace + offset");
     }
@@ -882,15 +877,15 @@ void TensorRTPluginCodeGen::CodegenEnqueue(const Plugin& plugin, bool dynamic) {
         compute_args.push_back(t_name);
         const String& size_name = "size_" + plugin->buffers[i]->name;
         stack_
-            .func_call("size", DocUtils::ToDeclareDoc("size_t", size_name),
-                       DocUtils::ToIndexDoc("buffer_metas_", i))
+            .func_call("size", DocUtils::ToDeclare("size_t", size_name),
+                       DocUtils::ToIndex("buffer_metas_", i))
             .call_arg(false)
             .assign("offset", "offset + batch_size * " + size_name);
       }
     }
     compute_args.push_back("meta_attr_");
     compute_args.push_back("stream");
-    CodeGenSafeCall(plugin->externs["cuda_compute"], compute_args);
+    CodeGenSafeCall(plugin->externs["cpu_compute"], compute_args);
     stack_.cond_end();
   }
 }

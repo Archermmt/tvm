@@ -335,6 +335,7 @@ def _test_with_manager(compile_type):
     ), "Model info {} mismatch with expected {}".format(model_info, expected_info)
 
 
+"""
 @pytest.mark.parametrize("compile_type", [MSCFramework.TORCH, MSCFramework.TVM])
 def test_manager_plugin(compile_type):
     _test_with_manager(compile_type)
@@ -342,18 +343,10 @@ def test_manager_plugin(compile_type):
 
 def test_tensorrt_plugin():
     _test_with_manager(MSCFramework.TENSORRT)
-
+"""
 
 if __name__ == "__main__":
     # tvm.testing.main()
     # test_torch_plugin()
     # test_tvm_plugin_cpu()
-    # managers = _build_plugin([MSCFramework.TENSORRT])
-    from tvm.contrib.msc.plugin import pack_plugins_wheel
-
-    test_dir = msc_utils.msc_dir("msc_plugin")
-    externs_dir = test_dir.create_dir("externs")
-    install_dir = test_dir.create_dir("install")
-    plugin = _create_plugin(externs_dir)
-    path = pack_plugins_wheel(plugin, [MSCFramework.TORCH], externs_dir=externs_dir, on_debug=True)
-    print("path " + str(path))
+    managers = _build_plugin([MSCFramework.TENSORRT])

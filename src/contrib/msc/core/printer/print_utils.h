@@ -70,16 +70,16 @@ class DocUtils {
   TVM_DLL static const ExprDoc ToDoc(const String& val);
   TVM_DLL static const ExprDoc ToDoc(bool val);
   TVM_DLL static const ExprDoc ToDoc(const ExprDoc& val);
-  TVM_DLL static const ExprDoc ToStrDoc(const String& val);
-  TVM_DLL static const PointerDoc ToPtrDoc(const String& val);
+  TVM_DLL static const ExprDoc ToStr(const String& val);
+  TVM_DLL static const PointerDoc ToPtr(const String& val);
 
   /*!
    * \brief Change object to DeclareDoc.
    * \return The DeclareDoc.
    */
   template <typename T>
-  TVM_DLL static const DeclareDoc ToDeclareDoc(const String& type, const T& variable,
-                                               size_t len = 0, bool use_constructor = true) {
+  TVM_DLL static const DeclareDoc ToDeclare(const String& type, const T& variable, size_t len = 0,
+                                            bool use_constructor = true) {
     Optional<ExprDoc> type_doc;
     if (type.size() == 0) {
       type_doc = NullOpt;
@@ -95,11 +95,41 @@ class DocUtils {
   }
 
   /*!
+   * \brief Change object to AssignDoc.
+   * \return The AssignDoc.
+   */
+  template <typename LT, typename RT>
+  TVM_DLL static const AssignDoc ToAssign(const LT& lhs, const RT& rhs,
+                                          const String& annotation = "") {
+    if (annotation.size() == 0) {
+      return AssignDoc(ToDoc(lhs), ToDoc(rhs), NullOpt);
+    }
+    return AssignDoc(ToDoc(lhs), ToDoc(rhs), IdDoc(annotation));
+  }
+  template <typename T>
+  TVM_DLL static const AssignDoc ToAssign(const T& lhs, const String& rhs,
+                                          const String& annotation = "") {
+    Optional<ExprDoc> rhs_doc;
+    if (rhs.size() > 0) {
+      rhs_doc = IdDoc(rhs);
+    } else {
+      rhs_doc = NullOpt;
+    }
+    Optional<ExprDoc> annotation_doc;
+    if (annotation.size() > 0) {
+      annotation_doc = IdDoc(annotation);
+    } else {
+      annotation_doc = NullOpt;
+    }
+    return AssignDoc(ToDoc(lhs), rhs_doc, annotation_doc);
+  }
+
+  /*!
    * \brief Change object to AttrAccessDoc.
    * \return The AttrAccessDoc.
    */
   template <typename T>
-  TVM_DLL static const AttrAccessDoc ToAttrAccessDoc(const T& value, const String& name) {
+  TVM_DLL static const AttrAccessDoc ToAttrAccess(const T& value, const String& name) {
     return AttrAccessDoc(ToDoc(value), name);
   }
 
@@ -129,15 +159,15 @@ class DocUtils {
    * \return The ListDoc.
    */
   template <typename T>
-  TVM_DLL static const StrictListDoc ToListDoc(const std::vector<T>& values,
-                                               bool allow_empty = false) {
+  TVM_DLL static const StrictListDoc ToList(const std::vector<T>& values,
+                                            bool allow_empty = false) {
     if (values.size() > 0 || allow_empty) {
       return StrictListDoc(ListDoc(ToDocList(values)), allow_empty);
     }
     return StrictListDoc(ListDoc(), false);
   }
   template <typename T>
-  TVM_DLL static const StrictListDoc ToListDoc(const Array<T>& values, bool allow_empty = false) {
+  TVM_DLL static const StrictListDoc ToList(const Array<T>& values, bool allow_empty = false) {
     if (values.size() > 0 || allow_empty) {
       return StrictListDoc(ListDoc(ToDocList(values)), allow_empty);
     }
@@ -149,13 +179,13 @@ class DocUtils {
    * \return The IndexDoc.
    */
   template <typename VT, typename IT>
-  TVM_DLL static const IndexDoc ToIndexDoc(const VT& value, const IT& index) {
+  TVM_DLL static const IndexDoc ToIndex(const VT& value, const IT& index) {
     Array<Doc> doc_indices;
     doc_indices.push_back(ToDoc(index));
     return IndexDoc(ToDoc(value), doc_indices);
   }
   template <typename VT, typename IT>
-  TVM_DLL static const IndexDoc ToIndicesDoc(const VT& value, const std::vector<IT>& indices) {
+  TVM_DLL static const IndexDoc ToIndices(const VT& value, const std::vector<IT>& indices) {
     Array<Doc> doc_indices;
     for (const auto& i : indices) {
       doc_indices.push_back(ToDoc(i));
@@ -163,25 +193,12 @@ class DocUtils {
     return IndexDoc(ToDoc(value), doc_indices);
   }
   template <typename VT, typename IT>
-  TVM_DLL static const IndexDoc ToIndicesDoc(const VT& value, const Array<IT>& indices) {
+  TVM_DLL static const IndexDoc ToIndices(const VT& value, const Array<IT>& indices) {
     Array<Doc> doc_indices;
     for (const auto& i : indices) {
       doc_indices.push_back(ToDoc(i));
     }
     return IndexDoc(ToDoc(value), doc_indices);
-  }
-
-  /*!
-   * \brief Change object to AssignDoc.
-   * \return The AssignDoc.
-   */
-  template <typename T>
-  TVM_DLL static const AssignDoc ToAssignDoc(const String& lhs, const T& rhs,
-                                             const String& annotation = "") {
-    if (annotation.size() == 0) {
-      return AssignDoc(IdDoc(lhs), ToDoc(rhs), NullOpt);
-    }
-    return AssignDoc(IdDoc(lhs), ToDoc(rhs), IdDoc(annotation));
   }
 
   /*!
