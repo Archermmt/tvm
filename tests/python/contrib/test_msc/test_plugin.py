@@ -247,7 +247,7 @@ def _build_plugin(frameworks):
     managers = build_plugins_manager(
         plugin, frameworks, install_dir, externs_dir=externs_dir, on_debug=True
     )
-    # test_dir.destory()
+    test_dir.destory()
     return managers
 
 
@@ -257,9 +257,13 @@ def _run_relax(relax_mod, target_name, data):
     if target_name == "cuda":
         with target:
             relax_mod = tvm.tir.transform.DefaultGPUSchedule()(relax_mod)
+        device = tvm.cuda()
+    else:
+        device = tvm.cpu()
     with tvm.transform.PassContext(opt_level=3):
         relax_exec = tvm.relax.build(relax_mod, target)
-        runnable = tvm.relax.VirtualMachine(relax_exec, tvm.cpu())
+        runnable = tvm.relax.VirtualMachine(relax_exec, device)
+    data = tvm.nd.array(data, device)
     return runnable["main"](data).asnumpy()
 
 
@@ -268,13 +272,8 @@ def _test_tvm_plugin(target):
 
     managers = _build_plugin([MSCFramework.TVM])
     model = _get_tvm_model(managers[MSCFramework.TVM])
-    print("model " + str(model))
-    if target == "cuda":
-        tvm_data = tvm.nd.array(np.random.rand(1, 3, 224, 224).astype("float32"), tvm.cuda())
-    else:
-        tvm_data = tvm.nd.array(np.random.rand(1, 3, 224, 224).astype("float32"))
-    outputs = _run_relax(model, target, tvm_data)
-    print("tvm outputs " + str(msc_utils.inspect_array(outputs)))
+    data = np.random.rand(1, 3, 224, 224).astype("float32")
+    outputs = _run_relax(model, target, data)
     assert outputs.min() >= 0 and outputs.max() <= 0.5
 
 
@@ -301,7 +300,6 @@ def test_torch_plugin():
         model = model.to(torch.device("cuda:0"))
         torch_data = torch_data.to(torch.device("cuda:0"))
     outputs = model(torch_data)
-    print("torch outputs " + str(msc_utils.inspect_array(outputs)))
     assert outputs.min() >= 0 and outputs.max() <= 0.5
 
 
@@ -343,12 +341,10 @@ def test_manager_plugin(compile_type):
     _test_with_manager(compile_type)
 
 
+@requires_tensorrt
 def test_tensorrt_plugin():
     _test_with_manager(MSCFramework.TENSORRT)
 
 
 if __name__ == "__main__":
-    # tvm.testing.main()
-    # test_torch_plugin()
-    test_tvm_plugin_cpu()
-    # managers = _build_plugin([MSCFramework.TENSORRT])
+    tvm.testing.main()

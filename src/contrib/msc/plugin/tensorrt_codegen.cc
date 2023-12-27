@@ -824,7 +824,7 @@ void TensorRTPluginCodeGen::CodegenBufferInfer(const Plugin& plugin) {
 }
 
 void TensorRTPluginCodeGen::CodegenEnqueue(const Plugin& plugin, bool dynamic) {
-  // ICHECK(plugin->externs.count("cuda_compute")) << "cuda_compute is needed fo TensorRT plugin";
+  ICHECK(plugin->externs.count("cuda_compute")) << "cuda_compute is needed fo TensorRT plugin";
   auto prepare_tensor = [this, &dynamic](const PluginTensor& tensor,
                                          const Map<String, String>& dtypes, size_t idx,
                                          const String& collect) {
@@ -886,7 +886,7 @@ void TensorRTPluginCodeGen::CodegenEnqueue(const Plugin& plugin, bool dynamic) {
     }
     compute_args.push_back("meta_attr_");
     compute_args.push_back("stream");
-    CodeGenSafeCall(plugin->externs["cpu_compute"], compute_args);
+    CodeGenSafeCall(plugin->externs["cuda_compute"], compute_args);
     stack_.cond_end();
   }
 }
