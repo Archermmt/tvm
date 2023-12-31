@@ -84,7 +84,7 @@ class TVMPluginCodeGen : public BasePluginCodeGen<TVMPluginCodeGenConfig> {
   /*! \brief Codegen cmake file*/
   void CodeGenCmake(const std::set<String>& devices) final;
 
-  /*! \brief Codegen manager imports*/
+  /*! \brief Codegen manager depends*/
   void CodeGenManagerDepends() final;
 
   /*! \brief Codegen manager methods*/

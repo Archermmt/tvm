@@ -125,6 +125,7 @@ def from_relax(
     ]
     mod = tvm.transform.Sequential(passes)(mod)
     graph = _ffi_api.BuildFromRelax(mod, entry, msc_utils.dump_dict(build_config))
+    print("[TMINFO] final graph " + str(graph))
     t_weights = _ffi_api.GetRelaxWeights(mod, entry)
     return graph, normalize_weights(t_weights, graph)
 

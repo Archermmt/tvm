@@ -18,7 +18,7 @@
 
 import os
 import subprocess
-from typing import Dict, Optional, Tuple, List, Union
+from typing import Dict, Optional, Tuple, List, Union, Any
 import numpy as np
 
 import tvm
@@ -38,6 +38,7 @@ def to_sub_tensorrt(
     print_config: Optional[Dict[str, str]] = None,
     build_folder: msc_utils.MSCDirectory = None,
     output_folder: msc_utils.MSCDirectory = None,
+    plugin: Any = None,
 ) -> str:
     """Change MSCGraph to TensorRT engine file.
 
@@ -55,6 +56,8 @@ def to_sub_tensorrt(
         The folder for saving sources and datas.
     export_folder: MSCDirectory
         The folder for saving outputs.
+    plugin: PluginManager
+        The plugin manager.
 
     Returns
     -------
@@ -91,6 +94,9 @@ def to_sub_tensorrt(
                         write_weight(name, data, f)
                     else:
                         write_weight(name, data.asnumpy(), f)
+        # copy plugin
+        if plugin:
+            plugin.copy_libs("plugin")
         # save utils sources
         with folder.create_dir("utils") as utils_folder:
             for name, source in get_trt_sources().items():
@@ -139,6 +145,7 @@ def to_tensorrt(
     extra_options: Optional[Union[Dict[str, str], List[Dict[str, str]]]] = None,
     build_folder: msc_utils.MSCDirectory = None,
     output_folder: msc_utils.MSCDirectory = None,
+    plugin: Any = None,
 ) -> Dict[str, str]:
     """Change all MSCGraphs to TensorRT engine files.
 
@@ -158,6 +165,8 @@ def to_tensorrt(
         The folder for saving sources and datas.
     export_folder: MSCDirectory
         The folder for saving outputs.
+    plugin: PluginManager
+        The plugin manager.
 
     Returns
     -------
@@ -174,7 +183,13 @@ def to_tensorrt(
         extra_options = [extra_options] * len(graph_infos)
     for idx, (graph, weights) in enumerate(graph_infos):
         options = to_sub_tensorrt(
-            graph, weights, codegen_configs[idx], print_configs[idx], build_folder, output_folder
+            graph,
+            weights,
+            codegen_configs[idx],
+            print_configs[idx],
+            build_folder,
+            output_folder,
+            plugin=plugin,
         )
         if extra_options[idx]:
             options.update(extra_options[idx])

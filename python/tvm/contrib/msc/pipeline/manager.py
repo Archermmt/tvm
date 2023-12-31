@@ -31,6 +31,7 @@ from tvm.contrib.msc.core.utils.namespace import MSCFramework, MSCMap
 from tvm.contrib.msc.core.utils.message import MSCStage
 from tvm.contrib.msc.core import utils as msc_utils
 from tvm.contrib.msc.core.gym.control import create_controller
+from tvm.contrib.msc.core import _ffi_api
 
 
 class BaseManager(object):
@@ -42,14 +43,17 @@ class BaseManager(object):
         The raw model in framwork.
     config: dict
         The config for pipeline.
+    plugins: dict
+        The plugins fro pipeline.
     """
 
-    def __init__(self, model, config):
+    def __init__(self, model: Any, config: dict, plugins: dict = None):
         # check config
         for stage in ["inputs", "outputs", "dataset", "prepare", "compile"]:
             assert stage in config, "{} should be given to run the pipeline".format(stage)
         MSCMap.reset()
         self._model = model
+        self._plugins = plugins or {}
         self._workspace = msc_utils.set_workspace(config.get("workspace"))
         log_path = config.get("log_path") or self._workspace.relpath("MSC_LOG", keep_history=False)
         if config.get("debug_level", 0) > 0 and "verbose" not in config:
@@ -74,6 +78,11 @@ class BaseManager(object):
             The setup info.
         """
 
+        # register plugins
+        if self._plugins:
+            assert MSCFramework.TVM in self._plugins, "tvm plugin is needed to compile"
+            for name, plugin in self._plugins[MSCFramework.TVM].get_ops_info().items():
+                _ffi_api.RegisterPlugin(name, msc_utils.dump_dict(plugin))
         self._config, self._debug_levels = self.update_config(config)
         self._tools_config = {}
         self._relax_mod, self._runner = None, None
@@ -87,7 +96,7 @@ class BaseManager(object):
             "duration": {},
             "profile": {},
         }
-        return {"workspace": self._workspace.path, "config": config}
+        return {"workspace": self._workspace.path, "plugins": self._plugins, "config": config}
 
     def update_config(self, config: dict) -> dict:
         """Update config
@@ -327,7 +336,15 @@ class BaseManager(object):
                 "trans_func": trans_func,
             }
             self._logger.info(msc_utils.msg_block("PARSE", parse_info))
-            relax_mod, _ = stage_config["parser"](self._model, as_msc=False, **parse_config)
+            if self._config["model_type"] in self._plugins:
+                custom_convert_map = self._plugins[self._config["model_type"]].get_convert_map()
+            else:
+                custom_convert_map = None
+            relax_mod, _ = stage_config["parser"](
+                self._model, as_msc=False, custom_convert_map=custom_convert_map, **parse_config
+            )
+            print("relax span attrs " + str(msc_utils.get_span_attrs(relax_mod)))
+
             if trans_func:
                 relax_mod = trans_func(relax_mod)
             if cache_path:
@@ -505,6 +522,7 @@ class BaseManager(object):
         runner = runner_cls(
             self._relax_mod,
             tools_config=tools_config,
+            plugin=self._plugins.get(stage_config["run_type"]),
             stage=stage,
             logger=self._logger,
             **run_config,

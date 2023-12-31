@@ -18,11 +18,11 @@
  */
 
 /*!
- * \file src/contrib/msc/plugin/plugin.h
- * \brief Plugin builder for msc.
+ * \file src/contrib/msc/core/ir/plugin.h
+ * \brief Plugin describe for msc.
  */
-#ifndef TVM_CONTRIB_MSC_PLUGIN_PLUGIN_H_
-#define TVM_CONTRIB_MSC_PLUGIN_PLUGIN_H_
+#ifndef TVM_CONTRIB_MSC_CORE_IR_PLUGIN_H_
+#define TVM_CONTRIB_MSC_CORE_IR_PLUGIN_H_
 
 #include <dmlc/json.h>
 #include <tvm/tir/data_layout.h>
@@ -31,8 +31,8 @@
 #include <unordered_map>
 #include <vector>
 
-#include "../../../node/attr_registry.h"
-#include "../core/utils.h"
+#include "../../../../node/attr_registry.h"
+#include "../utils.h"
 
 namespace tvm {
 namespace contrib {
@@ -110,7 +110,6 @@ struct JsonPluginTensor {
         bitmask |= 1;
       } else if (key == "dtype") {
         reader->Read(&dtype);
-        bitmask |= 2;
       } else if (key == "ndim") {
         reader->Read(&ndim);
       } else if (key == "device") {
@@ -119,7 +118,7 @@ struct JsonPluginTensor {
         reader->Read(&describe);
       }
     }
-    ICHECK_EQ(bitmask, 1 | 2) << "name and dtype should be given for plugin tensor";
+    ICHECK_EQ(bitmask, 1) << "name should be given for plugin tensor";
     if (describe.size() == 0) {
       describe = "Plugin tensor " + name + "(" + dtype + " on " + device + ")";
     }
@@ -225,23 +224,23 @@ struct JsonPlugin {
         reader->Read(&buffers);
       } else if (key == "externs") {
         reader->Read(&externs);
-        bitmask |= 8;
       } else if (key == "support_dtypes") {
         reader->Read(&support_dtypes);
       } else if (key == "options") {
         reader->Read(&options);
       }
     }
-    ICHECK_EQ(bitmask, 1 | 2 | 4 | 8)
-        << "name, inputs, outputs and externs should be given for plugin";
-    ICHECK(externs.count("infer_output")) << "infer_output should be given as extern";
-    bool has_compute = false;
-    for (const auto& pair : externs) {
-      if (StringUtils::EndsWith(pair.first, "_compute")) {
-        has_compute = true;
+    ICHECK_EQ(bitmask, 1 | 2 | 4) << "name, inputs and outputs should be given for plugin";
+    if (externs.size() > 0) {
+      ICHECK(externs.count("infer_output")) << "infer_output should be given as extern";
+      bool has_compute = false;
+      for (const auto& pair : externs) {
+        if (StringUtils::EndsWith(pair.first, "_compute")) {
+          has_compute = true;
+        }
       }
+      ICHECK(has_compute) << "No compute function found, please check";
     }
-    ICHECK(has_compute) << "No compute function found, please check";
     if (describe.size() == 0) {
       describe = "Plugin " + name + "(" + version + ")";
     }
@@ -616,6 +615,16 @@ class PluginRegistry {
   }
 
   /*!
+   * \brief Check if an plugin is registered.
+   * \param name The name of the item.
+   * \return Whether the plugin is registered.
+   */
+  bool Registered(const String& name) const {
+    auto it = plugin_map_.find(name);
+    return it != plugin_map_.end();
+  }
+
+  /*!
    * \brief Get an plugin from the registry.
    * \param name The name of the item.
    * \return The corresponding plugin.
@@ -664,7 +673,14 @@ const Array<String> ListPluginNames();
  */
 const Plugin GetPlugin(const String& name);
 
+/*!
+ * \brief Check if an plugin is registered.
+ * \param name The name of the item.
+ * \return Whether the plugin is registered.
+ */
+bool IsPlugin(const String& name);
+
 }  // namespace msc
 }  // namespace contrib
 }  // namespace tvm
-#endif  // TVM_CONTRIB_MSC_PLUGIN_PLUGIN_H_
+#endif  // TVM_CONTRIB_MSC_CORE_IR_PLUGIN_H_

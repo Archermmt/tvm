@@ -240,14 +240,14 @@ def _get_tvm_model(tvm_manager):
 
 
 def _build_plugin(frameworks):
-    test_dir = msc_utils.msc_dir("msc_plugin")
-    externs_dir = test_dir.create_dir("externs")
-    install_dir = test_dir.create_dir("install")
+    root_dir = msc_utils.msc_dir("msc_plugin")
+    externs_dir = root_dir.create_dir("externs")
+    install_dir = root_dir.create_dir("install")
     plugin = _create_plugin(externs_dir)
     managers = build_plugins_manager(
         plugin, frameworks, install_dir, externs_dir=externs_dir, on_debug=True
     )
-    test_dir.destory()
+    root_dir.destory()
     return managers
 
 
@@ -303,7 +303,7 @@ def test_torch_plugin():
     assert outputs.min() >= 0 and outputs.max() <= 0.5
 
 
-def _test_with_manager(compile_type):
+def _test_with_manager(compile_type, expected_info):
     """Test the plugin with manager"""
 
     frameworks = [MSCFramework.TORCH, MSCFramework.TVM]
@@ -313,6 +313,7 @@ def _test_with_manager(compile_type):
     model = _get_torch_model(managers[MSCFramework.TORCH])
     config = {
         "model_type": MSCFramework.TORCH,
+        "debug_level": 1,
         "inputs": [["input_0", [1, 3, 224, 224], "float32"]],
         "outputs": ["output"],
         "dataset": {"loader": "from_random", "max_iter": 5},
@@ -327,9 +328,8 @@ def _test_with_manager(compile_type):
     }
     manager = MSCManager(model, config, plugins=managers)
     report = manager.run_pipe()
-    expected_info = {}
     model_info = manager.runner.model_info
-    manager.destory()
+    # manager.destory()
     assert report["success"], "Failed to run pipe for torch -> {}".format(compile_type)
     assert msc_utils.dict_equal(
         model_info, expected_info
@@ -338,7 +338,17 @@ def _test_with_manager(compile_type):
 
 @pytest.mark.parametrize("compile_type", [MSCFramework.TORCH, MSCFramework.TVM])
 def test_manager_plugin(compile_type):
-    _test_with_manager(compile_type)
+    model_info = {
+        "inputs": [
+            {"name": "input_0", "shape": [1, 3, 224, 224], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "outputs": [
+            {"name": "output", "shape": [1, 6, 218, 218], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "nodes": {"total": 4, "input": 1, "msc.conv2d_bias": 1, "MyRelu": 1, "nn.max_pool2d": 1},
+    }
+
+    _test_with_manager(compile_type, model_info)
 
 
 @requires_tensorrt
@@ -347,4 +357,6 @@ def test_tensorrt_plugin():
 
 
 if __name__ == "__main__":
-    tvm.testing.main()
+    # tvm.testing.main()
+    # test_torch_plugin()
+    test_manager_plugin(MSCFramework.TVM)

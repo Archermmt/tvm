@@ -237,6 +237,8 @@ const String StringUtils::ToString(const runtime::ObjectRef& obj) {
         obj_string = obj_string + ",";
       }
     }
+  } else if (const auto* n = obj.as<relax::PrimValueNode>()) {
+    obj_string = ToString(n->value);
   } else {
     std::ostringstream obj_des;
     obj_des << obj;

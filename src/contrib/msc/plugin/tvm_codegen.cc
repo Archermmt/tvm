@@ -274,34 +274,10 @@ void TVMPluginCodeGen::CodeGenCmake(const std::set<String>& devices) {
 void TVMPluginCodeGen::CodeGenManagerDepends() {
   BasePluginCodeGen<TVMPluginCodeGenConfig>::CodeGenManagerDepends();
   stack_.line("from tvm import relax")
-      .line("from tvm import tir")
       .line("from tvm.relax import call_dps_packed")
-      .line()
-      .func_def("to_expr", "relax.Expr")
-      .func_arg("value", "Any")
-      .func_start()
-      .switch_start("isinstance(value, (bool, int))")
-      .func_call("tir.IntImm", "value")
-      .call_arg(DocUtils::ToStr("int64"))
-      .call_arg("value")
-      .func_call("relax.PrimValue", "expr")
-      .call_arg("value")
-      .switch_case("isinstance(value, float)")
-      .func_call("tir.FloatImm", "value")
-      .call_arg(DocUtils::ToStr("float64"))
-      .call_arg("value")
-      .func_call("relax.PrimValue", "expr")
-      .call_arg("value")
-      .switch_case("isinstance(value, str)")
-      .func_call("relax.StringImm", "expr")
-      .call_arg("value")
-      .switch_case("isinstance(value, (list, tuple))")
-      .func_call("relax.Tuple", "expr")
-      .call_arg("[to_expr(v) for v in value]")
-      .switch_case()
-      .line("raise TypeError(f\"Unsupported input type: {type(value)}\")")
-      .switch_end()
-      .func_end("expr");
+      .line("from tvm.contrib.msc.plugin import utils as plugin_utils")
+      .line("from tvm.contrib.msc.core import utils as msc_utils")
+      .line();
 }
 
 void TVMPluginCodeGen::CodeGenManagerMethods() {
@@ -341,7 +317,7 @@ void TVMPluginCodeGen::CodeGenOpBuilder(const Plugin& plugin) {
     args.push_back(t->name);
   }
   for (const auto& a : plugin->attrs) {
-    stack_.func_call("to_expr", a->name).call_arg(a->name);
+    stack_.func_call("plugin_utils.to_expr", a->name).call_arg(a->name);
     args.push_back(a->name);
   }
   stack_.func_call("relax.Tuple", "args")
@@ -356,7 +332,10 @@ void TVMPluginCodeGen::CodeGenOpBuilder(const Plugin& plugin) {
   stack_.func_call("call_dps_packed", "op")
       .call_arg(DocUtils::ToStr(plugin->name))
       .call_arg("args", "args")
-      .call_arg("list(out_sinfo)", "out_sinfo");
+      .call_arg("list(out_sinfo)", "out_sinfo")
+      .func_call("msc_utils.set_expr_name", "op")
+      .call_arg("op")
+      .call_arg("name");
   stack_.func_end("op").comment(GetPyComment(plugin), true);
 }
 

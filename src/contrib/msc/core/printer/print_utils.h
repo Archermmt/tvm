@@ -147,11 +147,11 @@ class DocUtils {
   }
   template <typename T>
   TVM_DLL static const Array<ExprDoc> ToDocList(const Array<T>& values) {
-    Array<ExprDoc> elements;
+    std::vector<T> v_values;
     for (const auto& v : values) {
-      elements.push_back(ToDoc(v));
+      v_values.push_back(v);
     }
-    return elements;
+    return ToDocList(v_values);
   }
 
   /*!
@@ -168,11 +168,23 @@ class DocUtils {
   }
   template <typename T>
   TVM_DLL static const StrictListDoc ToList(const Array<T>& values, bool allow_empty = false) {
-    if (values.size() > 0 || allow_empty) {
-      return StrictListDoc(ListDoc(ToDocList(values)), allow_empty);
+    std::vector<T> v_values;
+    for (const auto& v : values) {
+      v_values.push_back(v);
     }
-    return StrictListDoc(ListDoc(), false);
+    return ToList(v_values, allow_empty);
   }
+
+  /*!
+   * \brief Change object to ListDoc for string elemenets.
+   * \return The ListDoc.
+   */
+  TVM_DLL static const StrictListDoc ToStrList(const std::vector<std::string>& values,
+                                               bool allow_empty = false);
+  TVM_DLL static const StrictListDoc ToStrList(const std::vector<String>& values,
+                                               bool allow_empty = false);
+  TVM_DLL static const StrictListDoc ToStrList(const Array<String>& values,
+                                               bool allow_empty = false);
 
   /*!
    * \brief Change object to IndexDoc.

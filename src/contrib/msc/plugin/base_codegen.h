@@ -36,7 +36,7 @@
 #include "../core/codegen/code_stack.h"
 #include "../core/printer/cpp_printer.h"
 #include "../core/printer/python_printer.h"
-#include "plugin.h"
+#include "../core/ir/plugin.h"
 
 namespace tvm {
 namespace contrib {
@@ -139,10 +139,11 @@ class BasePluginCodeGen {
     }
     if (this->config()->need_convert) {
       Map<Plugin, String> symbols;
-      this->stack_.func_def("get_converters")
+      this->stack_.func_def("get_convert_map")
           .func_decorator("classmethod")
           .func_arg("cls", "object")
           .func_start();
+      CodeGenConvertDepends();
       for (const auto& name : ListPluginNames()) {
         const auto& plugin = GetPlugin(name);
         const auto& symbol = CodeGenOpConvert(plugin);
@@ -316,12 +317,12 @@ class BasePluginCodeGen {
     }
   }
 
-  /*! \brief Codegen manager imports*/
+  /*! \brief Codegen manager depends*/
   virtual void CodeGenManagerDepends() {
     this->stack_.line("import os")
         .line("import shutil")
         .line("import ctypes")
-        .line("from typing import Any, List")
+        .line("from typing import Any, List, Dict")
         .line();
   }
 
@@ -372,6 +373,16 @@ class BasePluginCodeGen {
 
   /*! \brief Codegen manager for plugin*/
   virtual void CodeGenOpBuilder(const Plugin& plugin) {}
+
+  /*! \brief Codegen convert depends*/
+  virtual void CodeGenConvertDepends() {
+    this->stack_.line("from tvm import relax")
+        .line("from tvm.relax import call_dps_packed")
+        .line("from tvm.contrib.msc.plugin import utils as plugin_utils")
+        .line("from tvm.contrib.msc.plugin.op import _ffi_api as _plugin_api")
+        .line("from tvm.contrib.msc.core import utils as msc_utils")
+        .line();
+  }
 
   /*! \brief Codegen convert function for plugin*/
   virtual const String CodeGenOpConvert(const Plugin& plugin) { return plugin->name; }

@@ -84,13 +84,16 @@ void TorchPluginCodeGen::CodeGenOpDeclare(const Plugin& plugin) {
       .declare("std::string", "name_");
   stack_.struct_end();
   // entry method
-  const auto& entry_name = EntryName(plugin);
   stack_.comment("Entry method for plugin " + plugin->name)
-      .func_def(entry_name, "std::vector<torch::Tensor>")
+      .func_def(EntryName(plugin), "std::vector<torch::Tensor>")
       .func_arg("instance", "const c10::intrusive_ptr<" + plugin->name + ">&");
   for (const auto& input : plugin->inputs) {
     stack_.func_arg(input->name, "const torch::Tensor&");
   }
+  for (const auto& a : plugin->attrs) {
+    stack_.func_arg(a->name, "const " + ToTorchType(a->type) + "&");
+  }
+  stack_.func_arg("name", "const std::string&");
 }
 
 void TorchPluginCodeGen::CodeGenOpDefine(const Plugin& plugin) {
@@ -171,6 +174,10 @@ void TorchPluginCodeGen::CodeGenOpDefine(const Plugin& plugin) {
   for (const auto& input : plugin->inputs) {
     stack_.func_arg(input->name, "const torch::Tensor&");
   }
+  for (const auto& a : plugin->attrs) {
+    stack_.func_arg(a->name, "const " + ToTorchType(a->type) + "&");
+  }
+  stack_.func_arg("name", "const std::string&");
   stack_.func_start().declare("std::vector<torch::Tensor>", "inputs", 0, false);
   for (const auto& input : plugin->inputs) {
     stack_.declare_arg(input->name);
@@ -228,7 +235,7 @@ void TorchPluginCodeGen::CodeGenManagerDepends() {
       .func_arg("value", "Any")
       .func_start()
       .switch_start("isinstance(value, (list, tuple))")
-      .assign("str_value", "\",\".join([str(len(value))] + [_str_string(v) for v in value])")
+      .assign("str_value", "\",\".join([str(len(value))] + [to_string(v) for v in value])")
       .switch_case("isinstance(value, bool)")
       .assign("str_value", "\"1\" if value else \"0\"")
       .switch_case()
@@ -272,7 +279,6 @@ void TorchPluginCodeGen::CodeGenOpBuilder(const Plugin& plugin) {
   stack_.func_arg("name", "str", "\"" + plugin->name + "\"")
       .func_arg("layouts", "List[str]", "None")
       .func_start()
-      .line()
       .class_def(plugin->name + "(torch.nn.Module)")
       .class_start();
   // init method
@@ -321,6 +327,10 @@ void TorchPluginCodeGen::CodeGenOpBuilder(const Plugin& plugin) {
   for (const auto& t : plugin->inputs) {
     stack_.call_arg(t->name);
   }
+  for (const auto& a : plugin->attrs) {
+    stack_.call_arg(DocUtils::ToAttrAccess("self", a->name));
+  }
+  stack_.call_arg(DocUtils::ToAttrAccess("self", "name"));
   if (plugin->outputs.size() == 1) {
     stack_.func_end(DocUtils::ToIndex("outputs", 0));
   } else {
@@ -335,9 +345,65 @@ void TorchPluginCodeGen::CodeGenOpBuilder(const Plugin& plugin) {
   stack_.call_arg("name").call_arg("layouts").func_end("op").comment(GetPyComment(plugin), true);
 }
 
+void TorchPluginCodeGen::CodeGenConvertDepends() {
+  BasePluginCodeGen<TorchPluginCodeGenConfig>::CodeGenConvertDepends();
+  stack_.line("from torch import fx")
+      .line("from tvm.relax.frontend.torch.fx_translator import TorchFXImporter")
+      .line();
+}
+
 const String TorchPluginCodeGen::CodeGenOpConvert(const Plugin& plugin) {
-  stack_.func_def(ConverterName(plugin)).func_start().func_end();
-  return plugin->name + "::" + EntryName(plugin);
+  stack_.func_def(ConverterName(plugin), "relax.Var")
+      .func_arg("node", "fx.node.Node")
+      .func_arg("ctx", "TorchFXImporter")
+      .func_start()
+      .func_call("retrieve_args", "args", "ctx")
+      .call_arg("node");
+  Array<String> args;
+  for (size_t i = 0; i < plugin->inputs.size(); i++) {
+    const auto& tensor = plugin->inputs[i];
+    stack_.assign(tensor->name, DocUtils::ToIndex("args", i + 1));
+    args.push_back(tensor->name);
+  }
+  for (size_t i = 0; i < plugin->attrs.size(); i++) {
+    const auto& attr = plugin->attrs[i];
+    stack_.func_call("plugin_utils.to_expr", attr->name)
+        .call_arg(DocUtils::ToIndex("args", i + plugin->inputs.size() + 1));
+    args.push_back(attr->name);
+  }
+  stack_.assign("name",
+                DocUtils::ToIndex("args", 1 + plugin->inputs.size() + plugin->attrs.size()));
+  stack_.func_call("relax.Tuple", "args")
+      .call_arg(DocUtils::ToList(args))
+      .func_call("InferStructInfo" + plugin->name, "out_sinfo", "_plugin_api");
+  for (const auto& t : plugin->inputs) {
+    stack_.call_arg(t->name);
+  }
+  for (const auto& a : plugin->attrs) {
+    stack_.call_arg(a->name);
+  }
+  stack_.func_call("call_dps_packed", "op")
+      .call_arg(DocUtils::ToStr(plugin->name))
+      .call_arg("args", "args")
+      .call_arg("list(out_sinfo)", "out_sinfo")
+      .func_call("msc_utils.set_expr_name", "op")
+      .call_arg("op")
+      .call_arg("name")
+      .func_call("emit", "var", "ctx.block_builder")
+      .call_arg("op")
+      .call_arg("name");
+  if (plugin->outputs.size() == 1) {
+    stack_.func_end(DocUtils::ToList(Array<String>{"var"}));
+  } else {
+    Array<String> outputs;
+    for (size_t i = 0; i < plugin->outputs.size(); i++) {
+      const auto& tensor = plugin->outputs[i];
+      stack_.func_call("relax.TupleGetItem", tensor->name).call_arg("var").call_arg(i);
+      outputs.push_back(tensor->name);
+    }
+    stack_.func_end(DocUtils::ToList(outputs));
+  }
+  return EntryName(plugin);
 }
 
 void TorchPluginCodeGen::CodeGenMalloc(const Plugin& plugin, const Array<PluginTensor>& tensors,

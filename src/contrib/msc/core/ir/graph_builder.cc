@@ -207,6 +207,7 @@ const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>
 
   // Get optype and node_name
   String optype;
+  Plugin plugin;
   if (expr->IsInstance<relax::VarNode>()) {
     if (func_params_.count(expr) && func_params_[expr]->IsInstance<relax::ConstantNode>()) {
       optype = "constant";
@@ -224,7 +225,14 @@ const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>
     optype = "tuple";
   } else if (const auto* call_node = expr.as<relax::CallNode>()) {
     if (const auto* op_node = call_node->op.as<OpNode>()) {
-      optype = StringUtils::Replace(op_node->name, "relax.", "");
+      if (op_node->name == "relax.call_dps_packed" &&
+          call_node->args[0]->IsInstance<relax::ExternFuncNode>()) {
+        const auto& func = Downcast<relax::ExternFunc>(call_node->args[0]);
+        optype = func->global_symbol;
+        plugin = GetPlugin(optype);
+      } else {
+        optype = StringUtils::Replace(op_node->name, "relax.", "");
+      }
     } else if (const auto* v_node = call_node->op.as<GlobalVarNode>()) {
       const auto& func = Downcast<relax::Function>(ref_module_->Lookup(v_node->name_hint));
       const auto& byoc_name_opt = func->GetAttr<runtime::String>("byoc_name");
@@ -257,7 +265,14 @@ const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>
 
   // Extract attributes
   Map<String, String> attrs;
-  if (const auto* call_node = expr.as<relax::CallNode>()) {
+  if (plugin.defined()) {
+    const auto& call = Downcast<relax::Call>(expr);
+    const auto& args = Downcast<relax::Tuple>(call->args[1]);
+    for (size_t i = 0; i < plugin->attrs.size(); i++) {
+      const auto& val = args->fields[plugin->inputs.size() + i];
+      attrs.Set(plugin->attrs[i]->name, StringUtils::ToString(val));
+    }
+  } else if (const auto* call_node = expr.as<relax::CallNode>()) {
     if (const auto* v_node = call_node->op.as<GlobalVarNode>()) {
       const auto& func = Downcast<relax::Function>(ref_module_->Lookup(v_node->name_hint));
       const auto& byoc_name_opt = func->GetAttr<runtime::String>("byoc_name");
@@ -291,7 +306,17 @@ const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>
   // Build inputs and weights
   Array<String> input_names;
   Map<String, MSCTensor> node_weights;
-  if (const auto* call_node = expr.as<relax::CallNode>()) {
+  if (plugin.defined()) {
+    const auto& call = Downcast<relax::Call>(expr);
+    const auto& args = Downcast<relax::Tuple>(call->args[1]);
+    for (size_t i = 0; i < plugin->inputs.size(); i++) {
+      const auto& input = args->fields[i];
+      ICHECK(expr_tensor_map_.count(input)) << "Can not find plugin input " << input;
+      for (const auto& in_name : expr_tensor_map_[input]) {
+        input_names.push_back(in_name);
+      }
+    }
+  } else if (const auto* call_node = expr.as<relax::CallNode>()) {
     Array<String> prim_values;
     if (call_node->op->IsInstance<relax::VarNode>()) {
       ICHECK(target_funcs_.count(call_node->op)) << "Can not find target func: " << call_node->op;

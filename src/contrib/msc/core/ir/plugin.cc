@@ -18,7 +18,7 @@
  */
 
 /*!
- * \file src/contrib/msc/core/plugin/plugin.cc
+ * \file src/contrib/msc/core/ir/plugin.cc
  */
 
 #include "plugin.h"
@@ -303,7 +303,9 @@ const Array<String> ListPluginNames() { return PluginRegistry::Global()->ListAll
 
 const Plugin GetPlugin(const String& name) { return PluginRegistry::Global()->Get(name); }
 
-TVM_REGISTER_GLOBAL("msc.plugin.RegisterPlugin")
+bool IsPlugin(const String& name) { return PluginRegistry::Global()->Registered(name); }
+
+TVM_REGISTER_GLOBAL("msc.core.RegisterPlugin")
     .set_body_typed([](const String& name, const String& json_str) {
       PluginRegistry::Global()->Register(name, json_str);
     });

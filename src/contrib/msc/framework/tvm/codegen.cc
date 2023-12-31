@@ -40,6 +40,9 @@ void RelaxCodeGen::CodeGenGraph() {
     stack_.func_arg(idx_input, "relax.Var");
     idx_inputs.push_back(idx_input);
   }
+  if (config()->use_plugin) {
+    stack_.func_arg("plugin", "Any");
+  }
   stack_.func_start().assign("inputs", DocUtils::ToList(idx_inputs, true));
   // define weights
   stack_.comment("Define the weights");
@@ -128,6 +131,12 @@ void RelaxCodeGen::CodeGenGraph() {
 }
 
 void RelaxCodeGen::CodeGenInference() {
+  if (config()->use_plugin) {
+    stack_.comment("Import Plugin")
+        .line("from msc_plugin.tvm import PluginManager")
+        .line()
+        .func_call("PluginManager", "plugin");
+  }
   for (const auto& i : graph()->GetInputs()) {
     const auto& producer = graph()->FindProducer(i);
     stack_.func_call("relax.Var", IdxNodeBase(producer))
@@ -138,6 +147,9 @@ void RelaxCodeGen::CodeGenInference() {
         .pop_nest();
   }
   stack_.comment("Build Module").func_call(graph()->name, "mod");
+  if (config()->use_plugin) {
+    stack_.call_arg("plugin");
+  }
   for (const auto& i : graph()->GetInputs()) {
     const auto& producer = graph()->FindProducer(i);
     stack_.call_arg(IdxNodeBase(producer));
@@ -182,7 +194,7 @@ void RelaxCodeGen::CodeGenInference() {
 
 const Array<Doc> RelaxCodeGen::GetOpCodes(const MSCJoint& node) {
   const auto& ops_map = GetRelaxOpCodes();
-  auto it = ops_map->find(node->optype);
+  auto it = ops_map->find(GetOpType(node));
   ICHECK(it != ops_map->end()) << "Unsupported relax op(" << node->optype << "): " << node;
   it->second->Config(node, config());
   try {

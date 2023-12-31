@@ -21,7 +21,7 @@ from typing import Dict
 
 import tvm
 from tvm.contrib.msc.core import utils as msc_utils
-from tvm.contrib.msc.plugin import _ffi_api
+from tvm.contrib.msc.core import _ffi_api
 
 
 def register_plugin(
@@ -78,7 +78,7 @@ def register_plugin(
             extern_libs[os.path.basename(file_path)] = file_path
     _ffi_api.RegisterPlugin(name, msc_utils.dump_dict(plugin))
     # remove needless keys
-    for key in ["name", "support_dtypes", "externs"]:
+    for key in ["support_dtypes", "externs"]:
         plugin.pop(key)
     plugin["inputs"] = [{"name": i["name"]} for i in plugin["inputs"]]
     plugin["outputs"] = [{"name": o["name"]} for o in plugin["outputs"]]

@@ -48,6 +48,8 @@ class BaseRunner(object):
         The config for translate IRModule to MSCGraph.
     codegen_config: dict
         The config for build MSCGraph to runnable model.
+    plugin: PluginManager
+        The plugin manager.
     stage: str
         The stage of runner.
     name: str
@@ -68,6 +70,7 @@ class BaseRunner(object):
         tools_config: Optional[Dict[str, Any]] = None,
         translate_config: Optional[Dict[str, str]] = None,
         generate_config: Optional[Dict[str, str]] = None,
+        plugin: Any = None,
         stage: str = "default",
         name: str = "main",
         device: str = "cpu",
@@ -79,6 +82,7 @@ class BaseRunner(object):
         self._tools_config = msc_utils.copy_dict(tools_config)
         self._translate_config = msc_utils.copy_dict(translate_config)
         self._generate_config = msc_utils.copy_dict(generate_config)
+        self._plugin = plugin
         self._stage = stage
         self._name = name
         self._device = device if self._device_enabled(device) else "cpu"
@@ -113,8 +117,11 @@ class BaseRunner(object):
                 self._tools[t_type] = create_tool(
                     self.framework, t_type, self._name, stage=self._stage, **config
                 )
+        if self._plugin:
+            self._update_codegen({"use_plugin": True})
         return {
             "tools": {k: v.tool_style() for k, v in self._tools.items()},
+            "plugin": self._plugin,
             "translate_config": self._translate_config,
             "generate_config": self._generate_config,
             "name": self._name,
@@ -863,6 +870,7 @@ class ModelRunner(BaseRunner):
             codegen_config=self._generate_config.get("codegen"),
             print_config=self._generate_config.get("print"),
             build_folder=self._generate_config["build_folder"],
+            plugin=self._plugin,
         )
 
     def _inspect_model(self) -> dict:
@@ -1034,6 +1042,7 @@ class BYOCRunner(BaseRunner):
             extra_options=extra_option,
             build_folder=self._generate_config["build_folder"],
             output_folder=self._generate_config.get("output_folder", msc_utils.get_output_dir()),
+            plugin=self._plugin,
         )
 
     def _to_runnable(self, model: Any, device: str, is_training: bool) -> Any:

@@ -232,7 +232,7 @@ class TorchPluginCodegen(BasePluginCodeGen):
         super().setup()
         self._codegen_config.update(
             {
-                "need_convert": False,
+                "need_convert": True,
                 "with_runtime": False,
                 "torch_prefix": torch.utils.cmake_prefix_path,
             }

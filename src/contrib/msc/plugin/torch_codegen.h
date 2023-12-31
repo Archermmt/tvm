@@ -81,7 +81,7 @@ class TorchPluginCodeGen : public BasePluginCodeGen<TorchPluginCodeGenConfig> {
   /*! \brief Codegen cmake file*/
   void CodeGenCmake(const std::set<String>& devices) final;
 
-  /*! \brief Codegen manager imports*/
+  /*! \brief Codegen manager depends*/
   void CodeGenManagerDepends() final;
 
   /*! \brief Codegen manager methods*/
@@ -89,6 +89,9 @@ class TorchPluginCodeGen : public BasePluginCodeGen<TorchPluginCodeGenConfig> {
 
   /*! \brief Codegen manager member for plugin*/
   void CodeGenOpBuilder(const Plugin& plugin) final;
+
+  /*! \brief Codegen convert depends*/
+  void CodeGenConvertDepends() final;
 
   /*! \brief Codegen convert function for plugin*/
   const String CodeGenOpConvert(const Plugin& plugin) final;
@@ -102,12 +105,27 @@ class TorchPluginCodeGen : public BasePluginCodeGen<TorchPluginCodeGenConfig> {
   void CodeGenCompute(const Plugin& plugin, const String& device);
 
   /*! \brief Entry name of torch function*/
-  const String EntryName(const Plugin& plugin) { return plugin->name + "Entry"; }
+  const String EntryName(const Plugin& plugin) {
+    std::string lower_name;
+    const std::string& name = std::string(plugin->name);
+    for (size_t i = 0; i < name.size(); i++) {
+      const char& lower_c = tolower(name[i]);
+      if (lower_c != name[i] && i > 0) {
+        lower_name += "_";
+      }
+      lower_name += lower_c;
+    }
+    return lower_name + "_entry";
+  }
 
   /*! \brief Type name in torch*/
   const String ToTorchType(const String& type) {
     if (type == "float") {
       return "double";
+    }
+    if (IsListType(type)) {
+      const auto& ele_type = GetEleType(type);
+      return "c10::arrayRef<" + ToTorchType(ele_type) + ">";
     }
     return BasePluginCodeGen<TorchPluginCodeGenConfig>::ToCppType(type);
   }

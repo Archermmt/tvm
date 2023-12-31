@@ -171,9 +171,15 @@ class RelaxExprNameSetter : public ExprVisitor {
     bool use_unique = true;
     if (const auto* op_node = val->op.as<OpNode>()) {
       const std::string& op_name = op_node->name;
-      int rpos = op_name.rfind(".");
-      name_hint = op_name.substr(rpos + 1);
-      optype = StringUtils::Replace(op_node->name, "relax.", "");
+      if (op_name == "relax.call_dps_packed" && val->args[0]->IsInstance<ExternFuncNode>()) {
+        const auto& func = Downcast<ExternFunc>(val->args[0]);
+        name_hint = func->global_symbol;
+        optype = func->global_symbol;
+      } else {
+        int rpos = op_name.rfind(".");
+        name_hint = op_name.substr(rpos + 1);
+        optype = StringUtils::Replace(op_node->name, "relax.", "");
+      }
     } else if (const auto* v_node = val->op.as<GlobalVarNode>()) {
       const auto& func = Downcast<Function>(ref_module_->Lookup(v_node->name_hint));
       ExprVisitor::VisitExpr(func);

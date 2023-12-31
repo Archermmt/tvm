@@ -60,6 +60,33 @@ const ExprDoc DocUtils::ToStr(const String& val) { return LiteralDoc::Str(val, N
 
 const PointerDoc DocUtils::ToPtr(const String& val) { return PointerDoc(val); }
 
+const StrictListDoc DocUtils::ToStrList(const std::vector<std::string>& values, bool allow_empty) {
+  if (values.size() > 0 || allow_empty) {
+    Array<ExprDoc> elements;
+    for (const auto& v : values) {
+      elements.push_back(ToStr(v));
+    }
+    return StrictListDoc(ListDoc(elements), allow_empty);
+  }
+  return StrictListDoc(ListDoc(), false);
+}
+
+const StrictListDoc DocUtils::ToStrList(const std::vector<String>& values, bool allow_empty) {
+  std::vector<std::string> v_values;
+  for (const auto& v : values) {
+    v_values.push_back(v);
+  }
+  return ToStrList(v_values, allow_empty);
+}
+
+const StrictListDoc DocUtils::ToStrList(const Array<String>& values, bool allow_empty) {
+  std::vector<std::string> v_values;
+  for (const auto& v : values) {
+    v_values.push_back(v);
+  }
+  return ToStrList(v_values, allow_empty);
+}
+
 const Array<StmtDoc> DocUtils::ToStmts(const Array<Doc>& docs) {
   Array<StmtDoc> stmts;
   for (const auto& d : docs) {

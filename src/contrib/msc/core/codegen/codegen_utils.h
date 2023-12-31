@@ -42,6 +42,7 @@ using namespace tvm::script::printer;
 #define CODEGEN_CONFIG_MEMBERS             \
   bool is_train{false};                    \
   bool use_tools{false};                   \
+  bool use_plugin{false};                  \
   bool need_test{true};                    \
   std::string tools_scope{""};             \
   std::string tools_tag{"main"};           \
@@ -55,6 +56,8 @@ using namespace tvm::script::printer;
     reader->Read(&is_train);                    \
   } else if (key == "use_tools") {              \
     reader->Read(&use_tools);                   \
+  } else if (key == "use_plugin") {             \
+    reader->Read(&use_plugin);                  \
   } else if (key == "need_test") {              \
     reader->Read(&need_test);                   \
   } else if (key == "tools_scope") {            \

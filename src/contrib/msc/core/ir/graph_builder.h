@@ -41,6 +41,7 @@
 
 #include "../utils.h"
 #include "graph.h"
+#include "plugin.h"
 
 namespace tvm {
 namespace contrib {
