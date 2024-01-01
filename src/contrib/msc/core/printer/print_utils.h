@@ -26,6 +26,7 @@
 
 #include <tvm/script/printer/doc.h>
 
+#include <string>
 #include <vector>
 
 #include "msc_doc.h"

@@ -460,8 +460,12 @@ void TensorRTCodeGen::CodeGenCmake() {
           "${TRT_LIBS}\")")
       .line("add_definitions(-DTRT_MAJOR=" + std::to_string(config()->version[0]) + ")")
       .line("add_definitions(-DTRT_MINOR=" + std::to_string(config()->version[1]) + ")")
-      .line("add_definitions(-DTRT_PATCH=" + std::to_string(config()->version[2]) + ")")
-      .line("file(GLOB_RECURSE TRT_SRCS *.cc)")
+      .line("add_definitions(-DTRT_PATCH=" + std::to_string(config()->version[2]) + ")");
+  if (config()->use_plugin) {
+    stack_.line("add_definitions(-DPLUGIN_SUPPORT_TENSORRT)")
+        .line("find_library(PLUGIN_LIBS NAMES HINTS plugin_lib)");
+  }
+  stack_.line("file(GLOB_RECURSE TRT_SRCS *.cc)")
       .line("cuda_add_executable(" + graph()->name + " ${TRT_SRCS})")
       .line("target_include_directories(" + graph()->name + " PUBLIC ${TRT_INCLUDE_DIR})")
       .line("target_link_libraries(" + graph()->name + " ${TRT_LIBS})");

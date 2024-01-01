@@ -247,7 +247,7 @@ def _build_plugin(frameworks):
     managers = build_plugins_manager(
         plugin, frameworks, install_dir, externs_dir=externs_dir, on_debug=True
     )
-    # root_dir.destory()
+    root_dir.destory()
     return managers
 
 
@@ -359,6 +359,6 @@ def test_tensorrt_plugin():
 
 
 if __name__ == "__main__":
-    # tvm.testing.main()
+    tvm.testing.main()
     # test_tensorrt_plugin()
-    test_torch_plugin()
+    # test_torch_plugin()
