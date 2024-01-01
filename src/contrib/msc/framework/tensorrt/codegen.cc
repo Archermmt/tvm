@@ -43,6 +43,17 @@ void TensorRTCodeGen::CodeGenClassDeclare() {
   if (config()->precision == "int8") {
     stack_.line("#include \"utils/trt_quantize.h\"");
   }
+  // plugin headers
+  if (config()->use_plugin) {
+    std::set<String> plugins;
+    for (const auto& n : graph()->node_names) {
+      const auto& node = graph()->FindNode(n);
+      if (IsPlugin(node->optype) && !plugins.count(node->optype)) {
+        stack_.line("include \"plugin/" + node->optype + "\"");
+        plugins.insert(node->optype);
+      }
+    }
+  }
   stack_.line().line("using namespace nvinfer1;").line();
   StartNamespace();
   // start class declare
@@ -518,7 +529,7 @@ const String TensorRTCodeGen::ToDims(const Array<Integer>& dims, bool use_ndim) 
 
 const Array<Doc> TensorRTCodeGen::GetOpCodes(const MSCJoint& node) {
   const auto& ops_map = GetTensorRTOpCodes();
-  auto it = ops_map->find(node->optype);
+  auto it = ops_map->find(GetOpType(node));
   ICHECK(it != ops_map->end()) << "Unsupported tensorrt op(" << node->optype << "): " << node;
   it->second->Config(node, config());
   try {

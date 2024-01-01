@@ -437,24 +437,16 @@ void TensorRTPluginCodeGen::CodeGenCmake(const std::set<String>& devices) {
 }
 
 void TensorRTPluginCodeGen::CodeGenManagerMethods() {
-  stack_.func_def("__init__")
+  BasePluginCodeGen<TensorRTPluginCodeGenConfig>::CodeGenManagerMethods();
+  stack_.func_def("setup")
       .func_arg("self", "object")
-      .func_arg("lib_folder", "str", "None")
       .func_start()
-      .cond_if("lib_folder is None")
-      .assign("root", "os.path.dirname(__file__)")
-      .assign(DocUtils::ToAttrAccess("self", "_lib_folder"), "os.path.join(root, \"libs\")")
-      .cond_else()
-      .assign(DocUtils::ToAttrAccess("self", "_lib_folder"), "lib_folder")
-      .cond_end()
-      .line("assert os.path.isdir(self._lib_folder), \"lib_folder not exist\"")
       .for_start("lib", "os.listdir(self._lib_folder)")
       .assign("lib_file", "os.path.join(self._lib_folder, lib)")
       .func_call("CDLL", "", "ctypes")
       .call_arg("lib_file")
       .for_end()
       .func_end();
-  BasePluginCodeGen<TensorRTPluginCodeGenConfig>::CodeGenManagerMethods();
 }
 
 void TensorRTPluginCodeGen::CodegenOpCommonMethods(const Plugin& plugin, bool dynamic,

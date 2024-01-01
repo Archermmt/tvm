@@ -34,9 +34,9 @@
 #include <vector>
 
 #include "../core/codegen/code_stack.h"
+#include "../core/ir/plugin.h"
 #include "../core/printer/cpp_printer.h"
 #include "../core/printer/python_printer.h"
-#include "../core/ir/plugin.h"
 
 namespace tvm {
 namespace contrib {
@@ -76,7 +76,7 @@ class BasePluginCodeGen {
       this->stack_.line("#ifndef " + attr_macro)
           .line("#define " + attr_macro)
           .line()
-          .line("#include \"utils/plugin_utils.h\"")
+          .line("#include \"plugin_utils.h\"")
           .line();
       StartNamespace();
       CodeGenAttrDeclare(plugin);
@@ -276,9 +276,11 @@ class BasePluginCodeGen {
                         const Array<String>& extra_includes = Array<String>(),
                         const Array<String>& extra_libs = Array<String>()) {
     const auto& p_name = this->config()->project_name;
-    stack_.line().line("file(GLOB_RECURSE PLUGIN_CC_SRCS src/*.cc)");
+    stack_.line()
+        .line("file(GLOB_RECURSE PLUGIN_HEADERS *.h)")
+        .line("file(GLOB_RECURSE PLUGIN_CC_SRCS *.cc)");
     if (devices.count("cuda")) {
-      stack_.line("file(GLOB_RECURSE PLUGIN_CU_SRCS src/*.cu)");
+      stack_.line("file(GLOB_RECURSE PLUGIN_CU_SRCS *.cu)");
     }
     if (devices.count("cuda")) {
       stack_.line("cuda_add_library(" + p_name + " SHARED ${PLUGIN_CC_SRCS} ${PLUGIN_CU_SRCS})");
@@ -310,9 +312,11 @@ class BasePluginCodeGen {
     }
     const auto& install_dir = this->config()->install_dir;
     if (install_dir.size() > 0) {
-      stack_.line().line("SET(LIBRARY_OUTPUT_PATH " + install_dir + ")");
+      stack_.line()
+          .line("SET(LIBRARY_OUTPUT_PATH " + install_dir + "/lib)")
+          .line("file(COPY ${PLUGIN_HEADERS} DESTINATION " + install_dir + "/include)");
       if (this->config()->libs.size() > 0) {
-        stack_.line("file(COPY " + libs + " DESTINATION " + install_dir + ")");
+        stack_.line("file(COPY " + libs + " DESTINATION " + install_dir + "/lib)");
       }
     }
   }
@@ -328,6 +332,48 @@ class BasePluginCodeGen {
 
   /*! \brief Codegen manager methods*/
   virtual void CodeGenManagerMethods() {
+    // init method
+    stack_.func_def("__init__")
+        .func_arg("self", "object")
+        .func_arg("root", "str", "None")
+        .func_start()
+        .cond_if("root is None")
+        .assign("root", "os.path.dirname(os.path.dirname(__name__))")
+        .cond_end()
+        .assign(DocUtils::ToAttrAccess("self", "_lib_folder"), "os.path.join(root, \"lib\")")
+        .func_call("assert")
+        .inplace_start("os.path.isdir")
+        .call_arg(DocUtils::ToAttrAccess("self", "_lib_folder"))
+        .inplace_end()
+        .assign(DocUtils::ToAttrAccess("self", "_include_folder"),
+                "os.path.join(root, \"include\")")
+        .func_call("assert")
+        .inplace_start("os.path.isdir")
+        .call_arg(DocUtils::ToAttrAccess("self", "_include_folder"))
+        .inplace_end()
+        .func_call("setup", "", "self")
+        .func_end();
+    // copy the headers
+    this->stack_.func_def("copy_headers")
+        .func_arg("self", "object")
+        .func_arg("dst", "str")
+        .func_start()
+        .cond_if("not os.path.isdir(dst)")
+        .func_call("makedirs", "", "os")
+        .call_arg("dst")
+        .cond_end()
+        .for_start("header", "os.listdir(self._include_folder)")
+        .func_call("shutil.copyfile")
+        .inplace_start("os.path.join")
+        .call_arg(DocUtils::ToAttrAccess("self", "_include_folder"))
+        .call_arg("header")
+        .inplace_end()
+        .inplace_start("os.path.join")
+        .call_arg("dst")
+        .call_arg("header")
+        .inplace_end()
+        .for_end()
+        .func_end();
     // copy the libs
     this->stack_.func_def("copy_libs")
         .func_arg("self", "object")

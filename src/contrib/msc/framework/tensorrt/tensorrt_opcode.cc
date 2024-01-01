@@ -710,6 +710,24 @@ class TensorRTWhereCodeGen : public TensorRTOpCode {
   void CodeGenBuild() final { stack_.op_call().op_inputs_arg(false); }
 };
 
+class TensorRTPluginOpCodeGen : public TensorRTOpCode {
+ public:
+  TENSORRT_OP_CODEGEN_METHODS(TensorRTPluginOpCodeGen)
+
+ protected:
+  void CodeGenBuild() final {
+    const auto& plugin = GetPlugin(node()->optype);
+    const auto& input_ref = DeclareInputs();
+    const String& plugin_ref = "plugin_" + std::to_string(node()->index);
+    stack_.func_call(node()->optype + "_DynamicPlugin", DocUtils::ToDeclare("auto", plugin_ref))
+        .call_arg(DocUtils::ToStr(node()->name));
+    for (const auto& a : plugin->attrs) {
+      stack_.call_arg(GetAttrDoc(a->name, a->type));
+    }
+    stack_.op_call().call_arg(input_ref).call_arg(plugin->inputs.size()).call_arg(plugin_ref);
+  }
+};
+
 const std::shared_ptr<std::unordered_map<String, std::shared_ptr<TensorRTOpCode>>>
 GetTensorRTOpCodes() {
   static auto map = std::make_shared<std::unordered_map<String, std::shared_ptr<TensorRTOpCode>>>();
@@ -796,15 +814,14 @@ GetTensorRTOpCodes() {
 
   // special op
   map->emplace("input", std::make_shared<TensorRTInputCodeGen>("Input"));
+  map->emplace("get_item", std::make_shared<TensorRTGetItemCodeGen>(""));
+  map->emplace("tuple", std::make_shared<TensorRTTupleCodeGen>(""));
+  map->emplace("plugin", std::make_shared<TensorRTPluginOpCodeGen>("PluginV2"));
 
   // msc ops
   map->emplace("msc.conv2d_bias", std::make_shared<TensorRTConvCodeGen>("ConvolutionNd", true));
   map->emplace("msc.linear", std::make_shared<TensorRTLinearCodeGen>("FullyConnected", false));
   map->emplace("msc.linear_bias", std::make_shared<TensorRTLinearCodeGen>("FullyConnected", true));
-
-  // special op
-  map->emplace("get_item", std::make_shared<TensorRTGetItemCodeGen>(""));
-  map->emplace("tuple", std::make_shared<TensorRTTupleCodeGen>(""));
 
   return map;
 }

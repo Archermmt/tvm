@@ -245,17 +245,10 @@ void TorchPluginCodeGen::CodeGenManagerDepends() {
 }
 
 void TorchPluginCodeGen::CodeGenManagerMethods() {
-  stack_.func_def("__init__")
+  BasePluginCodeGen<TorchPluginCodeGenConfig>::CodeGenManagerMethods();
+  stack_.func_def("setup")
       .func_arg("self", "object")
-      .func_arg("lib_folder", "str", "None")
       .func_start()
-      .cond_if("lib_folder is None")
-      .assign("root", "os.path.dirname(__file__)")
-      .assign(DocUtils::ToAttrAccess("self", "_lib_folder"), "os.path.join(root, \"libs\")")
-      .cond_else()
-      .assign(DocUtils::ToAttrAccess("self", "_lib_folder"), "lib_folder")
-      .cond_end()
-      .line("assert os.path.isdir(self._lib_folder), \"lib_folder not exist\"")
       .for_start("lib", "os.listdir(self._lib_folder)")
       .assign("lib_file", "os.path.join(self._lib_folder, lib)")
       .cond_if("\"" + config()->project_name + "\" in lib")
@@ -267,7 +260,6 @@ void TorchPluginCodeGen::CodeGenManagerMethods() {
       .cond_end()
       .for_end()
       .func_end();
-  BasePluginCodeGen<TorchPluginCodeGenConfig>::CodeGenManagerMethods();
 }
 
 void TorchPluginCodeGen::CodeGenOpBuilder(const Plugin& plugin) {

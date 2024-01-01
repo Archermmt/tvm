@@ -44,7 +44,7 @@ def _get_externs_header():
     return """#ifndef EXTERNS_H_
 #define EXTERNS_H_
 
-#include "utils/plugin_base.h"
+#include "plugin_base.h"
 
 #ifdef PLUGIN_ENABLE_CUDA
 #include <cuda_runtime.h>
@@ -247,7 +247,7 @@ def _build_plugin(frameworks):
     managers = build_plugins_manager(
         plugin, frameworks, install_dir, externs_dir=externs_dir, on_debug=True
     )
-    root_dir.destory()
+    # root_dir.destory()
     return managers
 
 
@@ -312,6 +312,7 @@ def _test_with_manager(compile_type, expected_info):
     managers = _build_plugin(frameworks)
     model = _get_torch_model(managers[MSCFramework.TORCH])
     config = {
+        "workspace": msc_utils.msc_dir(),
         "model_type": MSCFramework.TORCH,
         "debug_level": 1,
         "inputs": [["input_0", [1, 3, 224, 224], "float32"]],
@@ -329,7 +330,7 @@ def _test_with_manager(compile_type, expected_info):
     manager = MSCManager(model, config, plugins=managers)
     report = manager.run_pipe()
     model_info = manager.runner.model_info
-    # manager.destory()
+    manager.destory()
     assert report["success"], "Failed to run pipe for torch -> {}".format(compile_type)
     assert msc_utils.dict_equal(
         model_info, expected_info
@@ -353,10 +354,11 @@ def test_manager_plugin(compile_type):
 
 @requires_tensorrt
 def test_tensorrt_plugin():
-    _test_with_manager(MSCFramework.TENSORRT)
+    model_info = {}
+    _test_with_manager(MSCFramework.TENSORRT, model_info)
 
 
 if __name__ == "__main__":
     # tvm.testing.main()
-    # test_torch_plugin()
-    test_manager_plugin(MSCFramework.TVM)
+    # test_tensorrt_plugin()
+    test_torch_plugin()

@@ -70,14 +70,14 @@ class BasePluginCodeGen(object):
     def setup(self):
         """Set up the codegen"""
 
-        self._lib_folder = self._output_folder.create_dir("libs")
+        self._lib_folder = self._output_folder.create_dir("lib")
         self._manager_folder = self._output_folder.create_dir(self.framework)
         self._libs = [os.path.basename(l) for l in self._extern_libs.values()]
         self._libs.extend([os.path.basename(l) for l in self._lib_folder.listdir()])
         self._project_name = "msc_{}_plugin".format(self.framework)
         self._codegen_config.update(
             {
-                "install_dir": self._lib_folder.path,
+                "install_dir": self._output_folder.path,
                 "project_name": self._project_name,
                 "version": msc_utils.get_version(self.framework),
             }
@@ -107,17 +107,12 @@ class BasePluginCodeGen(object):
         sources = self.source_getter(codegen_config, self._cpp_print_config, "build")
         with self._build_folder as folder:
             # add depends
-            with folder.create_dir("src") as src_folder:
-                for name, file in self._extern_sources.items():
-                    src_folder.copy(file, name)
-                with src_folder.create_dir("utils") as utils_folder:
-                    for name, source in get_plugin_sources().items():
-                        utils_folder.add_file(name, source)
+            for name, file in self._extern_sources.items():
+                folder.copy(file, name)
+            for name, source in get_plugin_sources().items():
+                folder.add_file(name, source)
             for name, source in sources.items():
-                if name == "CMakeLists.txt":
-                    folder.add_file(name, source)
-                else:
-                    folder.add_file(os.path.join("src", name), source)
+                folder.add_file(name, source)
             with folder.create_dir("build"):
                 command = "cmake ../ && make"
                 with open("codegen.log", "w") as log_f:
@@ -177,6 +172,10 @@ class BasePluginCodeGen(object):
     @property
     def framework(self):
         return MSCFramework.MSC
+
+    @property
+    def output_folder(self):
+        return self._output_folder
 
     @property
     def lib_folder(self):

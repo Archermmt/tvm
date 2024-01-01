@@ -142,7 +142,7 @@ def build_plugins_manager(
     for name, codegen in codegens.items():
         manager_file = codegen.manager_folder.relpath("manager.py")
         manager_cls = msc_utils.load_callable(manager_file + ":PluginManager")
-        managers[name] = manager_cls(codegen.lib_folder.path)
+        managers[name] = manager_cls(codegen.output_folder.path)
     return managers
 
 
