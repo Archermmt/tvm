@@ -269,7 +269,6 @@ void TorchPluginCodeGen::CodeGenManagerMethods() {
   stack_.func_def("setup")
       .func_arg("self", "object")
       .func_start()
-      .cond_if("not self.libs_loaded()")
       .for_start("lib", "os.listdir(self._lib_folder)")
       .assign("lib_file", "os.path.join(self._lib_folder, lib)")
       .cond_if("\"" + config()->project_name + "\" in lib")
@@ -280,7 +279,6 @@ void TorchPluginCodeGen::CodeGenManagerMethods() {
       .call_arg("lib_file")
       .cond_end()
       .for_end()
-      .cond_end()
       .func_end();
 }
 
