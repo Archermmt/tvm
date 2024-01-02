@@ -18,7 +18,6 @@
 """ Test Plugin in MSC. """
 
 import pytest
-import datetime
 import numpy as np
 
 import torch
@@ -364,7 +363,5 @@ def test_tensorrt_plugin():
 
 
 if __name__ == "__main__":
-    # tvm.testing.main()
+    tvm.testing.main()
     # test_tensorrt_plugin()
-    # test_manager_plugin(MSCFramework.TVM)
-    test_tensorrt_plugin()

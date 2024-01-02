@@ -113,7 +113,7 @@ class BasePluginCodeGen(object):
                 for name, source in get_plugin_sources().items():
                     src_folder.add_file(name, source)
                 for name, source in sources.items():
-                    if name=="CMakeLists.txt":
+                    if name == "CMakeLists.txt":
                         folder.add_file(name, source)
                     else:
                         src_folder.add_file(name, source)
