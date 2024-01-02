@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-""" Test Tools in MSC. """
+""" Test Gym in MSC. """
 
 import json
 import pytest
@@ -45,7 +45,7 @@ def _get_config(
 ):
     """Get msc config"""
 
-    path = "_".join(["test_tools", model_type, compile_type] + list(tools_config.keys()))
+    path = "_".join(["test_gym", model_type, compile_type] + list(tools_config.keys()))
     return {
         "workspace": msc_utils.msc_dir(path),
         "verbose": "critical",
@@ -70,7 +70,7 @@ def _get_config(
     }
 
 
-def get_tool_config(tool_type, use_distill=False):
+def get_tool_config(tool_type):
     """Get config for the tool"""
 
     config = {}
@@ -78,6 +78,22 @@ def get_tool_config(tool_type, use_distill=False):
         config = {
             "plan_file": "msc_pruner.json",
             "strategys": [{"method": "per_channel", "density": 0.8}],
+            "gym_configs": [
+                {
+                    "env": {
+                        "executors": {
+                            "action_space": {
+                                "method": "action_prune_density",
+                                "start": 0.4,
+                                "end": 0.8,
+                                "step": 0.4,
+                            }
+                        },
+                        "max_tasks": 3,
+                    },
+                    "agent": {"agent_type": "search.grid", "executors": {}},
+                }
+            ],
         }
     elif tool_type == ToolType.QUANTIZER:
         # pylint: disable=import-outside-toplevel
@@ -115,33 +131,23 @@ def get_tool_config(tool_type, use_distill=False):
                     "tensor_types": ["output"],
                 },
             ],
-        }
-    elif tool_type == ToolType.TRACKER:
-        config = {
-            "plan_file": "msc_tracker.json",
-            "strategys": [
+            "gym_configs": [
                 {
-                    "method": "save_compared",
-                    "compare_to": {
-                        "optimize": ["baseline"],
-                        "compile": ["optimize", "baseline"],
+                    "env": {
+                        "executors": {
+                            "action_space": {
+                                "method": "action_quantize_scale",
+                                "start": 0.8,
+                                "end": 1.2,
+                                "step": 0.2,
+                            }
+                        },
+                        "max_tasks": 3,
                     },
-                    "op_types": ["nn.relu"],
-                    "tensor_types": ["output"],
+                    "agent": {"agent_type": "search.grid", "executors": {}},
                 }
             ],
         }
-    if use_distill:
-        distill_config = {
-            "plan_file": "msc_distiller.json",
-            "strategys": [
-                {
-                    "method": "loss_lp_norm",
-                    "op_types": ["loss"],
-                },
-            ],
-        }
-        return {tool_type: config, ToolType.DISTILLER: distill_config}
     return {tool_type: config}
 
 
@@ -241,58 +247,23 @@ def get_model_info(compile_type):
     raise TypeError("Unexpected compile_type " + str(compile_type))
 
 
-@pytest.mark.parametrize("tool_type", [ToolType.PRUNER, ToolType.QUANTIZER, ToolType.TRACKER])
-def test_tvm_tool(tool_type):
-    """Test tools for tvm"""
-
-    tool_config = get_tool_config(tool_type)
-    _test_from_torch(
-        MSCFramework.TVM, tool_config, get_model_info(MSCFramework.TVM), is_training=True
-    )
-
-
 @tvm.testing.requires_gpu
 @pytest.mark.parametrize("tool_type", [ToolType.PRUNER, ToolType.QUANTIZER])
-def test_tvm_distill(tool_type):
-    """Test tools for tvm with distiller"""
-
-    tool_config = get_tool_config(tool_type, use_distill=True)
-    _test_from_torch(
-        MSCFramework.TVM, tool_config, get_model_info(MSCFramework.TVM), is_training=True
-    )
-
-
-@requires_tensorrt
-@pytest.mark.parametrize(
-    "tool_type",
-    [ToolType.PRUNER, ToolType.QUANTIZER, ToolType.TRACKER],
-)
-def test_tensorrt_tool(tool_type):
-    """Test tools for tensorrt"""
+def test_tvm_gym(tool_type):
+    """Test tools for tvm with gym"""
 
     tool_config = get_tool_config(tool_type)
-    if tool_type == ToolType.QUANTIZER:
-        tool_config[ToolType.QUANTIZER]["strategys"] = []
-        optimize_type = MSCFramework.TENSORRT
-    else:
-        optimize_type = None
     _test_from_torch(
-        MSCFramework.TENSORRT,
-        tool_config,
-        get_model_info(MSCFramework.TENSORRT),
-        is_training=False,
-        atol=1e-1,
-        rtol=1e-1,
-        optimize_type=optimize_type,
+        MSCFramework.TVM, tool_config, get_model_info(MSCFramework.TVM), is_training=True
     )
 
 
 @requires_tensorrt
 @pytest.mark.parametrize("tool_type", [ToolType.PRUNER])
-def test_tensorrt_distill(tool_type):
-    """Test tools for tensorrt with distiller"""
+def test_tensorrt_gym(tool_type):
+    """Test tools for tensorrt with gym"""
 
-    tool_config = get_tool_config(tool_type, use_distill=True)
+    tool_config = get_tool_config(tool_type)
     _test_from_torch(
         MSCFramework.TENSORRT, tool_config, get_model_info(MSCFramework.TENSORRT), is_training=False
     )

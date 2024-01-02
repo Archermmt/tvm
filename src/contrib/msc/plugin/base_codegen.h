@@ -277,10 +277,10 @@ class BasePluginCodeGen {
                         const Array<String>& extra_libs = Array<String>()) {
     const auto& p_name = this->config()->project_name;
     stack_.line()
-        .line("file(GLOB_RECURSE PLUGIN_HEADERS *.h)")
-        .line("file(GLOB_RECURSE PLUGIN_CC_SRCS *.cc)");
+        .line("file(GLOB_RECURSE PLUGIN_HEADERS src/*.h)")
+        .line("file(GLOB_RECURSE PLUGIN_CC_SRCS src/*.cc)");
     if (devices.count("cuda")) {
-      stack_.line("file(GLOB_RECURSE PLUGIN_CU_SRCS *.cu)");
+      stack_.line("file(GLOB_RECURSE PLUGIN_CU_SRCS src/*.cu)");
     }
     if (devices.count("cuda")) {
       stack_.line("cuda_add_library(" + p_name + " SHARED ${PLUGIN_CC_SRCS} ${PLUGIN_CU_SRCS})");

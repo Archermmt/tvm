@@ -25,7 +25,7 @@ from tvm.relax.dpl import pattern
 from tvm.relax.transform import PatternCheckContext, FusionPattern
 from tvm.relax.backend.pattern_registry import register_patterns
 from tvm.contrib.msc.core.transform import pattern as msc_pattern
-
+from tvm.contrib.msc.core import _ffi_api
 
 def basic_pattern(
     op_name: str, input_types: List[str] = None
@@ -234,6 +234,18 @@ def _take_check(context: PatternCheckContext) -> bool:
     return _check_expr(context.annotated_expr["input_1"], ("int32"))
 
 
+def _plugin_check(context: PatternCheckContext) -> bool:
+    """Check if the plugin pattern is correct.
+
+    Returns
+    -------
+    pass: bool
+        Whether the pattern is correct.
+    """
+
+    ext_func=context.annotated_expr["out"].args[0]
+    return bool(_ffi_api.IsPlugin(ext_func.global_symbol))
+
 def wrap_basic_check(
     func: Callable[[PatternCheckContext], bool]
 ) -> Callable[[PatternCheckContext], bool]:
@@ -407,6 +419,14 @@ def get_patterns(target) -> List[Pattern]:
             ),
         ]
     )
+    # plugin ops
+    patterns.append((
+        target+".plugin",
+        *basic_pattern("relax.call_dps_packed", ["input","input"]),
+        _plugin_check,
+        partial(msc_pattern.msc_attrs_getter, anchor="out")
+    ))
+
     return patterns
 
 

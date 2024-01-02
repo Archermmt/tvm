@@ -310,6 +310,18 @@ TVM_REGISTER_GLOBAL("msc.core.RegisterPlugin")
       PluginRegistry::Global()->Register(name, json_str);
     });
 
+TVM_REGISTER_GLOBAL("msc.core.ListPluginNames").set_body_typed([]() -> Array<String> {
+  return ListPluginNames();
+});
+
+TVM_REGISTER_GLOBAL("msc.core.GetPlugin").set_body_typed([](const String& name) -> Plugin {
+  return GetPlugin(name);
+});
+
+TVM_REGISTER_GLOBAL("msc.core.IsPlugin").set_body_typed([](const String& name) -> Bool {
+  return Bool(IsPlugin(name));
+});
+
 }  // namespace msc
 }  // namespace contrib
 }  // namespace tvm

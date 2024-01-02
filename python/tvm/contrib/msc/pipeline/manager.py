@@ -346,8 +346,6 @@ class BaseManager(object):
             relax_mod, _ = stage_config["parser"](
                 self._model, as_msc=False, custom_convert_map=custom_convert_map, **parse_config
             )
-            print("relax span attrs " + str(msc_utils.get_span_attrs(relax_mod)))
-
             if trans_func:
                 relax_mod = trans_func(relax_mod)
             if cache_path:

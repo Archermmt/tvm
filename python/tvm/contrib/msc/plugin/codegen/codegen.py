@@ -107,12 +107,16 @@ class BasePluginCodeGen(object):
         sources = self.source_getter(codegen_config, self._cpp_print_config, "build")
         with self._build_folder as folder:
             # add depends
-            for name, file in self._extern_sources.items():
-                folder.copy(file, name)
-            for name, source in get_plugin_sources().items():
-                folder.add_file(name, source)
-            for name, source in sources.items():
-                folder.add_file(name, source)
+            with folder.create_dir("src") as src_folder:
+                for name, file in self._extern_sources.items():
+                    src_folder.copy(file, name)
+                for name, source in get_plugin_sources().items():
+                    src_folder.add_file(name, source)
+                for name, source in sources.items():
+                    if name=="CMakeLists.txt":
+                        folder.add_file(name, source)
+                    else:
+                        src_folder.add_file(name, source)
             with folder.create_dir("build"):
                 command = "cmake ../ && make"
                 with open("codegen.log", "w") as log_f:

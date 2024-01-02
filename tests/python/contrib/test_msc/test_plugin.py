@@ -240,17 +240,13 @@ def _get_tvm_model(tvm_manager):
     return BindParams("main", {"w": tvm.nd.array(weights)})(mod)
 
 
-def _build_plugin(frameworks):
-    path = "msc_plugin_{}".format("_".join(frameworks))
-    path = path + "_" + str(datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
-    root_dir = msc_utils.msc_dir(path)
-    externs_dir = root_dir.create_dir("externs")
-    install_dir = root_dir.create_dir("install")
+def _build_plugin(frameworks, plugin_root):
+    externs_dir = plugin_root.create_dir("externs")
+    install_dir = plugin_root.create_dir("install")
     plugin = _create_plugin(externs_dir)
     managers = build_plugins_manager(
         plugin, frameworks, install_dir, externs_dir=externs_dir, on_debug=True
     )
-    root_dir.destory()
     return managers
 
 
@@ -273,11 +269,13 @@ def _run_relax(relax_mod, target_name, data):
 def _test_tvm_plugin(target):
     """Test plugin in tvm"""
 
-    managers = _build_plugin([MSCFramework.TVM])
+    plugin_root = msc_utils.msc_dir("test_plugin_tvm_{}".format(target))
+    managers = _build_plugin([MSCFramework.TVM], plugin_root)
     model = _get_tvm_model(managers[MSCFramework.TVM])
     data = np.random.rand(1, 3, 224, 224).astype("float32")
     outputs = _run_relax(model, target, data)
     assert outputs.min() >= 0 and outputs.max() <= 0.5
+    plugin_root.destory()
 
 
 def test_tvm_plugin_cpu():
@@ -296,7 +294,8 @@ def test_tvm_plugin_gpu():
 def test_torch_plugin():
     """Test plugin in torch"""
 
-    managers = _build_plugin([MSCFramework.TORCH])
+    plugin_root = msc_utils.msc_dir("test_plugin_torch")
+    managers = _build_plugin([MSCFramework.TORCH], plugin_root)
     model = _get_torch_model(managers[MSCFramework.TORCH])
     torch_data = torch.from_numpy(np.random.rand(1, 3, 224, 224).astype("float32"))
     if torch.cuda.is_available():
@@ -304,6 +303,7 @@ def test_torch_plugin():
         torch_data = torch_data.to(torch.device("cuda:0"))
     outputs = model(torch_data)
     assert outputs.min() >= 0 and outputs.max() <= 0.5
+    plugin_root.destory()
 
 
 def _test_with_manager(compile_type, expected_info):
@@ -312,12 +312,12 @@ def _test_with_manager(compile_type, expected_info):
     frameworks = [MSCFramework.TORCH, MSCFramework.TVM]
     if compile_type not in frameworks:
         frameworks.append(compile_type)
-    managers = _build_plugin(frameworks)
+    path = "_".join(["test_plugin"] + frameworks)
+    workspace = msc_utils.msc_dir(path)
+    managers = _build_plugin(frameworks, workspace.create_dir("plugins"))
     model = _get_torch_model(managers[MSCFramework.TORCH])
-    path = "test_plugin_{}".format("_".join(frameworks))
-    path = path + "_" + str(datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
     config = {
-        "workspace": msc_utils.msc_dir(path),
+        "workspace": workspace,
         "model_type": MSCFramework.TORCH,
         "debug_level": 1,
         "inputs": [["input_0", [1, 3, 224, 224], "float32"]],
@@ -364,5 +364,7 @@ def test_tensorrt_plugin():
 
 
 if __name__ == "__main__":
-    tvm.testing.main()
+    # tvm.testing.main()
     # test_tensorrt_plugin()
+    # test_manager_plugin(MSCFramework.TVM)
+    test_tensorrt_plugin()
