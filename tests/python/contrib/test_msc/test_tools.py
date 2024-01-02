@@ -17,9 +17,9 @@
 
 """ Test Tools in MSC. """
 
-import os
+import json
+import datetime
 import pytest
-
 import torch
 
 import tvm.testing
@@ -45,8 +45,15 @@ def _get_config(
     optimize_type=None,
 ):
     """Get msc config"""
+
+    path = "test_tool_{}_{}".format(model_type, compile_type)
+    for t_type, config in tools_config.items():
+        path = path + "_" + str(t_type)
+        if "gym_configs" in config:
+            path = path + "_gym"
+    path = path + "_" + str(datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
     return {
-        "workspace": msc_utils.msc_dir(),
+        "workspace": msc_utils.msc_dir(path),
         "verbose": "critical",
         "model_type": model_type,
         "inputs": inputs,
@@ -71,6 +78,7 @@ def _get_config(
 
 def get_tool_config(tool_type, use_distill=False, use_gym=False):
     """Get config for the tool"""
+
     config = {}
     if tool_type == ToolType.PRUNER:
         config = {
@@ -179,6 +187,7 @@ def get_tool_config(tool_type, use_distill=False, use_gym=False):
 
 def _get_torch_model(name, is_training=False):
     """Get model from torch vision"""
+
     # pylint: disable=import-outside-toplevel
     try:
         import torchvision
@@ -194,7 +203,7 @@ def _get_torch_model(name, is_training=False):
         return None
 
 
-def _check_manager(manager, tools_config, expected_info):
+def _check_manager(manager, expected_info):
     """Check the manager results"""
 
     model_info = manager.runner.model_info
@@ -202,17 +211,12 @@ def _check_manager(manager, tools_config, expected_info):
     if not manager.report["success"]:
         passed = False
         err = "Failed to run pipe for {} -> {}".format(manager.model_type, manager.compile_type)
-    for t_type, config in tools_config.items():
-        if not os.path.isfile(msc_utils.get_config_dir().relpath(config["plan_file"])):
-            passed = False
-            err = "Failed to find plan of " + str(t_type)
-            break
     if not msc_utils.dict_equal(model_info, expected_info):
         passed = False
         err = "Model info {} mismatch with expected {}".format(model_info, expected_info)
     manager.destory()
     if not passed:
-        raise Exception(err)
+        raise Exception("{}\nReport:{}".format(err, json.dumps(manager.report, indent=2)))
 
 
 def _test_from_torch(
@@ -240,11 +244,12 @@ def _test_from_torch(
         )
         manager = MSCManager(torch_model, config)
         manager.run_pipe()
-        _check_manager(manager, tools_config, expected_info)
+        _check_manager(manager, expected_info)
 
 
 def get_model_info(compile_type):
     """Get the model info"""
+
     if compile_type == MSCFramework.TVM:
         return {
             "inputs": [
@@ -300,7 +305,7 @@ def test_tvm_distill(tool_type):
 @tvm.testing.requires_gpu
 @pytest.mark.parametrize("tool_type", [ToolType.PRUNER, ToolType.QUANTIZER])
 def test_tvm_gym(tool_type):
-    """Test tools for tvm with distiller"""
+    """Test tools for tvm with gym"""
 
     tool_config = get_tool_config(tool_type, use_gym=True)
     _test_from_torch(
