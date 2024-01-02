@@ -313,12 +313,10 @@ def byoc_partition(
             msc_transform.BindShape(),
             msc_transform.FuseTuple(target),
             tvm.relax.transform.MergeCompositeFunctions(),
-        ]
-        """
             msc_transform.SetBYOCAttrs(target),
             msc_transform.SetExprName(target=target),
             msc_transform.SetExprLayout(trans_config.get("allow_layout_missing", True)),
-        """
+        ]
         return tvm.transform.Sequential(passes)(mod)
 
     def _is_target_func(func):
@@ -326,12 +324,7 @@ def byoc_partition(
             return False
         return func.attrs["Codegen"] == target
 
-    print("[TMINFO] byoc meta "+str(mod))
     msc_mod = _partition_mod(mod)
-    print("[TMINFO] msc_mod MergeCompositeFunctions "+str(msc_mod))
-    print("attrs "+str(msc_utils.get_span_attrs(msc_mod)))
-    raise Exception("stop here!!")
-    
     func_names = [var.name_hint for var, func in msc_mod.functions.items() if _is_target_func(func)]
 
     if not trans_config.get("allow_incomplete", False):
@@ -343,5 +336,4 @@ def byoc_partition(
         build_config.update({"graph_name": msc_mod[name].attrs["byoc_name"], "byoc_entry": name})
         graph = _ffi_api.BuildFromRelax(msc_mod, entry, msc_utils.dump_dict(build_config))
         graphs_info.append((graph, normalize_weights(all_weights, graph)))
-    print("graph infos get!!")
     return _partition_mod(mod, False), graphs_info

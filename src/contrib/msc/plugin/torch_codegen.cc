@@ -246,9 +246,30 @@ void TorchPluginCodeGen::CodeGenManagerDepends() {
 
 void TorchPluginCodeGen::CodeGenManagerMethods() {
   BasePluginCodeGen<TorchPluginCodeGenConfig>::CodeGenManagerMethods();
+  // libs_loaded method
+  stack_.func_def("libs_loaded")
+      .func_arg("self", "object")
+      .func_start()
+      .assign("loaded_libs", "set()")
+      .assign("loaded", DocUtils::ToDoc(false))
+      .for_start("lib", "torch.classes.loaded_libraries")
+      .func_call("add", "", "loaded_libs")
+      .inplace_start("os.path.basename")
+      .call_arg("lib")
+      .inplace_end()
+      .for_end()
+      .for_start("lib", "os.listdir(self._lib_folder)")
+      .cond_if("lib in loaded_libs")
+      .assign("loaded", DocUtils::ToDoc(true))
+      .line("break")
+      .cond_end()
+      .for_end()
+      .func_end("loaded");
+  // setup method
   stack_.func_def("setup")
       .func_arg("self", "object")
       .func_start()
+      .cond_if("not self.libs_loaded()")
       .for_start("lib", "os.listdir(self._lib_folder)")
       .assign("lib_file", "os.path.join(self._lib_folder, lib)")
       .cond_if("\"" + config()->project_name + "\" in lib")
@@ -259,6 +280,7 @@ void TorchPluginCodeGen::CodeGenManagerMethods() {
       .call_arg("lib_file")
       .cond_end()
       .for_end()
+      .cond_end()
       .func_end();
 }
 

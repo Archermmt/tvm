@@ -265,58 +265,34 @@ def _run_relax(relax_mod, target_name, data):
     return runnable["main"](data).asnumpy()
 
 
-def _test_tvm_plugin(target):
+def _test_tvm_plugin(manager, target):
     """Test plugin in tvm"""
 
-    plugin_root = msc_utils.msc_dir("test_plugin_tvm_{}".format(target))
-    managers = _build_plugin([MSCFramework.TVM], plugin_root)
-    model = _get_tvm_model(managers[MSCFramework.TVM])
+    model = _get_tvm_model(manager)
     data = np.random.rand(1, 3, 224, 224).astype("float32")
     outputs = _run_relax(model, target, data)
     assert outputs.min() >= 0 and outputs.max() <= 0.5
-    plugin_root.destory()
 
 
-def test_tvm_plugin_cpu():
-    """Test plugin in tvm on cpu"""
-
-    _test_tvm_plugin("llvm")
-
-
-@tvm.testing.requires_gpu
-def test_tvm_plugin_gpu():
-    """Test plugin in tvm on cpu"""
-
-    _test_tvm_plugin("cuda")
-
-
-def test_torch_plugin():
+def _test_torch_plugin(manager):
     """Test plugin in torch"""
 
-    plugin_root = msc_utils.msc_dir("test_plugin_torch")
-    managers = _build_plugin([MSCFramework.TORCH], plugin_root)
-    model = _get_torch_model(managers[MSCFramework.TORCH])
+    model = _get_torch_model(manager)
     torch_data = torch.from_numpy(np.random.rand(1, 3, 224, 224).astype("float32"))
     if torch.cuda.is_available():
         model = model.to(torch.device("cuda:0"))
         torch_data = torch_data.to(torch.device("cuda:0"))
     outputs = model(torch_data)
     assert outputs.min() >= 0 and outputs.max() <= 0.5
-    plugin_root.destory()
 
 
-def _test_with_manager(compile_type, expected_info):
+def _test_with_manager(plugins, compile_type, expected_info):
     """Test the plugin with manager"""
 
-    frameworks = [MSCFramework.TORCH, MSCFramework.TVM]
-    if compile_type not in frameworks:
-        frameworks.append(compile_type)
-    path = "_".join(["test_plugin"] + frameworks)
-    workspace = msc_utils.msc_dir(path)
-    managers = _build_plugin(frameworks, workspace.create_dir("plugins"))
-    model = _get_torch_model(managers[MSCFramework.TORCH])
+    path = "test_plugin_" + compile_type
+    model = _get_torch_model(plugins[MSCFramework.TORCH])
     config = {
-        "workspace": workspace,
+        "workspace": msc_utils.msc_dir(path),
         "model_type": MSCFramework.TORCH,
         "debug_level": 1,
         "inputs": [["input_0", [1, 3, 224, 224], "float32"]],
@@ -331,7 +307,7 @@ def _test_with_manager(compile_type, expected_info):
             "profile": {"check": {"atol": 1e-2, "rtol": 1e-2}, "benchmark": {"repeat": 10}},
         },
     }
-    manager = MSCManager(model, config, plugins=managers)
+    manager = MSCManager(model, config, plugins=plugins)
     report = manager.run_pipe()
     model_info = manager.runner.model_info
     manager.destory()
@@ -341,8 +317,22 @@ def _test_with_manager(compile_type, expected_info):
     ), "Model info {} mismatch with expected {}".format(model_info, expected_info)
 
 
-@pytest.mark.parametrize("compile_type", [MSCFramework.TORCH, MSCFramework.TVM])
-def test_manager_plugin(compile_type):
+def test_plugin():
+    """Test the plugins all in one"""
+
+    frameworks = [MSCFramework.TORCH, MSCFramework.TVM]
+    if tvm.get_global_func("relax.ext.tensorrt", True) is not None:
+        frameworks.append(MSCFramework.TENSORRT)
+    plugin_root = msc_utils.msc_dir("msc_plugin")
+    managers = _build_plugin(frameworks, plugin_root)
+
+    # test the plugin load
+    _test_tvm_plugin(managers[MSCFramework.TVM], "llvm")
+    if tvm.cuda().exist:
+        _test_tvm_plugin(managers[MSCFramework.TVM], "cuda")
+    _test_torch_plugin(managers[MSCFramework.TORCH])
+
+    # test the plugin with manager
     model_info = {
         "inputs": [
             {"name": "input_0", "shape": [1, 3, 224, 224], "dtype": "float32", "layout": "NCHW"}
@@ -352,16 +342,14 @@ def test_manager_plugin(compile_type):
         ],
         "nodes": {"total": 4, "input": 1, "msc.conv2d_bias": 1, "MyRelu": 1, "nn.max_pool2d": 1},
     }
+    _test_with_manager(managers, MSCFramework.TORCH, model_info)
+    _test_with_manager(managers, MSCFramework.TVM, model_info)
+    if tvm.get_global_func("relax.ext.tensorrt", True) is not None:
+        byoc_info = {}
+        _test_with_manager(managers, MSCFramework.TENSORRT, byoc_info)
 
-    _test_with_manager(compile_type, model_info)
-
-
-@requires_tensorrt
-def test_tensorrt_plugin():
-    model_info = {}
-    _test_with_manager(MSCFramework.TENSORRT, model_info)
+    plugin_root.destory()
 
 
 if __name__ == "__main__":
     tvm.testing.main()
-    # test_tensorrt_plugin()
