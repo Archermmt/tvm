@@ -18,6 +18,7 @@
 """ Test Plugin in MSC. """
 
 import pytest
+import datetime
 import numpy as np
 
 import torch
@@ -240,7 +241,9 @@ def _get_tvm_model(tvm_manager):
 
 
 def _build_plugin(frameworks):
-    root_dir = msc_utils.msc_dir("msc_plugin")
+    path = "msc_plugin_{}".format("_".join(frameworks))
+    path = path + "_" + str(datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
+    root_dir = msc_utils.msc_dir(path)
     externs_dir = root_dir.create_dir("externs")
     install_dir = root_dir.create_dir("install")
     plugin = _create_plugin(externs_dir)
@@ -311,8 +314,10 @@ def _test_with_manager(compile_type, expected_info):
         frameworks.append(compile_type)
     managers = _build_plugin(frameworks)
     model = _get_torch_model(managers[MSCFramework.TORCH])
+    path = "test_plugin_{}".format("_".join(frameworks))
+    path = path + "_" + str(datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
     config = {
-        "workspace": msc_utils.msc_dir(),
+        "workspace": msc_utils.msc_dir(path),
         "model_type": MSCFramework.TORCH,
         "debug_level": 1,
         "inputs": [["input_0", [1, 3, 224, 224], "float32"]],
@@ -361,4 +366,3 @@ def test_tensorrt_plugin():
 if __name__ == "__main__":
     tvm.testing.main()
     # test_tensorrt_plugin()
-    # test_torch_plugin()
