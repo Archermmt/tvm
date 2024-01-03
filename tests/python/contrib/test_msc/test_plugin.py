@@ -317,19 +317,45 @@ def _test_with_manager(plugins, compile_type, expected_info):
     ), "Model info {} mismatch with expected {}".format(model_info, expected_info)
 
 
-def test_plugin():
+def test_plugin_cpu():
+    """Test the plugins all in one"""
+
+    frameworks = [MSCFramework.TORCH, MSCFramework.TVM]
+    plugin_root = msc_utils.msc_dir("msc_plugin_cpu")
+    managers = _build_plugin(frameworks, plugin_root)
+
+    # test the plugin load
+    _test_tvm_plugin(managers[MSCFramework.TVM], "llvm")
+    _test_torch_plugin(managers[MSCFramework.TORCH])
+
+    # test the plugin with manager
+    model_info = {
+        "inputs": [
+            {"name": "input_0", "shape": [1, 3, 224, 224], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "outputs": [
+            {"name": "output", "shape": [1, 6, 218, 218], "dtype": "float32", "layout": "NCHW"}
+        ],
+        "nodes": {"total": 4, "input": 1, "msc.conv2d_bias": 1, "MyRelu": 1, "nn.max_pool2d": 1},
+    }
+    _test_with_manager(managers, MSCFramework.TORCH, model_info)
+    _test_with_manager(managers, MSCFramework.TVM, model_info)
+
+    plugin_root.destory()
+
+
+@tvm.testing.requires_cuda
+def test_plugin_cuda():
     """Test the plugins all in one"""
 
     frameworks = [MSCFramework.TORCH, MSCFramework.TVM]
     if tvm.get_global_func("relax.ext.tensorrt", True) is not None:
         frameworks.append(MSCFramework.TENSORRT)
-    plugin_root = msc_utils.msc_dir("msc_plugin")
+    plugin_root = msc_utils.msc_dir("msc_plugin_gpu")
     managers = _build_plugin(frameworks, plugin_root)
 
     # test the plugin load
-    _test_tvm_plugin(managers[MSCFramework.TVM], "llvm")
-    if tvm.cuda().exist:
-        _test_tvm_plugin(managers[MSCFramework.TVM], "cuda")
+    _test_tvm_plugin(managers[MSCFramework.TVM], "cuda")
     _test_torch_plugin(managers[MSCFramework.TORCH])
 
     # test the plugin with manager
