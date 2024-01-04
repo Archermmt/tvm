@@ -309,13 +309,13 @@ def byoc_partition(
         patterns = get_patterns_with_prefix(target)
         passes = [
             msc_transform.SetExprName(),
+            msc_transform.SetExprLayout(trans_config.get("allow_layout_missing", True)),
             tvm.relax.transform.FuseOpsByPattern(patterns, bind_constants=not as_msc),
             msc_transform.BindShape(),
             msc_transform.FuseTuple(target),
             tvm.relax.transform.MergeCompositeFunctions(),
             msc_transform.SetBYOCAttrs(target),
             msc_transform.SetExprName(target=target),
-            msc_transform.SetExprLayout(trans_config.get("allow_layout_missing", True)),
         ]
         return tvm.transform.Sequential(passes)(mod)
 
@@ -325,6 +325,13 @@ def byoc_partition(
         return func.attrs["Codegen"] == target
 
     msc_mod = _partition_mod(mod)
+    import json
+
+    print(
+        "[TMINFO] msc_mod {} with attr {}".format(
+            msc_mod, json.dumps(msc_utils.get_span_attrs(msc_mod), indent=2)
+        )
+    )
     func_names = [var.name_hint for var, func in msc_mod.functions.items() if _is_target_func(func)]
 
     if not trans_config.get("allow_incomplete", False):

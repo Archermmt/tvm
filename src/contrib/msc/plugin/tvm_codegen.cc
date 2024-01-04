@@ -162,7 +162,7 @@ void TVMPluginCodeGen::CodeGenOpDefine(const Plugin& plugin) {
                    DocUtils::ToDeclare("const auto&", "attr_" + attr->name))
         .call_arg(DocUtils::ToIndex("inputs", i + plugin->inputs.size()));
   }
-  stack_.declare("Array<NLayout>", "input_layouts")
+  stack_.declare("Array<NLayout>", "arg_layouts")
       .declare("Array<NLayout>", "output_layouts")
       .comment("extract meta attrs")
       .func_call(attr_name + "_from_exprs", "const " + attr_name + "& meta_attr");
@@ -176,12 +176,19 @@ void TVMPluginCodeGen::CodeGenOpDefine(const Plugin& plugin) {
                  DocUtils::ToDeclare("const auto&", "in_layout"))
       .call_arg(DocUtils::ToIndex("inputs", "i"))
       .call_arg("var_layout_map")
-      .func_call("push_back", "", "input_layouts")
+      .func_call("push_back", "", "arg_layouts")
       .call_arg("in_layout")
       .func_call("push_back", "", "input_metas")
       .inplace_start("TVMUtils::ToMetaTensor")
       .call_arg(DocUtils::ToIndex("inputs", "i"))
       .call_arg("in_layout")
+      .inplace_end()
+      .for_end()
+      .comment("add fake layout for attrs")
+      .for_start("i", 0, plugin->attrs.size())
+      .func_call("push_back", "", "arg_layouts")
+      .inplace_start("LayoutDecision")
+      .call_arg(DocUtils::ToStr(""))
       .inplace_end()
       .for_end();
   stack_.declare("std::vector<MetaTensor>", "output_metas");
@@ -192,6 +199,13 @@ void TVMPluginCodeGen::CodeGenOpDefine(const Plugin& plugin) {
       .call_arg(DocUtils::ToAttrAccess(DocUtils::ToIndex("output_metas", "i"), "layout_name()"))
       .inplace_end()
       .for_end()
+      .declare("Array<NLayout>", "input_layouts")
+      .func_call("push_back", "", "input_layouts")
+      .inplace_start("LayoutDecision")
+      .call_arg(DocUtils::ToStr(""))
+      .inplace_end()
+      .func_call("push_back", "", "input_layouts")
+      .call_arg("arg_layouts")
       .func_call("InferLayoutOutput", DocUtils::ToDeclare("const auto&", "infer_output"))
       .call_arg("input_layouts")
       .call_arg("output_layouts")
