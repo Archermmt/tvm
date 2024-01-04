@@ -115,12 +115,9 @@ def from_relax(
     patterns = get_patterns_with_prefix("msc.")
     passes = [
         msc_transform.SetExprName(),
+        msc_transform.SetExprLayout(trans_config.get("allow_layout_missing", True)),
         tvm.relax.transform.FuseOpsByPattern(
             patterns, bind_constants=False, annotate_codegen=False
-        ),
-        msc_transform.SetExprName(entry_name=entry, target=trans_config.get("target", "")),
-        msc_transform.SetExprLayout(
-            trans_config.get("allow_layout_missing", True), entry_name=entry
         ),
     ]
     mod = tvm.transform.Sequential(passes)(mod)
@@ -315,7 +312,6 @@ def byoc_partition(
             msc_transform.FuseTuple(target),
             tvm.relax.transform.MergeCompositeFunctions(),
             msc_transform.SetBYOCAttrs(target),
-            msc_transform.SetExprName(target=target),
         ]
         return tvm.transform.Sequential(passes)(mod)
 
@@ -325,13 +321,7 @@ def byoc_partition(
         return func.attrs["Codegen"] == target
 
     msc_mod = _partition_mod(mod)
-    import json
-
-    print(
-        "[TMINFO] msc_mod {} with attr {}".format(
-            msc_mod, json.dumps(msc_utils.get_span_attrs(msc_mod), indent=2)
-        )
-    )
+    print("msc_mod " + str(msc_mod))
     func_names = [var.name_hint for var, func in msc_mod.functions.items() if _is_target_func(func)]
 
     if not trans_config.get("allow_incomplete", False):
@@ -342,5 +332,6 @@ def byoc_partition(
     for name in func_names:
         build_config.update({"graph_name": msc_mod[name].attrs["byoc_name"], "byoc_entry": name})
         graph = _ffi_api.BuildFromRelax(msc_mod, entry, msc_utils.dump_dict(build_config))
+        print("graph " + str(graph))
         graphs_info.append((graph, normalize_weights(all_weights, graph)))
     return _partition_mod(mod, False), graphs_info

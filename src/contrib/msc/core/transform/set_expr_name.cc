@@ -92,14 +92,15 @@ class RelaxExprNameSetter : public ExprVisitor {
     if (block_name.size() == 0) {
       block_name = "block";
     }
-    if (setted_blocks_.count(block_name)) {
+    const String& prefix = StringUtils::Join(block_stack_, ".");
+    if (setted_blocks_.count(prefix + "." + block_name)) {
       int cnt = 1;
-      while (setted_blocks_.count(block_name + "_" + std::to_string(cnt))) {
+      while (setted_blocks_.count(prefix + "." + block_name + "_" + std::to_string(cnt))) {
         cnt++;
       }
       block_name = block_name + "_" + std::to_string(cnt);
     }
-    setted_blocks_.insert(block_name);
+    setted_blocks_.insert(prefix + "." + block_name);
     block_stack_.push_back(block_name);
     const String& unique_name = StringUtils::Join(block_stack_, ".");
     block->span = SpanUtils::SetAttr(block->span, "name", unique_name);

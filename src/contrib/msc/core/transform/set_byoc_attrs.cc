@@ -47,7 +47,7 @@ class ByocNameSetter : public ExprMutator {
     entry_name_ = entry_name;
   }
 
-  IRModule SetAttrs() {
+  IRModule SetNames() {
     GlobalVar main_var;
     size_t func_cnt = 0;
     for (const auto& [gv, func] : mod_->functions) {
@@ -56,9 +56,9 @@ class ByocNameSetter : public ExprMutator {
       } else {
         const auto& name_opt = func->GetAttr<runtime::String>(attr::kCodegen);
         if (name_opt.defined() && name_opt.value() == target_) {
-          const auto& new_func = WithAttr(Downcast<Function>(func), "byoc_name",
-                                          target_ + "_" + std::to_string(func_cnt));
-          builder_->UpdateFunction(gv, new_func);
+          const String& func_name = target_ + "_" + std::to_string(func_cnt);
+          const auto& new_func = Downcast<Function>(VisitExpr(func));
+          builder_->UpdateFunction(gv, WithAttr(new_func, "byoc_name", func_name));
           func_cnt += 1;
         }
       }
@@ -66,15 +66,32 @@ class ByocNameSetter : public ExprMutator {
     return builder_->GetContextIRModule();
   }
 
+  void VisitBinding_(const VarBindingNode* binding, const FunctionNode* val) final {
+    local_funcs_.Set(binding->var, GetRef<Function>(val));
+    ExprMutator::VisitBinding_(binding, val);
+  }
+
+  void VisitBinding_(const VarBindingNode* binding, const CallNode* val) final {
+    ExprMutator::VisitBinding_(binding, val);
+    if (val->op->IsInstance<relax::VarNode>()) {
+      ICHECK(local_funcs_.count(val->op)) << "Can not find local func " << val->op;
+      const auto& name_opt = local_funcs_[val->op]->GetAttr<runtime::String>("unique_name");
+      if (name_opt.defined()) {
+        val->span = SpanUtils::SetAttr(val->span, "name", name_opt.value());
+      }
+    }
+  }
+
  private:
   IRModule mod_;
   String target_;
   String entry_name_;
   Map<Function, Function> new_funcs_;
+  Map<Expr, Function> local_funcs_;
 };
 
 IRModule SetBYOCAttrs(IRModule mod, const String& target, const String& entry_name) {
-  return ByocNameSetter(mod, target, entry_name).SetAttrs();
+  return ByocNameSetter(mod, target, entry_name).SetNames();
 }
 
 namespace transform {

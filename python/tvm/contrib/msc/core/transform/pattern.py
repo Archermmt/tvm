@@ -17,7 +17,7 @@
 # pylint: disable=unused-argument
 """tvm.contrib.msc.core.transform.pattern"""
 
-from typing import Mapping, Tuple, Dict
+from typing import Mapping, Tuple, Dict, List
 from functools import partial
 
 import tvm
@@ -29,10 +29,14 @@ from tvm.relax.backend.pattern_registry import register_patterns
 from tvm.relay.op.contrib.register import register_pattern_table
 from tvm.contrib.msc.core.utils.namespace import MSCMap, MSCKey
 from tvm.contrib.msc.core import utils as msc_utils
+from tvm.contrib.msc.core import _ffi_api
 
 
 def msc_attrs_getter(
-    annotated_expr: Dict[str, tvm.relax.Expr], anchor: str = "out"
+    annotated_expr: Dict[str, tvm.relax.Expr],
+    anchor: str = "out",
+    output: str = None,
+    inputs: List[str] = None,
 ) -> Dict[str, str]:
     """Get attributes for fused pattern
 
@@ -49,6 +53,8 @@ def msc_attrs_getter(
         The extra attributes for msc.
     """
 
+    attrs = {}
+    # get name
     fused_cnt = MSCMap.get(MSCKey.FUSED_CNT, 0)
     unique_name = "msc_fused_" + str(fused_cnt)
     if anchor in annotated_expr:
@@ -56,7 +62,19 @@ def msc_attrs_getter(
         if name:
             unique_name = name
     MSCMap.set(MSCKey.FUSED_CNT, fused_cnt + 1)
-    return {"unique_name": unique_name}
+    attrs["unique_name"] = unique_name
+    # get output layout
+    output = output or anchor
+    if output in annotated_expr:
+        attrs["layout"] = _ffi_api.SpanGetAttr(annotated_expr[output].span, "layout")
+    if inputs:
+        attrs["input_layouts"] = {
+            msc_utils.get_expr_name(annotated_expr[i]): _ffi_api.SpanGetAttr(
+                annotated_expr[i].span, "layout"
+            )
+            for i in inputs
+        }
+    return attrs
 
 
 def make_relax_conv_bias_pattern(
@@ -87,7 +105,15 @@ def make_relax_conv_bias_pattern(
     shape = relax_pattern.wildcard()
     reshape = relax_pattern.is_op("relax.reshape")(bias, shape)
     out = relax_pattern.is_op("relax.add")(conv, reshape)
-    annotations = {"conv": conv, "bias": bias, "reshape": reshape, "out": out}
+    annotations = {
+        "data": data,
+        "weight": weight,
+        "bias": bias,
+        "conv": conv,
+        "bias": bias,
+        "reshape": reshape,
+        "out": out,
+    }
     return out, annotations
 
 
@@ -126,7 +152,7 @@ def make_relax_linear_pattern() -> (
     weight = relax_pattern.is_const()
     permute = relax_pattern.is_op("relax.permute_dims")(weight)
     out = relax_pattern.is_op("relax.matmul")(data, permute)
-    annotations = {"weight": weight, "permute": permute, "linear": out}
+    annotations = {"data": data, "weight": weight, "permute": permute, "linear": out}
     return out, annotations
 
 
@@ -203,7 +229,7 @@ def make_relax_embedding_pattern() -> (
     data = relax_pattern.wildcard()
     astype = relax_pattern.is_op("relax.astype")(data)
     out = relax_pattern.is_op("relax.take")(weight, astype)
-    annotations = {"weight": weight, "astype": astype, "take": out}
+    annotations = {"data": data, "weight": weight, "astype": astype, "take": out}
     return out, annotations
 
 
@@ -250,6 +276,7 @@ def make_relax_reshape_embedding_pattern() -> (
     expand_shape = relax_pattern.wildcard()
     out = relax_pattern.is_op("relax.reshape")(take, expand_shape)
     annotations = {
+        "data": data,
         "weight": weight,
         "astype": astype,
         "reduce_in": reduce_in,
@@ -301,7 +328,15 @@ def make_relax_attention_pattern() -> (
     k_trans = relax_pattern.is_op("relax.permute_dims")(weight_k)
     v_trans = relax_pattern.is_op("relax.permute_dims")(weight_v)
     out = relax_pattern.is_op("relax.nn.attention")(q_trans, k_trans, v_trans)
-    annotations = {"q_trans": q_trans, "k_trans": k_trans, "v_trans": v_trans, "attention": out}
+    annotations = {
+        "weight_q": weight_q,
+        "weight_k": weight_k,
+        "weight_v": weight_v,
+        "q_trans": q_trans,
+        "k_trans": k_trans,
+        "v_trans": v_trans,
+        "attention": out,
+    }
     return out, annotations
 
 
@@ -341,7 +376,16 @@ def make_relax_mask_attention_pattern() -> (
     k_trans = relax_pattern.is_op("relax.permute_dims")(weight_k)
     v_trans = relax_pattern.is_op("relax.permute_dims")(weight_v)
     out = relax_pattern.is_op("relax.nn.attention_bias")(q_trans, k_trans, v_trans, mask)
-    annotations = {"q_trans": q_trans, "k_trans": k_trans, "v_trans": v_trans, "attention": out}
+    annotations = {
+        "weight_q": weight_q,
+        "weight_k": weight_k,
+        "weight_v": weight_v,
+        "mask": mask,
+        "q_trans": q_trans,
+        "k_trans": k_trans,
+        "v_trans": v_trans,
+        "attention": out,
+    }
     return out, annotations
 
 
@@ -421,7 +465,7 @@ def make_opt_relax_linear_pattern() -> (
     data = relax_pattern.wildcard()
     weight = relax_pattern.is_const()
     out = relax_pattern.is_op("relax.matmul")(data, weight)
-    annotations = {"weight": weight, "linear": out}
+    annotations = {"data": data, "weight": weight, "linear": out}
     return out, annotations
 
 
@@ -459,7 +503,7 @@ def make_opt_relax_linear_bias_pattern() -> (
     linear = relax_pattern.is_op("relax.matmul")(data, weight)
     bias = relax_pattern.is_const()
     out = relax_pattern.is_op("relax.add")(linear, bias)
-    annotations = {"weight": weight, "bias": bias, "linear": linear, "out": out}
+    annotations = {"data": data, "weight": weight, "bias": bias, "linear": linear, "out": out}
     return out, annotations
 
 
@@ -488,7 +532,7 @@ register_patterns(
                 "relax.nn.conv1d",
             ),
             _check_opt_relax_conv_bias,
-            partial(msc_attrs_getter, anchor="conv"),
+            partial(msc_attrs_getter, anchor="conv", inputs=["data", "weight", "bias"]),
         ),
         (
             "msc.conv2d_bias",
@@ -496,19 +540,19 @@ register_patterns(
                 "relax.nn.conv2d",
             ),
             _check_opt_relax_conv_bias,
-            partial(msc_attrs_getter, anchor="conv"),
+            partial(msc_attrs_getter, anchor="conv", inputs=["data", "weight", "bias"]),
         ),
         (
             "msc.linear",
             *make_opt_relax_linear_pattern(),
             _check_opt_relax_linear,
-            partial(msc_attrs_getter, anchor="linear"),
+            partial(msc_attrs_getter, anchor="linear", inputs=["data", "weight"]),
         ),
         (
             "msc.linear_bias",
             *make_opt_relax_linear_bias_pattern(),
             _check_opt_relax_linear_bias,
-            partial(msc_attrs_getter, anchor="linear"),
+            partial(msc_attrs_getter, anchor="linear", inputs=["data", "weight", "bias"]),
         ),
         (
             "msc.conv1d_bias",
@@ -516,7 +560,7 @@ register_patterns(
                 "relax.nn.conv1d",
             ),
             _check_relax_conv_bias,
-            partial(msc_attrs_getter, anchor="conv"),
+            partial(msc_attrs_getter, anchor="conv", inputs=["data", "weight", "bias"]),
         ),
         (
             "msc.conv2d_bias",
@@ -524,43 +568,49 @@ register_patterns(
                 "relax.nn.conv2d",
             ),
             _check_relax_conv_bias,
-            partial(msc_attrs_getter, anchor="conv"),
+            partial(msc_attrs_getter, anchor="conv", inputs=["data", "weight", "bias"]),
         ),
         (
             "msc.linear",
             *make_relax_linear_pattern(),
             _check_relax_linear,
-            partial(msc_attrs_getter, anchor="linear"),
+            partial(msc_attrs_getter, anchor="linear", inputs=["data", "weight"]),
         ),
         (
             "msc.linear_bias",
             *make_relax_linear_bias_pattern(),
             _check_relax_linear_bias,
-            partial(msc_attrs_getter, anchor="linear"),
+            partial(msc_attrs_getter, anchor="linear", inputs=["data", "weight", "bias"]),
         ),
         (
             "msc.embedding",
             *make_relax_embedding_pattern(),
             _check_relax_embedding,
-            partial(msc_attrs_getter, anchor="take"),
+            partial(msc_attrs_getter, anchor="take", inputs=["data", "weight"]),
         ),
         (
             "msc.embedding",
             *make_relax_reshape_embedding_pattern(),
             _check_relax_reshape_embedding,
-            partial(msc_attrs_getter, anchor="take"),
+            partial(msc_attrs_getter, anchor="take", output="out", inputs=["data", "weight"]),
         ),
         (
             "msc.attention",
             *make_relax_attention_pattern(),
             _check_relax_attention,
-            partial(msc_attrs_getter, anchor="attention"),
+            partial(
+                msc_attrs_getter, anchor="attention", inputs=["weight_q", "weight_k", "weight_v"]
+            ),
         ),
         (
             "msc.attention",
             *make_relax_mask_attention_pattern(),
             _check_relax_mask_attention,
-            partial(msc_attrs_getter, anchor="attention"),
+            partial(
+                msc_attrs_getter,
+                anchor="attention",
+                inputs=["weight_q", "weight_k", "weight_v", "mask"],
+            ),
         ),
     ]
 )
