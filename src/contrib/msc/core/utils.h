@@ -123,6 +123,8 @@ class StringUtils {
    * \return The String.
    */
   TVM_DLL static const String Join(const Array<String>& sub_strings, const String& joint);
+  TVM_DLL static const String Join(const std::vector<std::string>& sub_strings,
+                                   const std::string& joint);
 
   /*!
    * \brief Replace the substring old to new in String.

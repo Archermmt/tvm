@@ -718,12 +718,19 @@ class TensorRTPluginOpCodeGen : public TensorRTOpCode {
   void CodeGenBuild() final {
     const auto& plugin = GetPlugin(node()->optype);
     const auto& input_ref = DeclareInputs();
+    const String& func_name = "plugin::" + node()->optype + "DynamicPlugin";
     const String& plugin_ref = "plugin_" + std::to_string(node()->index);
-    stack_.func_call(node()->optype + "_DynamicPlugin", DocUtils::ToDeclare("auto", plugin_ref))
+    const String& layouts_ref = "layouts_" + std::to_string(node()->index);
+    stack_.declare("std::vector<std::string>", layouts_ref, 0, false);
+    for (const auto& i : node()->GetInputs()) {
+      stack_.declare_arg(DocUtils::ToStr(i->layout.name()));
+    }
+    stack_.func_call(func_name, DocUtils::ToDeclare("auto", plugin_ref))
         .call_arg(DocUtils::ToStr(node()->name));
     for (const auto& a : plugin->attrs) {
       stack_.call_arg(GetAttrDoc(a->name, a->type));
     }
+    stack_.call_arg(layouts_ref);
     stack_.op_call().call_arg(input_ref).call_arg(plugin->inputs.size()).call_arg(plugin_ref);
   }
 };

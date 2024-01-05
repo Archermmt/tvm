@@ -40,6 +40,7 @@ def get_plugin_base_h_code() -> str:
 namespace tvm {
 namespace contrib {
 namespace msc {
+namespace plugin {
 
 typedef enum {
   kUINT8 = 0,
@@ -306,6 +307,7 @@ class DataTensor : public MetaTensor {
   T* data_{nullptr};
 };
 
+}  // namespace plugin
 }  // namespace msc
 }  // namespace contrib
 }  // namespace tvm
@@ -1126,12 +1128,15 @@ def get_plugin_utils_h_code() -> str:
 namespace tvm {
 namespace contrib {
 namespace msc {
+namespace plugin {
+
 """
     code += _get_common_utils()
     code += _get_tvm_utils()
     code += _get_torch_utils()
     code += _get_tensorrt_utils()
     code += """
+}  // namespace plugin
 }  // namespace msc
 }  // namespace contrib
 }  // namespace tvm

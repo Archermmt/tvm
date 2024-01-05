@@ -89,6 +89,7 @@ struct TensorRTCodeGenConfig {
   std::string precision{"float32"};
   std::string precision_mode{"strict"};
   std::string tensorrt_root{"/usr/local/cuda"};
+  std::vector<std::string> extern_libs;
   CODEGEN_CONFIG_MEMBERS
   void Load(dmlc::JSONReader* reader) {
     std::string key;
@@ -114,6 +115,8 @@ struct TensorRTCodeGenConfig {
         reader->Read(&precision_mode);
       } else if (key == "tensorrt_root") {
         reader->Read(&tensorrt_root);
+      } else if (key == "extern_libs") {
+        reader->Read(&extern_libs);
       } else {
         CODEGEN_CONFIG_PARSE
       }

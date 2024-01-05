@@ -293,27 +293,21 @@ class BasePluginCodeGen {
       stack_.line("add_library(" + p_name + " SHARED ${PLUGIN_CC_SRCS})");
     }
     // define includes
-    String includes = "";
-    for (const auto& include : extra_includes) {
-      includes = includes + " " + include;
-    }
-    for (const auto& include : this->config()->includes) {
-      includes = includes + " " + include;
+    String includes = StringUtils::Join(extra_includes, " ");
+    if (this->config()->includes.size() > 0) {
+      includes = includes + " " + StringUtils::Join(this->config()->includes, " ");
     }
     if (includes.size() > 0) {
       stack_.line("target_include_directories(" + p_name + " PUBLIC " + includes + ")");
     }
     // define libs
-    String e_libs = "";
-    for (const auto& lib : extra_libs) {
-      e_libs = e_libs + " " + lib;
+    String link_libs = StringUtils::Join(extra_libs, " ");
+    const auto& libs = StringUtils::Join(this->config()->libs, " ");
+    if (libs.size() > 0) {
+      link_libs = link_libs + " " + libs;
     }
-    String libs = "";
-    for (const auto& lib : this->config()->libs) {
-      libs = libs + " " + lib;
-    }
-    if (e_libs.size() > 0 || libs.size() > 0) {
-      stack_.line("target_link_libraries(" + p_name + e_libs + libs + ")");
+    if (link_libs.size() > 0) {
+      stack_.line("target_link_libraries(" + p_name + " " + link_libs + ")");
     }
     const auto& install_dir = this->config()->install_dir;
     if (install_dir.size() > 0) {

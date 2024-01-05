@@ -53,6 +53,7 @@ def _get_externs_header():
 namespace tvm {
 namespace contrib {
 namespace msc {
+namespace plugin {
 
 template <typename TAttr>
 std::vector<MetaTensor> my_relu_infer(const std::vector<MetaTensor>& inputs, const TAttr& attrs,
@@ -82,6 +83,7 @@ void my_relu_cuda_compute(const DataTensor<T>& input, DataTensor<T>& output, con
 }
 #endif
 
+}  // namespace plugin
 }  // namespace msc
 }  // namespace contrib
 }  // namespace tvm
@@ -96,6 +98,7 @@ def _get_externs_cc():
 namespace tvm {
 namespace contrib {
 namespace msc {
+namespace plugin {
 
 template <typename T>
 void my_relu_cpu_kernel(const DataTensor<T>& input, DataTensor<T>& output, T max_val) {
@@ -114,6 +117,8 @@ void my_relu_cpu_kernel(const DataTensor<T>& input, DataTensor<T>& output, T max
 
 template void my_relu_cpu_kernel<float>(const DataTensor<float>& input, DataTensor<float>& output,
                                         float max_val);
+
+}  // namespace plugin
 }  // namespace msc
 }  // namespace contrib
 }  // namespace tvm
@@ -132,6 +137,7 @@ def _get_externs_cu():
 namespace tvm {
 namespace contrib {
 namespace msc {
+namespace plugin {
 
 inline int n_blocks(int size, int block_size) {
   return size / block_size + (size % block_size == 0 ? 0 : 1);
@@ -162,6 +168,8 @@ void my_relu_cuda_kernel(const DataTensor<T>& input, DataTensor<T>& output, T ma
 
 template void my_relu_cuda_kernel<float>(const DataTensor<float>& input, DataTensor<float>& output,
                                          float max_val, const cudaStream_t& stream);
+
+}  // namespace plugin
 }  // namespace msc
 }  // namespace contrib
 }  // namespace tvm

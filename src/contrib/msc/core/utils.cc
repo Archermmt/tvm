@@ -175,6 +175,15 @@ const String StringUtils::Join(const Array<String>& sub_strings, const String& j
   return join_str;
 }
 
+const String StringUtils::Join(const std::vector<std::string>& sub_strings,
+                               const std::string& joint) {
+  Array<String> new_strings;
+  for (const auto& s : sub_strings) {
+    new_strings.push_back(s);
+  }
+  return Join(new_strings, joint);
+}
+
 const String StringUtils::Replace(const String& src_string, const String& old_str,
                                   const String& new_str) {
   String new_string;
