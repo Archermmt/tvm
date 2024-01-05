@@ -328,7 +328,7 @@ class BaseManager(object):
                 relax_mod = tvm.ir.load_json(f.read())
             self._logger.info("Load parsed mod from %s", cache_path)
         else:
-            parse_config = stage_config.get("parse_config", {})
+            parse_config = msc_utils.copy_dict(stage_config.get("parse_config", {}))
             runner_cls = self._get_runner_cls(self._config["compile"]["run_type"])
             trans_func = (
                 runner_cls.target_transform if hasattr(runner_cls, "target_transform") else None
@@ -339,13 +339,11 @@ class BaseManager(object):
                 "trans_func": trans_func,
             }
             self._logger.info(msc_utils.msg_block("PARSE", parse_info))
+            parse_config["as_msc"] = False
             if self._config["model_type"] in self._plugins:
-                custom_convert_map = self._plugins[self._config["model_type"]].get_convert_map()
-            else:
-                custom_convert_map = None
-            relax_mod, _ = stage_config["parser"](
-                self._model, as_msc=False, custom_convert_map=custom_convert_map, **parse_config
-            )
+                plugin = self._plugins[self._config["model_type"]]
+                parse_config["custom_convert_map"] = plugin.get_convert_map()
+            relax_mod, _ = stage_config["parser"](self._model, **parse_config)
             if trans_func:
                 relax_mod = trans_func(relax_mod)
             if cache_path:

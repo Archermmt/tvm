@@ -39,6 +39,24 @@ using Expr = tvm::RelayExpr;
 using RelaxCall = tvm::relax::Call;
 using RelayCall = tvm::relay::Call;
 
+namespace msc_attr {
+/*! \brief Mark the name for the expr. */
+constexpr const char* kName = "Name";
+/*! \brief Mark the layout for the expr. */
+constexpr const char* kLayout = "Layout";
+/*! \brief Mark the share reference for the expr. */
+constexpr const char* kSharedRef = "SharedRef";
+
+/*! \brief Mark the unique name for the func. */
+constexpr const char* kUnique = "Unique";
+/*! \brief Mark the input layout for the func. */
+constexpr const char* kInputLayouts = "InputLayouts";
+/*! \brief Mark the consumer type for the func. */
+constexpr const char* kConsumerType = "ConsumerType";
+/*! \brief Mark the byoc name for the func. */
+constexpr const char* kByocName = "ByocName";
+}  // namespace msc_attr
+
 /*!
  * \brief Utils for Common.
  */
@@ -64,6 +82,11 @@ class CommonUtils {
                                     const std::vector<size_t>& target_version);
   TVM_DLL static int CompareVersion(const Array<Integer>& given_version,
                                     const Array<Integer>& target_version);
+  /*!
+   * \brief Get attr key.
+   * \return The attr key.
+   */
+  TVM_DLL static const String ToAttrKey(const String& key);
 };
 
 /*!

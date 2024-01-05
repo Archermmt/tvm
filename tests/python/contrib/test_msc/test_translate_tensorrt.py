@@ -69,8 +69,8 @@ def check_names(mod):
 
         def visit_function_(self, op: tvm.relax.Function) -> None:
             if "Composite" in op.attrs:
-                assert "unique_name" in op.attrs, "Can not find unique_name for func " + str(op)
-                name = str(op.attrs["unique_name"])
+                assert "Unique" in op.attrs, "Can not find unique_name for func " + str(op)
+                name = str(op.attrs["Unique"])
                 assert name not in self._recorded_names, "Name {} is already in use".format(name)
                 self._recorded_names.add(name)
             super().visit_function_(op)
@@ -83,7 +83,7 @@ def check_names(mod):
     for _, func in mod.functions.items():
         if not _is_target_func(func):
             continue
-        assert "byoc_name" in func.attrs, "Can not find byoc_name from function attributes"
+        assert "ByocName" in func.attrs, "Can not find ByocName from function attributes"
         NameChecker().check(func)
 
 

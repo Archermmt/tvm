@@ -288,6 +288,9 @@ class RelaxGraphBuilder : public RelaxExprVisitor {
   /*! \brief Get the node_name, optype, layout for func*/
   const std::tuple<String, String, String> ParseFunc(const relax::Function& func);
 
+  /*! \brief Get the plugin inputs*/
+  Array<Expr> GetPluginInputs(const relax::Expr& expr);
+
   String name_;
   IRModule ref_module_;
   MSCRBuildConfig config_;
@@ -304,6 +307,8 @@ class RelaxGraphBuilder : public RelaxExprVisitor {
   // BYOC maps
   Map<Expr, relax::Function> target_funcs_;
   Map<Expr, Expr> func_params_;
+  // Plugin inputs
+  Map<Expr, Array<Expr>> plugin_inputs_;
 };
 
 class RelaxWeightsExtractor : public RelaxExprVisitor {

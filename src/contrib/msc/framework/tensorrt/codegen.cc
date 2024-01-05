@@ -591,9 +591,9 @@ Array<runtime::Module> MSCTensorRTCompiler(Array<Function> functions,
   Array<runtime::Module> compiled_functions;
   for (const auto& func : functions) {
     VLOG(1) << "MSC.TensorRT partition:" << std::endl << func;
-    const auto& byoc_name_opt = func->GetAttr<runtime::String>("byoc_name");
-    ICHECK(byoc_name_opt.defined()) << "Can not find byoc_name from attrs";
-    const auto& byoc_name = byoc_name_opt.value();
+    const auto& byoc_opt = func->GetAttr<runtime::String>(msc_attr::kByocName);
+    ICHECK(byoc_opt.defined()) << "Can not find byoc from attrs";
+    const auto& byoc_name = byoc_opt.value();
     std::string func_name = GetExtSymbol(func);
     ICHECK(target_option.count(byoc_name)) << "Can not find target option for " << byoc_name;
     const auto& options = Downcast<String>(target_option[byoc_name]);

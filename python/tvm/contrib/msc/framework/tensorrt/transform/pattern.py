@@ -430,7 +430,7 @@ def get_patterns(target) -> List[Pattern]:
             target + ".plugin",
             *basic_pattern("relax.call_dps_packed", ["input", "input"]),
             _plugin_check,
-            partial(msc_pattern.msc_attrs_getter, anchor="out", inputs=["input_1"]),
+            partial(msc_pattern.msc_attrs_getter, anchor="out"),
         )
     )
 

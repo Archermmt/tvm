@@ -321,7 +321,6 @@ def byoc_partition(
         return func.attrs["Codegen"] == target
 
     msc_mod = _partition_mod(mod)
-    print("msc_mod " + str(msc_mod))
     func_names = [var.name_hint for var, func in msc_mod.functions.items() if _is_target_func(func)]
 
     if not trans_config.get("allow_incomplete", False):
@@ -330,8 +329,8 @@ def byoc_partition(
 
     graphs_info, all_weights = [], _ffi_api.GetRelaxWeights(msc_mod, entry)
     for name in func_names:
-        build_config.update({"graph_name": msc_mod[name].attrs["byoc_name"], "byoc_entry": name})
+        graph_name = msc_mod[name].attrs[_ffi_api.ToAttrKey("byoc_name")]
+        build_config.update({"graph_name": graph_name, "byoc_entry": name})
         graph = _ffi_api.BuildFromRelax(msc_mod, entry, msc_utils.dump_dict(build_config))
-        print("graph " + str(graph))
         graphs_info.append((graph, normalize_weights(all_weights, graph)))
     return _partition_mod(mod, False), graphs_info

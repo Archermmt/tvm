@@ -62,18 +62,20 @@ def msc_attrs_getter(
         if name:
             unique_name = name
     MSCMap.set(MSCKey.FUSED_CNT, fused_cnt + 1)
-    attrs["unique_name"] = unique_name
+    attrs[_ffi_api.ToAttrKey("unique")] = unique_name
     # get output layout
     output = output or anchor
     if output in annotated_expr:
-        attrs["layout"] = _ffi_api.SpanGetAttr(annotated_expr[output].span, "layout")
+        attrs[_ffi_api.ToAttrKey("layout")] = msc_utils.get_expr_layout(annotated_expr[output])
     if inputs:
-        attrs["input_layouts"] = {
-            msc_utils.get_expr_name(annotated_expr[i]): _ffi_api.SpanGetAttr(
-                annotated_expr[i].span, "layout"
+        layouts = {}
+        for i in inputs:
+            if i not in annotated_expr:
+                continue
+            layouts[msc_utils.get_expr_name(annotated_expr[i])] = msc_utils.get_expr_layout(
+                annotated_expr[i]
             )
-            for i in inputs
-        }
+        attrs[_ffi_api.ToAttrKey("input_layouts")] = layouts
     return attrs
 
 

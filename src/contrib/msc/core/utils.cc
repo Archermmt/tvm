@@ -78,6 +78,31 @@ int CommonUtils::CompareVersion(const Array<Integer>& given_version,
   return CompareVersion(int_given_version, int_target_version);
 }
 
+const String CommonUtils::ToAttrKey(const String& key) {
+  if (key == "name") {
+    return msc_attr::kName;
+  }
+  if (key == "layout") {
+    return msc_attr::kLayout;
+  }
+  if (key == "shared_ref") {
+    return msc_attr::kSharedRef;
+  }
+  if (key == "unique") {
+    return msc_attr::kUnique;
+  }
+  if (key == "input_layouts") {
+    return msc_attr::kInputLayouts;
+  }
+  if (key == "consumer_type") {
+    return msc_attr::kConsumerType;
+  }
+  if (key == "byoc_name") {
+    return msc_attr::kByocName;
+  }
+  LOG_FATAL << "Unexpected key " << key;
+}
+
 bool StringUtils::Contains(const String& src_string, const String& sub_string) {
   if (src_string.size() == 0) {
     return false;
@@ -432,6 +457,10 @@ TVM_REGISTER_GLOBAL("msc.core.CompareVersion")
                        const Array<Integer>& target_version) -> Integer {
       return Integer(CommonUtils::CompareVersion(given_version, target_version));
     });
+
+TVM_REGISTER_GLOBAL("msc.core.ToAttrKey").set_body_typed([](const String& key) -> String {
+  return CommonUtils::ToAttrKey(key);
+});
 
 }  // namespace msc
 }  // namespace contrib

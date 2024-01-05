@@ -72,7 +72,7 @@ class TupleFuser : public ExprMutator {
       Array<Expr> new_args;
       for (const auto& arg : val->args) {
         if (arg->IsInstance<TupleNode>()) {
-          const auto& func_call = AddFunc(arg);
+          const auto& func_call = AddFunc(binding, arg);
           const auto& tuple_out = builder_->Emit(func_call);
           ICHECK(target_funcs_.count(func_call->op))
               << "Can not find target func " << func_call->op;
@@ -118,7 +118,7 @@ class TupleFuser : public ExprMutator {
   }
 
  private:
-  Call AddFunc(const Expr& expr) {
+  Call AddFunc(const VarBindingNode* binding, const Expr& expr) {
     builder_->BeginDataflowBlock();
     Array<Expr> inputs;
     if (const auto* v_node = expr.as<TupleNode>()) {
@@ -162,7 +162,16 @@ class TupleFuser : public ExprMutator {
     Map<String, ObjectRef> func_attrs;
     func_attrs.Set(tvm::relax::attr::kComposite, target_ + func_name);
     func_attrs.Set(tvm::relax::attr::kPrimitive, Integer(1));
-    func_attrs.Set("unique_name", SpanUtils::GetAttr(expr->span, "name"));
+    func_attrs.Set(msc_attr::kUnique, SpanUtils::GetAttr(expr->span, msc_attr::kName));
+    if (const auto* call_node = binding->value.as<CallNode>()) {
+      if (target_funcs_.count(call_node->op)) {
+        const auto& comp_opt =
+            target_funcs_[call_node->op]->GetAttr<runtime::String>(attr::kComposite);
+        if (comp_opt.defined()) {
+          func_attrs.Set(msc_attr::kConsumerType, comp_opt.value());
+        }
+      }
+    }
 
     Function function = Function(/*params=*/params,            //
                                  /*body=*/body,                //
@@ -186,7 +195,7 @@ class TupleFuser : public ExprMutator {
   }
 
   void ReEmitFunc(const VarBindingNode* binding, const Expr& expr) {
-    const auto& func_call = AddFunc(expr);
+    const auto& func_call = AddFunc(binding, expr);
     ReEmitBinding(binding, builder_->Normalize(func_call));
     ICHECK(target_funcs_.count(func_call->op)) << "Can not find target func " << func_call->op;
     target_funcs_.Set(binding->var, target_funcs_[func_call->op]);
