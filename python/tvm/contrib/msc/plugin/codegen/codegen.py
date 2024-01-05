@@ -32,37 +32,39 @@ class BasePluginCodeGen(object):
 
     Parameters
     ----------
+    workspace: MSCDirectory
+        The workspace folder.
     codegen_config: dict<string, string>
         The config to generate code.
     cpp_print_config: dict<string, string>
         The config to print cpp code.
     py_print_config: dict<string, string>
         The config to print python code.
-    build_folder: MSCDirectory
-        The codegen folder.
-    output_folder: MSCDirectory
-        The output folder.
     extern_sources: dict<string, string>
         The depend source files.
     extern_libs: dict<string, string>
         The depend lib files.
+    on_debug: bool
+        Whether to debug the building.
     """
 
     def __init__(
         self,
+        workspace: msc_utils.MSCDirectory,
         codegen_config: Optional[Dict[str, str]] = None,
         cpp_print_config: Optional[Dict[str, str]] = None,
         py_print_config: Optional[Dict[str, str]] = None,
-        build_folder: msc_utils.MSCDirectory = None,
-        output_folder: msc_utils.MSCDirectory = None,
         extern_sources: Dict[str, str] = None,
         extern_libs: Dict[str, str] = None,
+        on_debug: bool = False,
     ):
         self._codegen_config = msc_utils.copy_dict(codegen_config)
         self._cpp_print_config = msc_utils.dump_dict(cpp_print_config)
         self._py_print_config = msc_utils.dump_dict(py_print_config)
-        self._build_folder = build_folder or msc_utils.msc_dir(keep_history=False, cleanup=True)
-        self._output_folder = output_folder or msc_utils.msc_dir("msc_plugins")
+        self._build_folder = workspace.create_dir(
+            "source_" + self.framework, keep_history=on_debug, cleanup=not on_debug
+        )
+        self._output_folder = workspace.create_dir(self.framework)
         self._extern_sources = extern_sources or {}
         self._extern_libs = extern_libs or {}
         self.setup()
@@ -71,7 +73,7 @@ class BasePluginCodeGen(object):
         """Set up the codegen"""
 
         self._lib_folder = self._output_folder.create_dir("lib")
-        self._manager_folder = self._output_folder.create_dir(self.framework)
+        self._manager_folder = self._output_folder
         self._libs = [os.path.basename(l) for l in self._extern_libs.values()]
         self._libs.extend([os.path.basename(l) for l in self._lib_folder.listdir()])
         self._project_name = "msc_{}_plugin".format(self.framework)
@@ -278,13 +280,13 @@ class TensorRTPluginCodegen(BasePluginCodeGen):
 
 def get_codegen(
     framework: str,
+    workspace: msc_utils.MSCDirectory,
     codegen_config: Optional[Dict[str, str]] = None,
     cpp_print_config: Optional[Dict[str, str]] = None,
     py_print_config: Optional[Dict[str, str]] = None,
-    build_folder: msc_utils.MSCDirectory = None,
-    output_folder: msc_utils.MSCDirectory = None,
     extern_sources: Dict[str, str] = None,
     extern_libs: Dict[str, str] = None,
+    on_debug: bool = False,
 ):
     """Create codegen for framework
 
@@ -292,20 +294,20 @@ def get_codegen(
     ----------
     framework: str
         THe framework for the plugin.
+    workspace: MSCDirectory
+        The workspace folder.
     codegen_config: dict<string, string>
         The config to generate code.
     cpp_print_config: dict<string, string>
         The config to print cpp code.
     py_print_config: dict<string, string>
         The config to print python code.
-    build_folder: MSCDirectory
-        The codegen folder.
-    output_folder: MSCDirectory
-        The output folder.
     extern_sources: dict<string, string>
         The depend source files.
     extern_libs: dict<string, string>
         The depend lib files.
+    on_debug: bool
+        Whether to debug the building.
     """
 
     codegen_cls = None
@@ -320,11 +322,11 @@ def get_codegen(
             "framework {} is not support for plugin codegen".format(framework)
         )
     return codegen_cls(
+        workspace,
         codegen_config=codegen_config,
         cpp_print_config=cpp_print_config,
         py_print_config=py_print_config,
-        build_folder=build_folder,
-        output_folder=output_folder,
         extern_sources=extern_sources,
         extern_libs=extern_libs,
+        on_debug=on_debug,
     )

@@ -26,7 +26,7 @@ from tvm.contrib.msc.plugin.codegen import get_codegen
 from .register import register_plugin
 
 
-def build_plugins(
+def _build_plugins(
     plugins: Dict[str, dict],
     frameworks: List[str],
     workspace: msc_utils.MSCDirectory = None,
@@ -70,18 +70,15 @@ def build_plugins(
     # build plugins for frameworks
     codegens = {}
     for framework in frameworks:
-        build_folder = workspace.create_dir(
-            "source_" + framework, keep_history=on_debug, cleanup=not on_debug
-        )
         codegen = get_codegen(
             framework,
+            workspace,
             codegen_config,
             cpp_print_config=cpp_print_config,
             py_print_config=py_print_config,
-            build_folder=build_folder,
-            output_folder=workspace,
             extern_sources=extern_sources,
             extern_libs=extern_libs,
+            on_debug=on_debug,
         )
         if not codegen.libs_built():
             codegen.build_libs()
@@ -91,7 +88,7 @@ def build_plugins(
     return codegens
 
 
-def build_plugins_manager(
+def build_plugins(
     plugins: Dict[str, dict],
     frameworks: List[str],
     workspace: msc_utils.MSCDirectory = None,
@@ -124,11 +121,11 @@ def build_plugins_manager(
 
     Returns
     -------
-    path: str
-        The wheel path.
+    managers: dict<string, PluginManager>
+        The plugin managers.
     """
 
-    codegens = build_plugins(
+    codegens = _build_plugins(
         plugins,
         frameworks,
         workspace,
@@ -146,7 +143,7 @@ def build_plugins_manager(
     return managers
 
 
-def pack_plugins_wheel(
+def pack_plugins(
     plugins: Dict[str, dict],
     frameworks: List[str],
     project_name: str = "msc_plugin",
@@ -165,8 +162,8 @@ def pack_plugins_wheel(
         The plugins define.
     frameworks: list<str>
         The frameworks for plugin.
-    workspace: MSCDirectory:
-        The install folder.
+    project_name: str
+        The project name
     codegen_config: dict<string, string>
         The config to generate code.
     cpp_print_config: dict<string, string>
@@ -175,8 +172,6 @@ def pack_plugins_wheel(
         The config to print python code.
     externs_dir: MSCDirectory
         The extern sources folder.
-    project_name: str
-        The project name
     setup_config: dict<string, string>
         The config to setup wheel.
     on_debug: bool
@@ -190,7 +185,7 @@ def pack_plugins_wheel(
 
     project_dir = msc_utils.msc_dir(project_name)
     workspace = project_dir.create_dir(project_name)
-    codegens = build_plugins(
+    codegens = _build_plugins(
         plugins,
         frameworks,
         workspace,
@@ -217,6 +212,8 @@ def pack_plugins_wheel(
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+
+from .manager import *
 """
     with open(workspace.relpath("__init__.py"), "w") as f:
         f.write(init_code)
@@ -239,8 +236,16 @@ from setuptools import find_packages, setup
 from setuptools.dist import Distribution
 
 project_name = "{0}"
-lib_path = os.path.join(project_name, "libs")
-
+data_files = []
+for framework in [{2}]:
+    for folder in ["lib", "include"]:
+        src_path = os.path.join(project_name, framework, folder)
+        data_files.append(
+            (
+                os.path.join(project_name, framework, folder),
+                [os.path.join(src_path, f) for f in os.listdir(src_path)],
+            ),
+        )
 
 class BinaryDistribution(Distribution):
     def has_ext_modules(self):
@@ -249,23 +254,17 @@ class BinaryDistribution(Distribution):
     def is_pure(self):
         return False
 
-
 setup(
-    name="{0}",{1}
+    name="{0}"{1},
     packages=find_packages(),
     distclass=BinaryDistribution,
-    data_files=[
-        (
-            os.path.join(project_name, "libs"),
-            [os.path.join(lib_path, f) for f in os.listdir(lib_path)],
-        )
-    ],
+    data_files=data_files
 )
 
 shutil.rmtree("build")
 shutil.rmtree("{0}.egg-info")
 """.format(
-        project_name, setup_config_str
+        project_name, setup_config_str, ",".join(['"{}"'.format(f) for f in frameworks])
     )
     with open(project_dir.relpath("setup.py"), "w") as f:
         f.write(setup_code)
@@ -279,8 +278,9 @@ shutil.rmtree("{0}.egg-info")
         assert (
             process.returncode == 0
         ), "Failed to build wheel under {}, check build.log for detail".format(os.getcwd())
-    files = list(project_dir.create_dir("dist").listdir())
+    dist_dir = project_dir.create_dir("dist")
+    files = list(dist_dir.listdir())
     assert len(files) == 1 and files[0].endswith(
         ".whl"
-    ), "Failed to build wheel, no .whl found @ " + str(project_dir.create_dir("dist").path)
-    return files[0]
+    ), "Failed to build wheel, no .whl found @ " + str(dist_dir.path)
+    return dist_dir.relpath(files[0])

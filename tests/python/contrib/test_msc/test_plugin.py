@@ -28,7 +28,7 @@ from tvm import relax
 from tvm.relax.transform import BindParams
 from tvm.script import relax as R
 from tvm.contrib.msc.pipeline import MSCManager
-from tvm.contrib.msc.plugin import build_plugins_manager
+from tvm.contrib.msc.plugin import build_plugins
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 
@@ -243,7 +243,7 @@ def _build_plugin(frameworks, plugin_root):
     externs_dir = plugin_root.create_dir("externs")
     install_dir = plugin_root.create_dir("install")
     plugin = _create_plugin(externs_dir)
-    managers = build_plugins_manager(
+    managers = build_plugins(
         plugin, frameworks, install_dir, externs_dir=externs_dir, on_debug=True
     )
     return managers

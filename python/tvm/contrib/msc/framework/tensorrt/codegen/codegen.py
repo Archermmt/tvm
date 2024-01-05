@@ -96,13 +96,8 @@ def to_sub_tensorrt(
                         write_weight(name, data.asnumpy(), f)
         # copy plugin
         if plugin:
-            print("plugin "+str(plugin))
-            print("should copy libs and headers")
             plugin.copy_libs("plugin_lib")
-            print("libs done")
             plugin.copy_headers("plugin")
-            print("headers done")
-
         # save utils sources
         with folder.create_dir("utils") as utils_folder:
             for name, source in get_trt_sources().items():

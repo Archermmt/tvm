@@ -338,7 +338,7 @@ class BasePluginCodeGen {
         .func_arg("root", "str", "None")
         .func_start()
         .cond_if("root is None")
-        .assign("root", "os.path.dirname(os.path.dirname(__name__))")
+        .assign("root", "os.path.dirname(__name__)")
         .cond_end()
         .assign(DocUtils::ToAttrAccess("self", "_lib_folder"), "os.path.join(root, \"lib\")")
         .func_call("assert")
