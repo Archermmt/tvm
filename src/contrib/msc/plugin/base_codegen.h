@@ -177,12 +177,17 @@ class BasePluginCodeGen {
 
   /*! \brief Start the namespace*/
   void StartNamespace() {
-    this->stack_.line("namespace tvm {").line("namespace contrib {").line("namespace msc {").line();
+    this->stack_.line("namespace tvm {")
+        .line("namespace contrib {")
+        .line("namespace msc {")
+        .line("namespace plugin {")
+        .line();
   }
 
   /*! \brief End the namespace*/
   void EndNamespace() {
-    this->stack_.line("}  // namespace msc")
+    this->stack_.line("}  // namespace plugin")
+        .line("}  // namespace msc")
         .line("}  // namespace contrib")
         .line("}  // namespace tvm");
   }

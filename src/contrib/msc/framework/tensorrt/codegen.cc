@@ -49,9 +49,12 @@ void TensorRTCodeGen::CodeGenClassDeclare() {
     for (const auto& n : graph()->node_names) {
       const auto& node = graph()->FindNode(n);
       if (IsPlugin(node->optype) && !plugins.count(node->optype)) {
-        stack_.line("include \"plugin/" + node->optype + "\"");
+        stack_.line("#include \"plugin/" + node->optype + "_op.h\"");
         plugins.insert(node->optype);
       }
+    }
+    if (plugins.size() > 0) {
+      stack_.line("using namespace tvm::contrib::msc::plugin;");
     }
   }
   stack_.line().line("using namespace nvinfer1;").line();
