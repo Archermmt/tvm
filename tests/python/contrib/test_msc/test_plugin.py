@@ -300,7 +300,7 @@ def _test_with_manager(plugins, compile_type, expected_info):
     config = {
         "workspace": msc_utils.msc_dir(path),
         "model_type": MSCFramework.TORCH,
-        "debug_level": 1,
+        "verbose": "critical",
         "inputs": [["input_0", [1, 3, 224, 224], "float32"]],
         "outputs": ["output"],
         "dataset": {"loader": "from_random", "max_iter": 5},
@@ -330,7 +330,6 @@ def test_plugin_cpu():
     plugin_root = msc_utils.msc_dir("msc_plugin_cpu")
     managers = _build_plugin(frameworks, plugin_root)
 
-    """
     # test the plugin load
     _test_tvm_plugin(managers[MSCFramework.TVM], "llvm")
     _test_torch_plugin(managers[MSCFramework.TORCH])
@@ -347,12 +346,8 @@ def test_plugin_cpu():
     }
     _test_with_manager(managers, MSCFramework.TORCH, model_info)
     _test_with_manager(managers, MSCFramework.TVM, model_info)
-    """
 
-    byoc_info = {}
-    _test_with_manager(managers, MSCFramework.TENSORRT, byoc_info)
-
-    # plugin_root.destory()
+    plugin_root.destory()
 
 
 @tvm.testing.requires_cuda
