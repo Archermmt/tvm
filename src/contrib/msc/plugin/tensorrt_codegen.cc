@@ -542,7 +542,7 @@ void TensorRTPluginCodeGen::CodegenOpCommonMethods(const Plugin& plugin, bool dy
         .assign("size", "size + sizeof(dtype_)")
         .assign("size", "size + sizeof(size_t)")
         .for_start("layout", "layouts_")
-        .assign("size", "size + layout.size() * sizeof(char)")
+        .assign("size", "size + sizeof(size_t) + layout.size() * sizeof(char)")
         .for_end()
         .func_end("size");
     // serialize

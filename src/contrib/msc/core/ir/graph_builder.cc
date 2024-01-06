@@ -260,11 +260,6 @@ const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>
     } else if (call_node->op->IsInstance<relax::VarNode>()) {
       ICHECK(target_funcs_.count(call_node->op)) << "Can not find target func: " << call_node->op;
       std::tie(node_name, optype, layout) = ParseFunc(target_funcs_[call_node->op]);
-      if (optype == "plugin") {
-        ICHECK(func_params_.count(call_node->args[0]))
-            << "Can not find plugin extern " << call_node->args[0];
-        optype = Downcast<relax::ExternFunc>(func_params_[call_node->args[0]])->global_symbol;
-      }
     } else if (call_node->op->IsInstance<relax::FunctionNode>()) {
       std::tie(node_name, optype, layout) = ParseFunc(Downcast<relax::Function>(call_node->op));
     }
@@ -287,8 +282,8 @@ const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>
   } else if (const auto* call_node = expr.as<relax::CallNode>()) {
     if (const auto* v_node = call_node->op.as<GlobalVarNode>()) {
       const auto& func = Downcast<relax::Function>(ref_module_->Lookup(v_node->name_hint));
-      const auto& byoc_opt = func->GetAttr<runtime::String>(msc_attr::kByocName);
-      if (!byoc_opt.defined()) {
+      const auto& name_opt = func->GetAttr<runtime::String>(relax::attr::kComposite);
+      if (name_opt.defined()) {
         attrs = RelaxFuncAttrGetter().GetAttrs(func);
       }
     } else if (call_node->op->IsInstance<relax::VarNode>()) {
@@ -605,19 +600,19 @@ void RelaxGraphBuilder::VisitBinding_(const relax::VarBindingNode* binding,
 
 const std::tuple<String, String, String> RelaxGraphBuilder::ParseFunc(const relax::Function& func) {
   String node_name, optype, layout;
-  const auto& byoc_opt = func->GetAttr<runtime::String>(msc_attr::kByocName);
   const auto& name_opt = func->GetAttr<runtime::String>(msc_attr::kUnique);
   // get node_name
-  if (byoc_opt.defined()) {
-    node_name = byoc_opt.value();
-  } else if (name_opt.defined()) {
+  if (name_opt.defined()) {
     node_name = name_opt.value();
   }
   // get optype
   const auto& codegen_opt = func->GetAttr<runtime::String>(relax::attr::kCodegen);
+  const auto& optype_opt = func->GetAttr<runtime::String>(msc_attr::kOptype);
   const auto& composite_opt = func->GetAttr<runtime::String>(relax::attr::kComposite);
   if (codegen_opt.defined()) {
     optype = codegen_opt.value();
+  } else if (optype_opt.defined()) {
+    optype = optype_opt.value();
   } else if (composite_opt.defined()) {
     optype = composite_opt.value();
     if (config_.target.size() > 0) {
@@ -635,8 +630,8 @@ const std::tuple<String, String, String> RelaxGraphBuilder::ParseFunc(const rela
 Array<Expr> RelaxGraphBuilder::GetPluginInputs(const relax::Expr& expr) {
   ICHECK(expr->IsInstance<relax::CallNode>()) << "plugin expr should be call";
   const auto& call = Downcast<relax::Call>(expr);
-  if (plugin_inputs_.count(call->args[1])) {
-    return plugin_inputs_[call->args[1]];
+  if (call->args.size() == 1 && plugin_inputs_.count(call->args[0])) {
+    return plugin_inputs_[call->args[0]];
   }
   ICHECK(call->args[1]->IsInstance<relax::TupleNode>()) << "plugin argument 1 should be call";
   return Downcast<relax::Tuple>(call->args[1])->fields;

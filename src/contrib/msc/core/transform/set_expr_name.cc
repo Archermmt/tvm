@@ -275,14 +275,7 @@ class RelaxExprNameSetter : public ExprVisitor {
 
   const String GetFuncName(const Call& call, const Function& func) {
     String name;
-    // get from byoc_name
-    if (target_.size() > 0) {
-      const auto& byoc_opt = func->GetAttr<runtime::String>(msc_attr::kByocName);
-      if (byoc_opt.defined()) {
-        return byoc_opt.value();
-      }
-    }
-    // get from attribute
+    // get from unique
     const auto& name_opt = func->GetAttr<runtime::String>(msc_attr::kUnique);
     if (name_opt.defined()) {
       return name_opt.value();

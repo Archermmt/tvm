@@ -308,7 +308,7 @@ def byoc_partition(
             msc_transform.SetExprName(),
             msc_transform.SetExprLayout(trans_config.get("allow_layout_missing", True)),
             tvm.relax.transform.FuseOpsByPattern(patterns, bind_constants=not as_msc),
-            msc_transform.BindShape(),
+            msc_transform.InlineParams(),
             msc_transform.FuseTuple(target),
             tvm.relax.transform.MergeCompositeFunctions(),
             msc_transform.SetBYOCAttrs(target),
@@ -329,7 +329,7 @@ def byoc_partition(
 
     graphs_info, all_weights = [], _ffi_api.GetRelaxWeights(msc_mod, entry)
     for name in func_names:
-        graph_name = msc_mod[name].attrs[_ffi_api.ToAttrKey("byoc_name")]
+        graph_name = msc_mod[name].attrs[_ffi_api.ToAttrKey("unique")]
         build_config.update({"graph_name": graph_name, "byoc_entry": name})
         graph = _ffi_api.BuildFromRelax(msc_mod, entry, msc_utils.dump_dict(build_config))
         graphs_info.append((graph, normalize_weights(all_weights, graph)))

@@ -27,9 +27,12 @@
 #include <tvm/relax/transform.h>
 
 #include "../../../../relax/transform/utils.h"
+#include "../utils.h"
 
 namespace tvm {
 namespace relax {
+
+using namespace tvm::contrib::msc;
 
 /*!
  * \brief Bind ShapeExpr to Reshape
@@ -56,6 +59,13 @@ class ShapeBinder : public ExprMutator {
           if (struct_info->IsInstance<ShapeStructInfoNode>()) {
             continue;
           }
+          if (struct_info->IsInstance<FuncStructInfoNode>()) {
+            const auto& optype_opt = func->GetAttr<runtime::String>(msc_attr::kOptype);
+            ICHECK(optype_opt.defined())
+                << "Cna not find attr " << msc_attr::kOptype << " form extern func";
+            extern_types_.Set(p, optype_opt.value());
+            continue;
+          }
           new_params.push_back(p);
         }
         if (new_params.size() == Downcast<Function>(func)->params.size()) {
@@ -76,25 +86,29 @@ class ShapeBinder : public ExprMutator {
 
   void VisitBinding_(const VarBindingNode* binding, const CallNode* call_node) final {
     Array<Expr> new_args;
+    bool has_inline = false;
     for (const auto& a : call_node->args) {
       auto struct_info = GetStructInfo(a);
-      if (a->IsInstance<VarNode>() && struct_info->IsInstance<ShapeStructInfoNode>()) {
-        continue;
+      if (a->IsInstance<VarNode>() && struct_info->IsInstance<FuncStructInfoNode>()) {
+        ICHECK(extern_types_.count(a)) << "Can not find extern type of " << a;
+        new_args.push_back(ExternFunc(extern_types_[a]));
+        has_inline = true;
+      } else if (call_node->op->IsInstance<GlobalVarNode>() && a->IsInstance<ExternFuncNode>()) {
+        has_inline = true;
+      } else if (a->IsInstance<VarNode>() && struct_info->IsInstance<ShapeStructInfoNode>()) {
+        const auto& shape_opt = Downcast<ShapeStructInfo>(GetStructInfo(a))->values;
+        ICHECK(shape_opt.defined()) << "Expected shape defined, get " << a;
+        new_args.push_back(ShapeExpr(shape_opt.value()));
+        has_inline = true;
+      } else if (call_node->op->IsInstance<GlobalVarNode>() && a->IsInstance<ShapeExprNode>()) {
+        has_inline = true;
+      } else {
+        new_args.push_back(a);
       }
-      if (call_node->op->IsInstance<GlobalVarNode>() && a->IsInstance<ShapeExprNode>()) {
-        continue;
-      }
-      new_args.push_back(a);
     }
-    if (new_args.size() == call_node->args.size()) {
+    if (!has_inline) {
       ExprMutator::VisitBinding_(binding, call_node);
     } else if (const auto* op_node = call_node->op.as<OpNode>()) {
-      ICHECK(op_node->name == "relax.reshape" || op_node->name == "relax.image.resize2d")
-          << "Expect ShapeExpr consumer as reshape or image.resize2d, get "
-          << GetRef<Call>(call_node);
-      const auto& opt_shape = Downcast<ShapeStructInfo>(GetStructInfo(call_node->args[1]))->values;
-      ICHECK(opt_shape.defined()) << "Expected shape defined, get " << call_node->args[1];
-      new_args.push_back(ShapeExpr(opt_shape.value()));
       const auto& new_call =
           Call(call_node->op, new_args, call_node->attrs, call_node->sinfo_args, call_node->span);
       ReEmitBinding(binding, builder_->Normalize(new_call));
@@ -119,21 +133,22 @@ class ShapeBinder : public ExprMutator {
  private:
   IRModule mod_;
   String entry_name_;
+  Map<Expr, String> extern_types_;
 };
 
-IRModule BindShape(IRModule mod, const String& entry_name) {
+IRModule InlineParams(IRModule mod, const String& entry_name) {
   return ShapeBinder(mod, entry_name).Bind();
 }
 
 namespace transform {
 
-Pass BindShape(const String& entry_name) {
+Pass InlineParams(const String& entry_name) {
   runtime::TypedPackedFunc<IRModule(IRModule, PassContext)> pass_func =
-      [=](IRModule m, PassContext pc) { return relax::BindShape(m, entry_name); };
-  return CreateModulePass(pass_func, 0, "BindShape", {});
+      [=](IRModule m, PassContext pc) { return relax::InlineParams(m, entry_name); };
+  return CreateModulePass(pass_func, 0, "InlineParams", {});
 }
 
-TVM_REGISTER_GLOBAL("relax.transform.BindShape").set_body_typed(BindShape);
+TVM_REGISTER_GLOBAL("relax.transform.InlineParams").set_body_typed(InlineParams);
 
 }  // namespace transform
 }  // namespace relax

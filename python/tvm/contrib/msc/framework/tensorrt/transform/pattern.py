@@ -20,6 +20,7 @@
 from typing import Mapping, Tuple, List, Union, Callable, Dict
 from functools import wraps, partial
 
+import tvm
 from tvm import relax
 from tvm.relax.dpl import pattern
 from tvm.relax.transform import PatternCheckContext, FusionPattern
@@ -248,6 +249,30 @@ def _plugin_check(context: PatternCheckContext) -> bool:
     return bool(_ffi_api.IsPlugin(ext_func.global_symbol))
 
 
+def plugin_attrs_getter(
+    annotated_expr: Dict[str, tvm.relax.Expr],
+) -> Dict[str, str]:
+    """Get attributes for plugin pattern
+
+    Parameters
+    ----------
+    annotated_expr: dict<str,Expr>
+        The annotated exprs during fus pattern
+    anchor: str
+        The anchor key of expr
+
+    Returns
+    -------
+    attrs: dict<str,str>
+        The extra attributes for msc.
+    """
+
+    attrs = msc_pattern.msc_attrs_getter(annotated_expr, anchor="out")
+    ext_func = annotated_expr["out"].args[0]
+    attrs[_ffi_api.ToAttrKey("optype")] = ext_func.global_symbol
+    return attrs
+
+
 def wrap_basic_check(
     func: Callable[[PatternCheckContext], bool]
 ) -> Callable[[PatternCheckContext], bool]:
@@ -430,7 +455,7 @@ def get_patterns(target) -> List[Pattern]:
             target + ".plugin",
             *basic_pattern("relax.call_dps_packed", ["input", "input"]),
             _plugin_check,
-            partial(msc_pattern.msc_attrs_getter, anchor="out"),
+            plugin_attrs_getter,
         )
     )
 

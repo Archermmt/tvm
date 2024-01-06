@@ -83,7 +83,7 @@ def check_names(mod):
     for _, func in mod.functions.items():
         if not _is_target_func(func):
             continue
-        assert "ByocName" in func.attrs, "Can not find ByocName from function attributes"
+        assert "Unique" in func.attrs, "Can not find Unique from function attributes"
         NameChecker().check(func)
 
 

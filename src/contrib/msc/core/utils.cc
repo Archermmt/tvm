@@ -82,6 +82,9 @@ const String CommonUtils::ToAttrKey(const String& key) {
   if (key == "name") {
     return msc_attr::kName;
   }
+  if (key == "optype") {
+    return msc_attr::kOptype;
+  }
   if (key == "layout") {
     return msc_attr::kLayout;
   }
@@ -96,9 +99,6 @@ const String CommonUtils::ToAttrKey(const String& key) {
   }
   if (key == "consumer_type") {
     return msc_attr::kConsumerType;
-  }
-  if (key == "byoc_name") {
-    return msc_attr::kByocName;
   }
   LOG_FATAL << "Unexpected key " << key;
 }

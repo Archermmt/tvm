@@ -42,6 +42,8 @@ using RelayCall = tvm::relay::Call;
 namespace msc_attr {
 /*! \brief Mark the name for the expr. */
 constexpr const char* kName = "Name";
+/*! \brief Mark the optype for the expr. */
+constexpr const char* kOptype = "Optype";
 /*! \brief Mark the layout for the expr. */
 constexpr const char* kLayout = "Layout";
 /*! \brief Mark the share reference for the expr. */
@@ -53,8 +55,6 @@ constexpr const char* kUnique = "Unique";
 constexpr const char* kInputLayouts = "InputLayouts";
 /*! \brief Mark the consumer type for the func. */
 constexpr const char* kConsumerType = "ConsumerType";
-/*! \brief Mark the byoc name for the func. */
-constexpr const char* kByocName = "ByocName";
 }  // namespace msc_attr
 
 /*!

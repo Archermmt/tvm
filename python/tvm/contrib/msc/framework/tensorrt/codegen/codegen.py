@@ -97,7 +97,7 @@ def to_sub_tensorrt(
         # copy plugin
         if plugin:
             plugin.copy_libs("plugin_lib")
-            plugin.copy_headers("plugin")
+            plugin.copy_includes("plugin")
         # save utils sources
         with folder.create_dir("utils") as utils_folder:
             for name, source in get_trt_sources().items():
@@ -125,7 +125,7 @@ def to_sub_tensorrt(
         sub_folder = folder.create_dir(graph.name)
         if plugin:
             codegen_config["extern_libs"] = [
-                sub_folder.create_dir("plugin_lib").relpath(f) for f in plugin.lib_folder
+                sub_folder.create_dir("plugin_lib").relpath(f) for f in plugin.list_libs()
             ]
         codegen = CodeGen(
             graph,

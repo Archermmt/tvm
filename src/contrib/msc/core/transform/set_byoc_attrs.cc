@@ -58,7 +58,7 @@ class ByocNameSetter : public ExprMutator {
         if (name_opt.defined() && name_opt.value() == target_) {
           const String& func_name = target_ + "_" + std::to_string(func_cnt);
           const auto& new_func = Downcast<Function>(VisitExpr(func));
-          builder_->UpdateFunction(gv, WithAttr(new_func, msc_attr::kByocName, func_name));
+          builder_->UpdateFunction(gv, WithAttr(new_func, msc_attr::kUnique, func_name));
           func_cnt += 1;
         }
       }
