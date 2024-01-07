@@ -176,9 +176,9 @@ class RelaxExprNameSetter : public ExprVisitor {
         const auto& func = Downcast<ExternFunc>(val->args[0]);
         name_hint = func->global_symbol;
         optype = func->global_symbol;
-        const String& tuple_name = GetUniqueName(val->args[1], "tuple");
-        if (tuple_name != SpanUtils::GetAttr(val->args[1]->span, msc_attr::kName)) {
-          val->args[1]->span = SpanUtils::SetAttr(val->args[1]->span, msc_attr::kName, tuple_name);
+        const String& input_name = GetUniqueName(val->args[1], "plugin_def");
+        if (input_name != SpanUtils::GetAttr(val->args[1]->span, msc_attr::kName)) {
+          val->args[1]->span = SpanUtils::SetAttr(val->args[1]->span, msc_attr::kName, input_name);
         }
       } else {
         int rpos = op_name.rfind(".");

@@ -289,7 +289,7 @@ class RelaxGraphBuilder : public RelaxExprVisitor {
   const std::tuple<String, String, String> ParseFunc(const relax::Function& func);
 
   /*! \brief Get the plugin inputs*/
-  Array<Expr> GetPluginInputs(const relax::Expr& expr);
+  Array<Expr> GetPluginInputs(const relax::Expr& expr, const String& optype);
 
   String name_;
   IRModule ref_module_;
@@ -308,7 +308,7 @@ class RelaxGraphBuilder : public RelaxExprVisitor {
   Map<Expr, relax::Function> target_funcs_;
   Map<Expr, Expr> func_params_;
   // Plugin inputs
-  Map<Expr, Array<Expr>> plugin_inputs_;
+  Map<Expr, Array<Expr>> plugin_defs_;
 };
 
 class RelaxWeightsExtractor : public RelaxExprVisitor {

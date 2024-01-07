@@ -34,7 +34,9 @@ namespace msc {
 const Array<Doc> TensorRTOpCode::GetDocs() {
   stack_.Config(this);
   CodeGenBuild();
-  if (node()->optype == "tuple") {
+  if (node()->optype == "plugin_def") {
+    // ignore setting name for plugin_def
+  } else if (node()->optype == "tuple") {
     for (size_t i = 0; i < node()->outputs.size(); i++) {
       stack_.func_call("setName", NullOpt, DocUtils::ToPtr(IdxOutput(i)))
           .call_arg(DocUtils::ToStr(node()->OutputAt(i)->name));
@@ -678,13 +680,7 @@ class TensorRTTupleCodeGen : public TensorRTOpCode {
   TENSORRT_OP_CODEGEN_METHODS(TensorRTTupleCodeGen)
 
  protected:
-  void CodeGenBuild() final {
-    stack_.declare("std::vector<ITensor*>", IdxNode(), 0, false);
-    for (size_t i = 0; i < node()->inputs.size(); i++) {
-      const auto& idx_input = StringUtils::Replace(IdxInput(i), "*", "");
-      stack_.declare_arg(idx_input);
-    }
-  }
+  void CodeGenBuild() final { DeclareInputs(); }
 };
 
 class TensorRTUnaryCodeGen : public TensorRTOpCode {
@@ -710,12 +706,36 @@ class TensorRTWhereCodeGen : public TensorRTOpCode {
   void CodeGenBuild() final { stack_.op_call().op_inputs_arg(false); }
 };
 
+class TensorRTPluginDefCodeGen : public TensorRTOpCode {
+ public:
+  TENSORRT_OP_CODEGEN_METHODS(TensorRTPluginDefCodeGen)
+
+ protected:
+  void CodeGenBuild() final {
+    const String& optype = node()->GetTypeAttr<std::string>("plugin_type");
+    const auto& plugin = GetPlugin(optype);
+    const String& func_name = "plugin::" + optype + "DynamicPlugin";
+    const String& layouts_ref = "layouts_" + std::to_string(node()->index);
+    DeclareInputs();
+    stack_.declare("std::vector<std::string>", layouts_ref, 0, false);
+    for (const auto& i : node()->GetInputs()) {
+      stack_.declare_arg(DocUtils::ToStr(i->layout.name()));
+    }
+    stack_.op_call(func_name).call_arg(DocUtils::ToStr(node()->name));
+    for (const auto& a : plugin->attrs) {
+      stack_.call_arg(GetAttrDoc(a->name, a->type));
+    }
+    stack_.call_arg(layouts_ref);
+  }
+};
+
 class TensorRTPluginOpCodeGen : public TensorRTOpCode {
  public:
   TENSORRT_OP_CODEGEN_METHODS(TensorRTPluginOpCodeGen)
 
  protected:
   void CodeGenBuild() final {
+    /*
     const auto& plugin = GetPlugin(node()->optype);
     const auto& input_ref = DeclareInputs();
     const String& func_name = "plugin::" + node()->optype + "DynamicPlugin";
@@ -732,6 +752,14 @@ class TensorRTPluginOpCodeGen : public TensorRTOpCode {
     }
     stack_.call_arg(layouts_ref);
     stack_.op_call().call_arg(input_ref).call_arg(plugin->inputs.size()).call_arg(plugin_ref);
+    */
+    const auto& producer = node()->ParentAt(0);
+    ICHECK(producer->optype == "plugin_def")
+        << "Only support tensorrt plugin with plugin_def, get " << producer;
+    stack_.op_call()
+        .call_arg("inputs_" + std::to_string(producer->index))
+        .call_arg(producer->inputs.size())
+        .call_arg(IdxNodeBase(producer));
   }
 };
 
@@ -823,6 +851,7 @@ GetTensorRTOpCodes() {
   map->emplace("input", std::make_shared<TensorRTInputCodeGen>("Input"));
   map->emplace("get_item", std::make_shared<TensorRTGetItemCodeGen>(""));
   map->emplace("tuple", std::make_shared<TensorRTTupleCodeGen>(""));
+  map->emplace("plugin_def", std::make_shared<TensorRTPluginDefCodeGen>(""));
   map->emplace("plugin", std::make_shared<TensorRTPluginOpCodeGen>("PluginV2"));
 
   // msc ops

@@ -108,7 +108,7 @@ class ShapeBinder : public ExprMutator {
     }
     if (!has_inline) {
       ExprMutator::VisitBinding_(binding, call_node);
-    } else if (const auto* op_node = call_node->op.as<OpNode>()) {
+    } else if (call_node->op->IsInstance<OpNode>()) {
       const auto& new_call =
           Call(call_node->op, new_args, call_node->attrs, call_node->sinfo_args, call_node->span);
       ReEmitBinding(binding, builder_->Normalize(new_call));

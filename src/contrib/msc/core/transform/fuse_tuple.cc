@@ -165,10 +165,16 @@ class TupleFuser : public ExprMutator {
     func_attrs.Set(msc_attr::kUnique, SpanUtils::GetAttr(expr->span, msc_attr::kName));
     if (const auto* call_node = binding->value.as<CallNode>()) {
       if (target_funcs_.count(call_node->op)) {
-        const auto& comp_opt =
-            target_funcs_[call_node->op]->GetAttr<runtime::String>(attr::kComposite);
+        const auto& func = target_funcs_[call_node->op];
+        const auto& comp_opt = func->GetAttr<runtime::String>(attr::kComposite);
         if (comp_opt.defined()) {
-          func_attrs.Set(msc_attr::kConsumerType, comp_opt.value());
+          if (StringUtils::EndsWith(comp_opt.value(), "plugin")) {
+            func_attrs.Set(tvm::relax::attr::kComposite, target_ + "plugin_def");
+            const auto& optype_opt = func->GetAttr<runtime::String>(msc_attr::kOptype);
+            func_attrs.Set(msc_attr::kConsumerType, optype_opt.value());
+          } else {
+            func_attrs.Set(msc_attr::kConsumerType, comp_opt.value());
+          }
         }
       }
     }
