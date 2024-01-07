@@ -54,6 +54,7 @@ class ShapeBinder : public ExprMutator {
       }
       if (func->IsInstance<FunctionNode>()) {
         Array<Var> new_params;
+        Array<String> attrs;
         for (const auto& p : Downcast<Function>(func)->params) {
           auto struct_info = GetStructInfo(p);
           if (struct_info->IsInstance<ShapeStructInfoNode>()) {
@@ -62,9 +63,23 @@ class ShapeBinder : public ExprMutator {
           if (struct_info->IsInstance<FuncStructInfoNode>()) {
             const auto& optype_opt = func->GetAttr<runtime::String>(msc_attr::kOptype);
             ICHECK(optype_opt.defined())
-                << "Cna not find attr " << msc_attr::kOptype << " form extern func";
+                << "Can not find attr " << msc_attr::kOptype << " form extern func";
             extern_types_.Set(p, optype_opt.value());
             continue;
+          }
+          if (const auto* tuple_info = struct_info.as<TupleStructInfoNode>()) {
+            Array<StructInfo> new_fields;
+            for (const auto& i : tuple_info->fields) {
+              if (i->IsInstance<TensorStructInfoNode>()) {
+                new_fields.push_back(i);
+              } else if (const auto& p_info = i.as<PrimStructInfoNode>()) {
+                ICHECK(p_info->value.defined()) << "PrimStructInfo with undefined prim value " << i;
+                attrs.push_back(StringUtils::ToString(p_info->value.value()));
+              }
+            }
+            if (new_fields.size() < tuple_info->fields.size()) {
+              p->struct_info_ = TupleStructInfo(new_fields, tuple_info->span);
+            }
           }
           new_params.push_back(p);
         }
@@ -72,8 +87,12 @@ class ShapeBinder : public ExprMutator {
           continue;
         }
         const auto& new_func = Downcast<Function>(VisitExpr(func));
+        Map<String, ObjectRef> func_attrs = new_func->attrs->dict;
+        if (attrs.size() > 0) {
+          func_attrs.Set(msc_attr::kOpattrs, attrs);
+        }
         auto updated_func = Function(new_params, new_func->body, new_func->ret_struct_info,
-                                     new_func->is_pure, new_func->attrs, new_func->span);
+                                     new_func->is_pure, DictAttrs(func_attrs), new_func->span);
         builder_->UpdateFunction(gv, updated_func);
       }
     }
@@ -102,6 +121,24 @@ class ShapeBinder : public ExprMutator {
         has_inline = true;
       } else if (call_node->op->IsInstance<GlobalVarNode>() && a->IsInstance<ShapeExprNode>()) {
         has_inline = true;
+      } else if (call_node->op->IsInstance<GlobalVarNode>() && a->IsInstance<TupleNode>()) {
+        const auto& tuple = Downcast<Tuple>(a);
+        Array<Expr> new_fields;
+        Array<StructInfo> new_infos;
+
+        for (const auto& f : tuple->fields) {
+          if (f->IsInstance<VarNode>()) {
+            new_fields.push_back(f);
+            new_infos.push_back(GetStructInfo(f));
+          }
+        }
+        if (new_fields.size() == tuple->fields.size()) {
+          new_args.push_back(a);
+        } else {
+          const auto& new_tuple = Tuple(new_fields, tuple->span);
+          new_tuple->struct_info_ = TupleStructInfo(new_infos);
+          new_args.push_back(new_tuple);
+        }
       } else {
         new_args.push_back(a);
       }

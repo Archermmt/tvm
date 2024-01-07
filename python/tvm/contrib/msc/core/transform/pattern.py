@@ -72,10 +72,12 @@ def msc_attrs_getter(
         for i in inputs:
             if i not in annotated_expr:
                 continue
-            layouts[msc_utils.get_expr_name(annotated_expr[i])] = msc_utils.get_expr_layout(
-                annotated_expr[i]
-            )
-        attrs[_ffi_api.ToAttrKey("input_layouts")] = layouts
+            in_name = msc_utils.get_expr_name(annotated_expr[i])
+            if not in_name:
+                continue
+            layouts[in_name] = msc_utils.get_expr_layout(annotated_expr[i])
+        if layouts:
+            attrs[_ffi_api.ToAttrKey("input_layouts")] = layouts
     return attrs
 
 

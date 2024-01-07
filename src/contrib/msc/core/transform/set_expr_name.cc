@@ -176,7 +176,7 @@ class RelaxExprNameSetter : public ExprVisitor {
         const auto& func = Downcast<ExternFunc>(val->args[0]);
         name_hint = func->global_symbol;
         optype = func->global_symbol;
-        const String& input_name = GetUniqueName(val->args[1], "plugin_def");
+        const String& input_name = GetUniqueName(val->args[1], "plugin_inputs");
         if (input_name != SpanUtils::GetAttr(val->args[1]->span, msc_attr::kName)) {
           val->args[1]->span = SpanUtils::SetAttr(val->args[1]->span, msc_attr::kName, input_name);
         }

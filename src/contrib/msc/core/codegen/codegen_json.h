@@ -78,7 +78,6 @@ class MSCJSONSerializer : public JSONSerializer {
     reader.Read(&config);
     ICHECK(config.graph_json.size() > 0) << "graph_json is needed to init MSCGraph";
     graph_ = MSCGraph(config.graph_json);
-    std::cout << "[TMINFO] has graph " << graph_ << std::endl;
     for (const auto& pair : config.options) {
       options_.Set(pair.first, pair.second);
     }

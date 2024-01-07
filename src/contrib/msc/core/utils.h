@@ -44,6 +44,8 @@ namespace msc_attr {
 constexpr const char* kName = "Name";
 /*! \brief Mark the optype for the expr. */
 constexpr const char* kOptype = "Optype";
+/*! \brief Mark the optype for the expr. */
+constexpr const char* kOpattrs = "Opattrs";
 /*! \brief Mark the layout for the expr. */
 constexpr const char* kLayout = "Layout";
 /*! \brief Mark the share reference for the expr. */

@@ -268,28 +268,29 @@ const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>
     layout = layouts_[node_name];
   }
 
-  // check if the op is plugin
-  Plugin plugin;
-  if (IsPlugin(optype) && Downcast<relax::Call>(expr)->args.size() == 2) {
-    plugin = GetPlugin(optype);
-  } else if (optype == "plugin_def") {
-    const auto& func = target_funcs_[Downcast<relax::Call>(expr)->op];
-    const auto& consumer_opt = func->GetAttr<runtime::String>(msc_attr::kConsumerType);
-    ICHECK(consumer_opt.defined())
-        << "Can not find " << msc_attr::kConsumerType << " from plugin input";
-    plugin = GetPlugin(consumer_opt.value());
-  }
+  // get plugin
+  const auto& plugin = IsPlugin(optype) ? GetPlugin(optype) : Plugin();
 
   // Extract normal attributes
   Map<String, String> attrs;
   if (plugin.defined()) {
-    const auto& args = GetPluginInputs(expr, optype);
-    for (size_t i = 0; i < plugin->attrs.size(); i++) {
-      const auto& val = args[plugin->inputs.size() + i];
-      attrs.Set(plugin->attrs[i]->name, StringUtils::ToString(val));
-    }
-    if (optype == "plugin_def") {
-      attrs.Set("plugin_type", plugin->name);
+    const auto& op = Downcast<relax::Call>(expr)->op;
+    if (target_funcs_.count(op)) {
+      const auto& opattrs_opt = target_funcs_[op]->GetAttr<Array<String>>(msc_attr::kOpattrs);
+      if (opattrs_opt.defined()) {
+        const auto& opattrs = opattrs_opt.value();
+        ICHECK_EQ(opattrs.size(), plugin->attrs.size())
+            << "opattrs " << opattrs << " size mismatch with " << plugin->attrs.size();
+        for (size_t i = 0; i < opattrs.size(); i++) {
+          attrs.Set(plugin->attrs[i]->name, opattrs[i]);
+        }
+      }
+    } else {
+      const auto& args = GetPluginInputs(expr);
+      for (size_t i = 0; i < plugin->attrs.size(); i++) {
+        const auto& val = args[plugin->inputs.size() + i];
+        attrs.Set(plugin->attrs[i]->name, StringUtils::ToString(val));
+      }
     }
   } else if (const auto* call_node = expr.as<relax::CallNode>()) {
     if (const auto* v_node = call_node->op.as<GlobalVarNode>()) {
@@ -350,11 +351,18 @@ const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>
   Array<String> input_names;
   Map<String, MSCTensor> node_weights;
   if (plugin.defined()) {
-    const auto& args = GetPluginInputs(expr, optype);
-    for (size_t i = 0; i < plugin->inputs.size(); i++) {
-      ICHECK(expr_tensor_map_.count(args[i])) << "Can not find plugin input " << args[i];
-      for (const auto& in_name : expr_tensor_map_[args[i]]) {
-        input_names.push_back(in_name);
+    const auto& call = Downcast<relax::Call>(expr);
+    if (call->args.size() == 1) {
+      ICHECK(expr_tensor_map_.count(call->args[0]))
+          << "Can not find tuple plugin input " << call->args[0];
+      input_names = expr_tensor_map_[call->args[0]];
+    } else {
+      const auto& args = GetPluginInputs(expr);
+      for (size_t i = 0; i < plugin->inputs.size(); i++) {
+        ICHECK(expr_tensor_map_.count(args[i])) << "Can not find plugin input " << args[i];
+        for (const auto& in_name : expr_tensor_map_[args[i]]) {
+          input_names.push_back(in_name);
+        }
       }
     }
   } else if (const auto* call_node = expr.as<relax::CallNode>()) {
@@ -442,7 +450,7 @@ const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>
   }
 
   // Redefine layout for special ops
-  if (optype == "tuple" || optype == "plugin_def") {
+  if (optype == "tuple") {
     layout = "";
     for (size_t i = 0; i < inputs.size(); i++) {
       const auto& in_tensor = Downcast<MSCJoint>(inputs[i].first)->OutputAt(inputs[i].second);
@@ -473,7 +481,7 @@ const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>
   Array<String> layouts = StringUtils::Split(layout, ",");
   size_t num_output = 1;
   if (const auto* tuple_sinfo = sinfo.as<relax::TupleStructInfoNode>()) {
-    num_output = optype == "plugin_def" ? plugin->outputs.size() : tuple_sinfo->fields.size();
+    num_output = tuple_sinfo->fields.size();
   }
   if (layouts.size() == 0) {
     layouts = Array<String>(num_output, "");
@@ -634,12 +642,9 @@ const std::tuple<String, String, String> RelaxGraphBuilder::ParseFunc(const rela
   return std::make_tuple(node_name, optype, layout);
 }
 
-Array<Expr> RelaxGraphBuilder::GetPluginInputs(const relax::Expr& expr, const String& optype) {
+Array<Expr> RelaxGraphBuilder::GetPluginInputs(const relax::Expr& expr) {
   ICHECK(expr->IsInstance<relax::CallNode>()) << "plugin expr should be call";
   const auto& call = Downcast<relax::Call>(expr);
-  if (optype == "plugin_def") {
-    return call->args;
-  }
   ICHECK(call->args[1]->IsInstance<relax::TupleNode>()) << "plugin argument 1 should be call";
   return Downcast<relax::Tuple>(call->args[1])->fields;
 }

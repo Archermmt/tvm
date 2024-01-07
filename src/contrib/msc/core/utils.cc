@@ -85,6 +85,9 @@ const String CommonUtils::ToAttrKey(const String& key) {
   if (key == "optype") {
     return msc_attr::kOptype;
   }
+  if (key == "op_attrs") {
+    return msc_attr::kOpattrs;
+  }
   if (key == "layout") {
     return msc_attr::kLayout;
   }
