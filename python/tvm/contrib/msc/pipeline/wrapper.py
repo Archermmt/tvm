@@ -24,17 +24,17 @@ from tvm.contrib.msc.core import utils as msc_utils
 from .manager import MSCManager
 
 
-def config_pruner(prune_strategy: Union[dict, str], gym_strategy: Union[dict, str], run_type: str):
+def config_pruner(prune_style: Union[dict, str], gym_style: Union[dict, str], run_type: str):
     """Get the prune config
 
     Parameters
     ----------
-    prune_strategy: dict/str
-        The strategy type or config.
-    gym_strategy: dict/str
-        The gym type or config.
+    prune_style: dict/str
+        The prune config dict or style.
+    gym_style: dict/str
+        The gym config dict or style.
     run_type: str
-        The runtime type for quantizer.
+        The runtime type.
 
     Returns
     -------
@@ -42,20 +42,20 @@ def config_pruner(prune_strategy: Union[dict, str], gym_strategy: Union[dict, st
         The prune config.
     """
 
-    if isinstance(prune_strategy, dict):
-        config = prune_strategy
-    elif prune_strategy == "default":
+    if isinstance(prune_style, dict):
+        config = prune_style
+    elif prune_style == "default":
         config = {
             "plan_file": "msc_pruner.json",
             "strategys": [{"method": "per_channel", "density": 0.8}],
         }
     else:
-        raise TypeError("Unexpected prune strategy " + str(prune_strategy))
+        raise TypeError("Unexpected prune strategy " + str(prune_style))
 
-    if gym_strategy:
-        if isinstance(gym_strategy, list):
-            config["gym_configs"] = gym_strategy
-        elif gym_strategy == "default":
+    if gym_style:
+        if isinstance(gym_style, list):
+            config["gym_configs"] = gym_style
+        elif gym_style == "default":
             config["gym_configs"] = (
                 [
                     {
@@ -74,23 +74,21 @@ def config_pruner(prune_strategy: Union[dict, str], gym_strategy: Union[dict, st
                 ],
             )
         else:
-            raise TypeError("Unexpected gym strategy " + str(gym_strategy))
+            raise TypeError("Unexpected gym strategy " + str(gym_style))
     return config
 
 
-def config_quantizer(
-    quantize_strategy: Union[dict, str], gym_strategy: Union[dict, str], run_type: str
-):
+def config_quantizer(quantize_style: Union[dict, str], gym_style: Union[dict, str], run_type: str):
     """Get the quantize config
 
     Parameters
     ----------
-    quantize_strategy: dict/str
-        The strategy type or config.
-    gym_strategy: dict/str
-        The gym type or config.
+    quantize_style: dict/str
+        The quantize config dict or style.
+    gym_style: dict/str
+        The gym config dict or style.
     run_type: str
-        The runtime type for quantizer.
+        The runtime type.
 
     Returns
     -------
@@ -98,9 +96,9 @@ def config_quantizer(
         The quantize config.
     """
 
-    if isinstance(quantize_strategy, dict):
-        config = quantize_strategy
-    elif quantize_strategy == "default":
+    if isinstance(quantize_style, dict):
+        config = quantize_style
+    elif quantize_style == "default":
         # pylint: disable=import-outside-toplevel
         from tvm.contrib.msc.core.tools.quantize import QuantizeStage
 
@@ -141,12 +139,12 @@ def config_quantizer(
                 ],
             }
     else:
-        raise TypeError("Unexpected quantize strategy " + str(quantize_strategy))
+        raise TypeError("Unexpected quantize strategy " + str(quantize_style))
 
-    if gym_strategy:
-        if isinstance(gym_strategy, list):
-            config["gym_configs"] = gym_strategy
-        elif gym_strategy == "default":
+    if gym_style:
+        if isinstance(gym_style, list):
+            config["gym_configs"] = gym_style
+        elif gym_style == "default":
             config["gym_configs"] = (
                 [
                     {
@@ -165,29 +163,29 @@ def config_quantizer(
                 ],
             )
         else:
-            raise TypeError("Unexpected gym strategy " + str(gym_strategy))
+            raise TypeError("Unexpected gym strategy " + str(gym_style))
     return config
 
 
-def config_tracker(track_strategy: Union[dict, str], run_type: str):
+def config_tracker(track_style: Union[dict, str], run_type: str):
     """Get the track config
 
     Parameters
     ----------
-    track_strategy: dict/str
-        The strategy type or config.
+    track_style: dict/str
+        The track config dict or style.
     run_type: str
-        The runtime type for quantizer.
+        The runtime type.
 
     Returns
     -------
     config: dict
-        The prune config.
+        The track config.
     """
 
-    if isinstance(track_strategy, dict):
-        return track_strategy
-    if track_strategy == "default":
+    if isinstance(track_style, dict):
+        return track_style
+    if track_style == "default":
         return {
             "plan_file": "msc_tracker.json",
             "strategys": [
@@ -202,7 +200,38 @@ def config_tracker(track_strategy: Union[dict, str], run_type: str):
                 }
             ],
         }
-    raise TypeError("Unexpected track strategy " + str(track_strategy))
+    raise TypeError("Unexpected track strategy " + str(track_style))
+
+
+def config_distiller(distill_style: Union[dict, str], run_type: str):
+    """Get the distill config
+
+    Parameters
+    ----------
+    distill_style: dict/str
+        The distill config dict or style..
+    run_type: str
+        The runtime type.
+
+    Returns
+    -------
+    config: dict
+        The distill config.
+    """
+
+    if isinstance(distill_style, dict):
+        return distill_style
+    if distill_style == "default":
+        return {
+            "plan_file": "msc_distiller.json",
+            "strategys": [
+                {
+                    "method": "loss_lp_norm",
+                    "op_types": ["loss"],
+                },
+            ],
+        }
+    raise TypeError("Unexpected distill strategy " + str(distill_style))
 
 
 class BaseWrapper(object):
@@ -212,33 +241,62 @@ class BaseWrapper(object):
     ----------
     model: Any
         The raw model in framwork.
-    config: dict
-        The config for pipeline.
-    plugins: dict
-        The plugins fro pipeline.
+    compile_type: str
+        The compile type.
+    optimize_type: str
+        The optimize type.
+    dataset: callable
+        The data loading method.
+    max_batch: int
+        The max data batch.
+    inputs: list<dict>
+        The inputs info,
+    outputs: list<str>
+        The output names.
+    prune_style: dict/str
+        The prune config or style.
+    quantize_style: dict/str
+        The quantize config or style.
+    track_style: dict/str
+        The track config or style.
+    distill_style: dict/str
+        The distill config or style.
+    gym_styles: dict<str, dict/str>
+        The gym configs for tools.
+    profile_strategys: dict<str, dict/str>
+        The profile configs for tools.
+    workspace: str
+        The workspace.
+    debug_leve: int
+        The debug level.
+    verbose: str
+        The verbose level.
+    extra_config: dict
+        The extra config.
     """
 
     def __init__(
         self,
         model: Any,
+        inputs: List[dict],
+        outputs: List[str],
         compile_type: str,
         optimize_type: str = None,
         dataset: Union[callable, str] = None,
         max_batch: int = -1,
-        inputs: List[dict] = None,
-        outputs: List[str] = None,
-        prune_strategy: Union[dict, str] = None,
-        quantize_strategy: Union[dict, str] = None,
-        track_strategy: Union[dict, str] = None,
-        distill_strategy: Union[dict, str] = None,
-        gym_strategys: Dict[str, Union[dict, str]] = None,
+        prune_style: Union[dict, str] = None,
+        quantize_style: Union[dict, str] = None,
+        track_style: Union[dict, str] = None,
+        distill_style: Union[dict, str] = None,
+        gym_styles: Dict[str, Union[dict, str]] = None,
+        profile_strategys: Dict[str, Union[dict, str]] = None,
         workspace: str = "msc_workspace",
         debug_level: int = 0,
         verbose: str = "info",
-        profile_strategy: Dict[str, Union[dict, str]] = None,
         **extra_config,
     ):
-        print("wrap the model " + str(model))
+        self._meta_model = model
+        self._optimized_model, self._compiled_model = None, None
         self._config = {
             "workspace": workspace,
             "debug_level": debug_level,
@@ -257,25 +315,101 @@ class BaseWrapper(object):
                 "profile": {"check": {"atol": 1e-3, "rtol": 1e-3}, "benchmark": {"repeat": 10}},
             },
         }
+        # config optimize
         tools_config = {}
         optimize_type = optimize_type or self.model_type
-        if prune_strategy:
+        if prune_style:
             tools_config[ToolType.PRUNER] = config_pruner(
-                prune_strategy, gym_strategys.get(ToolType.PRUNER), optimize_type
+                prune_style, gym_styles.get(ToolType.PRUNER), optimize_type
             )
-        if quantize_strategy:
+        if quantize_style:
             tools_config[ToolType.QUANTIZER] = config_quantizer(
-                quantize_strategy, gym_strategys.get(ToolType.QUANTIZER), optimize_type
+                quantize_style, gym_styles.get(ToolType.QUANTIZER), optimize_type
             )
-        if track_strategy:
-            tools_config[ToolType.TRACKER] = config_tracker(track_strategy, optimize_type)
+        if track_style:
+            tools_config[ToolType.TRACKER] = config_tracker(track_style, optimize_type)
+        if distill_style:
+            tools_config[ToolType.DISTILLER] = config_distiller(distill_style, optimize_type)
+        if tools_config:
+            self._config["optimize"] = {
+                "run_type": optimize_type,
+                "profile": {"check": {"atol": 1e-3, "rtol": 1e-3}, "benchmark": {"repeat": 10}},
+                **tools_config,
+            }
+        # update profile
+        if profile_strategys:
+            for stage, config in profile_strategys.items():
+                if stage not in self._config:
+                    continue
+                self._config[stage]["profile"].update(config)
+        if extra_config:
+            self._config = msc_utils.update_dict(self._config, extra_config)
+        self.setup()
 
-        self._compile_type = compile_type
-        self._dataset = dataset
-        self._inputs = inputs
-        self._outputs = outputs
-        self._optimize_type = optimize_type or self.model_type
+    def __str__(self):
+        if self.compiled:
+            phase = "compiled"
+        elif self.optimized:
+            phase = "optimized"
+        else:
+            phase = "meta"
+        return "({}) {}".format(phase, self._get_model().__str__())
+
+    def setup(self):
+        """Setup the wrapper"""
+
+        pass
+
+    def export(self, path: str = None):
+        """Export the model to path
+
+        Parameters
+        ----------
+        path: str
+            The export targ path.
+        """
+
+        path = path or "msc_export.tar.gz"
+        with msc_utils.msc_dir(path.split(".")[0]) as folder:
+            self._config["model"] = self.dump_model(self._get_model(), folder)
+
+    def dump_model(self, model: Any, folder: msc_utils.MSCDirectory) -> str:
+        """Dump the model
+
+        Parameters
+        ----------
+        model: Any
+            The model of wrapper.
+        folder: msc_utils.MSCDirectory
+            The dump folder.
+
+        Returns
+        -------
+        path: str
+            The dumped model path.
+        """
+
+        raise NotImplementedError("dump_model is not implemented for meta model in BaseWrapper")
+
+    def _get_model(self) -> Any:
+        return self._compiled_model or self._optimized_model or self._meta_model
+
+    @property
+    def optimized(self):
+        return self._optimized_model is not None
+
+    @property
+    def compiled(self):
+        return self._compiled_model is not None
 
     @property
     def model_type(self):
         return MSCFramework.MSC
+
+
+class TorchWrapper(object):
+    """Wrapper of torch models"""
+
+    @property
+    def model_type(self):
+        return MSCFramework.TORCH

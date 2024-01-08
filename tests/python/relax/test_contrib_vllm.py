@@ -22,6 +22,7 @@ import tvm
 from tvm import relax
 from tvm.script import ir as I
 from tvm.script import relax as R
+from tvm.script import tir as T
 
 
 has_vllm = tvm.get_global_func("tvm.contrib.vllm.single_query_cached_kv_attention", True)
@@ -59,7 +60,7 @@ def build_and_run(mod, inputs_np, target, legalize=True):
 
 def test_attention():
     @I.ir_module
-    class Module:
+    class ModulePagedAttentionV1:
         I.module_global_infos(
             {
                 "vdevice": [
@@ -73,23 +74,66 @@ def test_attention():
             query: R.Tensor(("num_seqs", 1, 64), dtype="float16"),
             key_cache: R.Tensor(("num_blocks", 1, 8, 16, 8), dtype="float16"),
             value_cache: R.Tensor(("num_blocks", 1, 64, 16), dtype="float16"),
-            head_mapping: R.Tensor((1,), dtype="int32"),
             block_tables: R.Tensor(("num_seqs", "max_num_blocks_per_seq"), dtype="int32"),
             context_lens: R.Tensor(("num_seqs",), dtype="int32"),
         ) -> R.Tensor(("num_seqs", 1, 64), dtype="float16"):
             with R.dataflow():
                 max_len = R.to_vdevice(R.max(context_lens), "llvm:0")
                 out = R.call_dps_packed(
-                    "tvm.contrib.vllm.single_query_cached_kv_attention",
+                    "tvm.contrib.vllm.single_query_cached_kv_attention_v1",
                     [
                         query,
                         key_cache,
                         value_cache,
-                        head_mapping,
                         block_tables,
                         context_lens,
                         16,
                         max_len,
+                    ],
+                    out_sinfo=query.struct_info,
+                )
+                R.output(out)
+            return out
+
+    @I.ir_module
+    class ModulePagedAttentionV2:
+        I.module_global_infos(
+            {
+                "vdevice": [
+                    I.vdevice("llvm"),
+                ]
+            }
+        )
+
+        @R.function
+        def main(
+            query: R.Tensor(("num_seqs", 1, 64), dtype="float16"),
+            key_cache: R.Tensor(("num_blocks", 1, 8, 16, 8), dtype="float16"),
+            value_cache: R.Tensor(("num_blocks", 1, 64, 16), dtype="float16"),
+            block_tables: R.Tensor(("num_seqs", "max_num_blocks_per_seq"), dtype="int32"),
+            context_lens: R.Tensor(("num_seqs",), dtype="int32"),
+        ) -> R.Tensor(("num_seqs", 1, 64), dtype="float16"):
+            with R.dataflow():
+                num_seqs = T.int64()
+                max_len = R.to_vdevice(R.max(context_lens), "llvm:0")
+                # alloc workspace
+                exp_sums = R.zeros((num_seqs, 1, 1), "float32")
+                max_logits = R.zeros((num_seqs, 1, 1), "float32")
+                tmp_out = R.zeros((num_seqs, 1, 1, 64), "float16")
+
+                out = R.call_dps_packed(
+                    "tvm.contrib.vllm.single_query_cached_kv_attention_v2",
+                    [
+                        query,
+                        key_cache,
+                        value_cache,
+                        block_tables,
+                        context_lens,
+                        16,
+                        max_len,
+                        exp_sums,
+                        max_logits,
+                        tmp_out,
                     ],
                     out_sinfo=query.struct_info,
                 )
@@ -109,12 +153,18 @@ def test_attention():
     ).astype("float16")
     value_cache = np.random.randn(num_blocks, num_heads, head_dim, block_size).astype("float16")
     block_tables = np.array([[0], [0]]).astype("int32")
-    head_mapping = np.array([0]).astype("int32")
     context_lens = np.array([3, 5]).astype("int32")
 
-    out = build_and_run(
-        Module,
-        [query, key_cache, value_cache, head_mapping, block_tables, context_lens],
+    out_v1 = build_and_run(
+        ModulePagedAttentionV1,
+        [query, key_cache, value_cache, block_tables, context_lens],
+        "cuda",
+        legalize=True,
+    )
+
+    out_v2 = build_and_run(
+        ModulePagedAttentionV2,
+        [query, key_cache, value_cache, block_tables, context_lens],
         "cuda",
         legalize=True,
     )
@@ -272,7 +322,7 @@ def test_attention():
     #     to_torch(query),
     #     to_torch(key_cache),
     #     to_torch(value_cache),
-    #     to_torch(head_mapping),
+    #     num_kv_heads,
     #     query.shape[-1] ** -0.5,  # scale
     #     to_torch(block_tables),
     #     to_torch(context_lens),
@@ -284,7 +334,8 @@ def test_attention():
 
     # print(ref.tolist())
 
-    assert np.max(np.abs(ref - out)) == 0.0
+    for out in [out_v1, out_v2]:
+        assert np.max(np.abs(ref - out)) == 0.0
 
 
 def test_cache():
