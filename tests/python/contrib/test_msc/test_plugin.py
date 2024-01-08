@@ -297,6 +297,8 @@ def _test_with_manager(plugins, compile_type, expected_info):
 
     path = "test_plugin_" + compile_type
     model = _get_torch_model(plugins[MSCFramework.TORCH])
+    if torch.cuda.is_available():
+        model = model.to(torch.device("cuda:0"))
     config = {
         "workspace": msc_utils.msc_dir(path),
         "model_type": MSCFramework.TORCH,
@@ -377,12 +379,19 @@ def test_plugin_cuda():
     _test_with_manager(managers, MSCFramework.TORCH, model_info)
     _test_with_manager(managers, MSCFramework.TVM, model_info)
     if tvm.get_global_func("relax.ext.tensorrt", True) is not None:
-        byoc_info = {}
+        byoc_info = {
+            "inputs": [
+                {"name": "input_0", "shape": [1, 3, 224, 224], "dtype": "float32", "layout": "NCHW"}
+            ],
+            "outputs": [
+                {"name": "output", "shape": [1, 6, 218, 218], "dtype": "float32", "layout": ""}
+            ],
+            "nodes": {"total": 2, "input": 1, "msc_tensorrt": 1},
+        }
         _test_with_manager(managers, MSCFramework.TENSORRT, byoc_info)
 
     plugin_root.destory()
 
 
 if __name__ == "__main__":
-    # tvm.testing.main()
-    test_plugin_cpu()
+    tvm.testing.main()

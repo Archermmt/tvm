@@ -73,15 +73,15 @@ const String TensorRTOpCode::DeclareInputs(bool simplify) {
     const auto& idx_input = StringUtils::Replace(IdxInput(), "*", "");
     stack_.declare("std::vector<ITensor*>", inputs_ref + "_vec")
         .declare_arg(node()->inputs.size())
-        .declare_arg(idx_input)
-        .assign(inputs_ref, inputs_ref + "_vec.data()", "ITensor**");
+        .declare_arg(idx_input);
   } else {
-    stack_.declare("std::vector<ITensor*>", IdxNode(), 0, false);
+    stack_.declare("std::vector<ITensor*>", inputs_ref + "_vec", 0, false);
     for (size_t i = 0; i < node()->inputs.size(); i++) {
       const auto& idx_input = StringUtils::Replace(IdxInput(i), "*", "");
       stack_.declare_arg(idx_input);
     }
   }
+  stack_.assign(inputs_ref, inputs_ref + "_vec.data()", "ITensor**");
   return inputs_ref;
 }
 
@@ -678,7 +678,10 @@ class TensorRTTupleCodeGen : public TensorRTOpCode {
   TENSORRT_OP_CODEGEN_METHODS(TensorRTTupleCodeGen)
 
  protected:
-  void CodeGenBuild() final { DeclareInputs(); }
+  void CodeGenBuild() final {
+    const auto& inputs_ref = DeclareInputs();
+    stack_.assign(IdxNode(), inputs_ref, "auto");
+  }
 };
 
 class TensorRTUnaryCodeGen : public TensorRTOpCode {
