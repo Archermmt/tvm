@@ -23,18 +23,38 @@ https://discuss.tvm.apache.org/t/rfc-unity-msc-introduction-to-multi-system-comp
 
 import argparse
 import torch
+from torchvision.models import resnet50, ResNet50_Weights
 import torch.optim as optim
 
+from utils import *
+
 parser = argparse.ArgumentParser(description="Qauntizer example")
-parser.add_argument("--dataset", type=str, help="The folder saving training and testing datas")
+parser.add_argument(
+    "--dataset",
+    type=str,
+    default="/tmp/msc_dataset",
+    help="The folder saving training and testing datas",
+)
 parser.add_argument("--compile_type", type=str, default="tvm", help="The compile type of model")
 parser.add_argument("--distill", action="store_true", help="Whether to use distiller for quantize")
 parser.add_argument("--gym", action="store_true", help="Whether to use gym for quantize")
 parser.add_argument("--test_batch", type=int, default=1, help="The batch size for test")
-parser.add_argument("--test_iter", type=int, default=-1, help="The iter for test")
+parser.add_argument("--test_iter", type=int, default=5, help="The iter for test")
 parser.add_argument("--train_batch", type=int, default=32, help="The batch size for train")
-parser.add_argument("--train_iter", type=int, default=-1, help="The iter for train")
+parser.add_argument("--train_iter", type=int, default=5, help="The iter for train")
+args = parser.parse_args()
+
 
 if __name__ == "__main__":
-    print("testing the quantizer")
-    model = torch
+    trainloader, testloader = get_dataloaders(args.dataset, args.train_batch, args.test_batch)
+
+    def _get_datas():
+        for i, (inputs, _) in enumerate(testloader, 0):
+            if i >= args.test_iter > 0:
+                break
+            yield {"input": inputs.detach().cpu().numpy()}
+
+    model = resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
+    print("model " + str(model))
+    acc = run_torch_model(model, testloader, max_iter=args.test_iter)
+    print("Baseline acc " + str(acc))

@@ -210,7 +210,8 @@ class BaseManager(object):
         source_loader = self._config["dataset"].get("loader")
         max_batch = self._config["dataset"].get("max_batch", 5)
         assert source_loader, "Dataset loader should be given for msc pipeline"
-        if source_loader.startswith("from_random"):
+        if source_loader == "from_random":
+            max_batch = max(max_batch, 5)
 
             def get_random():
                 for _ in range(max_batch):
@@ -228,7 +229,7 @@ class BaseManager(object):
 
             def get_source():
                 for idx, inputs in enumerate(source_loader()):
-                    if idx >= max_batch:
+                    if idx >= max_batch > 0:
                         break
                     yield inputs
 

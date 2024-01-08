@@ -24,10 +24,8 @@ from torch import nn
 import torchvision
 import torchvision.transforms as transforms
 
-import tvm
 
-
-def get_dataloaders(path, batch_size=1, dataset="cifar10"):
+def get_dataloaders(path, train_batch=32, test_batch=1, dataset="cifar10"):
     """Get the data loaders for torch process"""
 
     if dataset == "cifar10":
@@ -54,10 +52,10 @@ def get_dataloaders(path, batch_size=1, dataset="cifar10"):
             root=path, train=False, download=True, transform=test_transform
         )
         trainloader = torch.utils.data.DataLoader(
-            trainset, batch_size=batch_size, shuffle=True, num_workers=2
+            trainset, batch_size=train_batch, shuffle=True, num_workers=2
         )
         testloader = torch.utils.data.DataLoader(
-            testset, batch_size=batch_size, shuffle=False, num_workers=2
+            testset, batch_size=test_batch, shuffle=False, num_workers=2
         )
         return trainloader, testloader
     raise Exception("Unexpected dataset " + str(dataset))

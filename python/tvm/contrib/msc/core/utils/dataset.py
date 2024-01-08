@@ -501,6 +501,8 @@ class IODataSaver(BaseDataSaver):
 def is_io_dataset(folder: str) -> bool:
     """Check if a folder is IO dataset"""
 
+    if not isinstance(folder, str):
+        return False
     if not os.path.isfile(os.path.join(folder, "datas_info.json")):
         return False
     data_info = load_dict(os.path.join(folder, "datas_info.json"))
