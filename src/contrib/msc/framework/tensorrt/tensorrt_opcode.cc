@@ -298,10 +298,7 @@ class TensorRTConcatCodeGen : public TensorRTOpCode {
     const auto& producer = node()->ProducerOf(0);
     ICHECK(node()->parents.size() == 1 && producer->optype == "tuple")
         << "Concat expect parent as tuple, get " << node();
-    stack_.op_call()
-        .inplace_start("data", "", IdxNodeBase(producer))
-        .inplace_end()
-        .call_arg(producer->inputs.size());
+    stack_.op_call().call_arg(IdxNodeBase(producer)).call_arg(producer->inputs.size());
     SetLayerByValue("Axis", AttrToAxis());
   }
 };

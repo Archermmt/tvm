@@ -359,7 +359,7 @@ def test_plugin_cuda():
     frameworks = [MSCFramework.TORCH, MSCFramework.TVM]
     if tvm.get_global_func("relax.ext.tensorrt", True) is not None:
         frameworks.append(MSCFramework.TENSORRT)
-    plugin_root = msc_utils.msc_dir("msc_plugin_gpu")
+    plugin_root = msc_utils.msc_dir("msc_plugin_cuda")
     managers = _build_plugin(frameworks, plugin_root)
 
     # test the plugin load
