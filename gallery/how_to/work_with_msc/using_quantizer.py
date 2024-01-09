@@ -26,6 +26,7 @@ import torch
 from torchvision.models import resnet50, ResNet50_Weights
 import torch.optim as optim
 
+from tvm.contrib.msc.pipeline import TorchWrapper
 from utils import *
 
 parser = argparse.ArgumentParser(description="Qauntizer example")
@@ -58,3 +59,14 @@ if __name__ == "__main__":
     print("model " + str(model))
     acc = run_torch_model(model, testloader, max_iter=args.test_iter)
     print("Baseline acc " + str(acc))
+
+    model = TorchWrapper(
+        model,
+        inputs=[{"name": "input", "shape": [1, 3, 32, 32], "dtype": "float32"}],
+        outputs=["output"],
+        compile_type=args.compile_type,
+        dataloader=_get_datas(),
+    )
+    model.optimize()
+    acc = run_torch_model(model, testloader, max_iter=args.test_iter)
+    print("Optimized acc " + str(acc))

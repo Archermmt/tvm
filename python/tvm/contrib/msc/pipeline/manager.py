@@ -44,7 +44,7 @@ class BaseManager(object):
     config: dict
         The config for pipeline.
     plugins: dict
-        The plugins fro pipeline.
+        The plugins for pipeline.
     """
 
     def __init__(self, model: Any, config: dict, plugins: dict = None):

@@ -28,6 +28,31 @@ from .namespace import MSCMap, MSCKey, MSCFramework
 from .register import get_registered_func
 
 
+def is_callable(name: str, framework: str = MSCFramework.MSC) -> bool:
+    """Check if name is callable.
+
+    Parameters
+    ----------
+    name: string
+        The name of the registered func or path:f_name str.
+    framework: string
+        Should be from MSCFramework.
+
+    Returns
+    -------
+    is_callable: bool
+        Whether the name is callable
+    """
+
+    func = get_registered_func(name, framework)
+    if func:
+        return True
+    if ".py:" in name:
+        path, _ = name.split(":")
+        return os.path.isfile(path)
+    return False
+
+
 def load_callable(name: str, framework: str = MSCFramework.MSC) -> callable:
     """Load a callable  object.
 

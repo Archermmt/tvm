@@ -265,6 +265,8 @@ class BaseWrapper(object):
         The gym configs for tools.
     profile_strategys: dict<str, dict/str>
         The profile configs for tools.
+    plugins: dict
+        The plugins for pipeline.
     workspace: str
         The workspace.
     debug_leve: int
@@ -282,7 +284,7 @@ class BaseWrapper(object):
         outputs: List[str],
         compile_type: str,
         optimize_type: str = None,
-        dataset: Union[callable, str] = None,
+        dataloader: Union[callable, str] = None,
         max_batch: int = -1,
         prune_style: Union[dict, str] = None,
         quantize_style: Union[dict, str] = None,
@@ -290,6 +292,7 @@ class BaseWrapper(object):
         distill_style: Union[dict, str] = None,
         gym_styles: Dict[str, Union[dict, str]] = None,
         profile_strategys: Dict[str, Union[dict, str]] = None,
+        plugins: dict = None,
         workspace: str = "msc_workspace",
         debug_level: int = 0,
         verbose: str = "info",
@@ -297,6 +300,12 @@ class BaseWrapper(object):
     ):
         self._meta_model = model
         self._optimized_model, self._compiled_model = None, None
+        self._dataloader = dataloader
+        self._max_batch = max_batch
+        self._compile_type = compile_type
+        optimize_type = optimize_type or self.model_type
+        self._plugins = plugins
+        self._manager = None
         self._config = {
             "workspace": workspace,
             "debug_level": debug_level,
@@ -304,10 +313,14 @@ class BaseWrapper(object):
             "model_type": self.model_type,
             "inputs": inputs,
             "outputs": outputs,
-            "dataset": {"loader": dataset or "from_random", "max_batch": max_batch},
+            "dataset": {"loader": dataloader or "from_random", "max_batch": max_batch},
             "prepare": {"profile": {"benchmark": {"repeat": 10}}},
             "baseline": {
                 "run_type": self.model_type,
+                "profile": {"check": {"atol": 1e-3, "rtol": 1e-3}, "benchmark": {"repeat": 10}},
+            },
+            "optimize": {
+                "run_type": optimize_type,
                 "profile": {"check": {"atol": 1e-3, "rtol": 1e-3}, "benchmark": {"repeat": 10}},
             },
             "compile": {
@@ -317,7 +330,6 @@ class BaseWrapper(object):
         }
         # config optimize
         tools_config = {}
-        optimize_type = optimize_type or self.model_type
         if prune_style:
             tools_config[ToolType.PRUNER] = config_pruner(
                 prune_style, gym_styles.get(ToolType.PRUNER), optimize_type
@@ -331,11 +343,7 @@ class BaseWrapper(object):
         if distill_style:
             tools_config[ToolType.DISTILLER] = config_distiller(distill_style, optimize_type)
         if tools_config:
-            self._config["optimize"] = {
-                "run_type": optimize_type,
-                "profile": {"check": {"atol": 1e-3, "rtol": 1e-3}, "benchmark": {"repeat": 10}},
-                **tools_config,
-            }
+            self._config["optimize"].update(**tools_config)
         # update profile
         if profile_strategys:
             for stage, config in profile_strategys.items():
@@ -360,36 +368,9 @@ class BaseWrapper(object):
 
         pass
 
-    def export(self, path: str = None):
-        """Export the model to path
-
-        Parameters
-        ----------
-        path: str
-            The export targ path.
-        """
-
-        path = path or "msc_export.tar.gz"
-        with msc_utils.msc_dir(path.split(".")[0]) as folder:
-            self._config["model"] = self.dump_model(self._get_model(), folder)
-
-    def dump_model(self, model: Any, folder: msc_utils.MSCDirectory) -> str:
-        """Dump the model
-
-        Parameters
-        ----------
-        model: Any
-            The model of wrapper.
-        folder: msc_utils.MSCDirectory
-            The dump folder.
-
-        Returns
-        -------
-        path: str
-            The dumped model path.
-        """
-
-        raise NotImplementedError("dump_model is not implemented for meta model in BaseWrapper")
+    def _create_manager(self):
+        if not self._manager:
+            self._manager = MSCManager(self._get_model(), self._config, self._plugins)
 
     def _get_model(self) -> Any:
         return self._compiled_model or self._optimized_model or self._meta_model
