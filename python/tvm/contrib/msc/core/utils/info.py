@@ -377,7 +377,18 @@ def copy_dict(dict_obj: dict) -> dict:
 
     if not dict_obj:
         return {}
-    return copy.deepcopy(dict_obj)
+    try:
+        return copy.deepcopy(dict_obj)
+    except:
+        new_obj = {}
+        for k, v in dict_obj.items():
+            if isinstance(v, (list, tuple)):
+                new_obj[k] = [copy_dict(e) for e in v]
+            elif isinstance(v, dict):
+                new_obj[k] = copy_dict(v)
+            else:
+                new_obj[k] = v
+        return new_obj
 
 
 def get_version(framework: str) -> List[int]:

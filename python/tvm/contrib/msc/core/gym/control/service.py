@@ -149,10 +149,8 @@ class BaseService(object):
         The max seatch iter.
     record_step: int
         The record step.
-    debug_level: int
-        The debug level
     verbose: str
-        The verbose level.
+        The verbose level
     """
 
     def __init__(
@@ -170,15 +168,13 @@ class BaseService(object):
     ):
         self._workspace = workspace
         tasks = tasks or [GYMObject.ENV + ":0", GYMObject.AGENT + ":0"]
-        if not verbose:
-            verbose = "debug" if debug_level > 0 else "info"
+        verbose = verbose or "info"
+        debug_level = int(verbose.spilt(":")[1]) if verbose.startswith("debug:") else 0
         self._logger = msc_utils.create_file_logger(verbose, self._workspace.relpath("SERVICE_LOG"))
 
         def _create_workers(config: dict, obj_type: str) -> List[BaseWorker]:
             if "debug_level" not in config:
                 config["debug_level"] = debug_level
-            if "verbose" not in config:
-                config["verbose"] = verbose
             if "logger" not in config:
                 config["logger"] = self._logger
             return [

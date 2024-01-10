@@ -24,214 +24,14 @@ from tvm.contrib.msc.core import utils as msc_utils
 from .manager import MSCManager
 
 
-def config_pruner(prune_style: Union[dict, str], gym_style: Union[dict, str], run_type: str):
-    """Get the prune config
-
-    Parameters
-    ----------
-    prune_style: dict/str
-        The prune config dict or style.
-    gym_style: dict/str
-        The gym config dict or style.
-    run_type: str
-        The runtime type.
-
-    Returns
-    -------
-    config: dict
-        The prune config.
-    """
-
-    if isinstance(prune_style, dict):
-        config = prune_style
-    elif prune_style == "default":
-        config = {
-            "plan_file": "msc_pruner.json",
-            "strategys": [{"method": "per_channel", "density": 0.8}],
-        }
+def config_tool(tool_type, raw_config, **kwargs):
+    if isinstance(raw_config, dict):
+        tool_style = raw_config.get("tool_style", "default")
     else:
-        raise TypeError("Unexpected prune strategy " + str(prune_style))
-
-    if gym_style:
-        if isinstance(gym_style, list):
-            config["gym_configs"] = gym_style
-        elif gym_style == "default":
-            config["gym_configs"] = (
-                [
-                    {
-                        "env": {
-                            "executors": {
-                                "action_space": {
-                                    "method": "action_prune_density",
-                                    "start": 0.2,
-                                    "end": 0.8,
-                                    "step": 0.1,
-                                }
-                            },
-                        },
-                        "agent": {"agent_type": "search.grid", "executors": {}},
-                    }
-                ],
-            )
-        else:
-            raise TypeError("Unexpected gym strategy " + str(gym_style))
-    return config
-
-
-def config_quantizer(quantize_style: Union[dict, str], gym_style: Union[dict, str], run_type: str):
-    """Get the quantize config
-
-    Parameters
-    ----------
-    quantize_style: dict/str
-        The quantize config dict or style.
-    gym_style: dict/str
-        The gym config dict or style.
-    run_type: str
-        The runtime type.
-
-    Returns
-    -------
-    config: dict
-        The quantize config.
-    """
-
-    if isinstance(quantize_style, dict):
-        config = quantize_style
-    elif quantize_style == "default":
-        # pylint: disable=import-outside-toplevel
-        from tvm.contrib.msc.core.tools.quantize import QuantizeStage
-
-        if run_type == MSCFramework.TENSORRT:
-            config = {"plan_file": "msc_quantizer.json"}
-        else:
-            config = {
-                "plan_file": "msc_quantizer.json",
-                "strategys": [
-                    {
-                        "method": "gather_maxmin",
-                        "op_types": ["nn.conv2d", "msc.linear"],
-                        "tensor_types": ["input", "output"],
-                        "stages": [QuantizeStage.GATHER],
-                    },
-                    {
-                        "method": "gather_max_per_channel",
-                        "op_types": ["nn.conv2d", "msc.linear"],
-                        "tensor_types": ["weight"],
-                        "stages": [QuantizeStage.GATHER],
-                    },
-                    {
-                        "method": "calibrate_maxmin",
-                        "op_types": ["nn.conv2d", "msc.linear"],
-                        "tensor_types": ["input", "output"],
-                        "stages": [QuantizeStage.CALIBRATE],
-                    },
-                    {
-                        "method": "quantize_normal",
-                        "op_types": ["nn.conv2d", "msc.linear"],
-                        "tensor_types": ["input", "weight"],
-                    },
-                    {
-                        "method": "dequantize_normal",
-                        "op_types": ["nn.conv2d", "msc.linear"],
-                        "tensor_types": ["output"],
-                    },
-                ],
-            }
-    else:
-        raise TypeError("Unexpected quantize strategy " + str(quantize_style))
-
-    if gym_style:
-        if isinstance(gym_style, list):
-            config["gym_configs"] = gym_style
-        elif gym_style == "default":
-            config["gym_configs"] = (
-                [
-                    {
-                        "env": {
-                            "executors": {
-                                "action_space": {
-                                    "method": "action_quantize_scale",
-                                    "start": 0.8,
-                                    "end": 1.2,
-                                    "step": 0.1,
-                                }
-                            },
-                        },
-                        "agent": {"agent_type": "search.grid", "executors": {}},
-                    }
-                ],
-            )
-        else:
-            raise TypeError("Unexpected gym strategy " + str(gym_style))
-    return config
-
-
-def config_tracker(track_style: Union[dict, str], run_type: str):
-    """Get the track config
-
-    Parameters
-    ----------
-    track_style: dict/str
-        The track config dict or style.
-    run_type: str
-        The runtime type.
-
-    Returns
-    -------
-    config: dict
-        The track config.
-    """
-
-    if isinstance(track_style, dict):
-        return track_style
-    if track_style == "default":
-        return {
-            "plan_file": "msc_tracker.json",
-            "strategys": [
-                {
-                    "method": "save_compared",
-                    "compare_to": {
-                        "optimize": ["baseline"],
-                        "compile": ["optimize", "baseline"],
-                    },
-                    "op_types": ["nn.relu"],
-                    "tensor_types": ["output"],
-                }
-            ],
-        }
-    raise TypeError("Unexpected track strategy " + str(track_style))
-
-
-def config_distiller(distill_style: Union[dict, str], run_type: str):
-    """Get the distill config
-
-    Parameters
-    ----------
-    distill_style: dict/str
-        The distill config dict or style..
-    run_type: str
-        The runtime type.
-
-    Returns
-    -------
-    config: dict
-        The distill config.
-    """
-
-    if isinstance(distill_style, dict):
-        return distill_style
-    if distill_style == "default":
-        return {
-            "plan_file": "msc_distiller.json",
-            "strategys": [
-                {
-                    "method": "loss_lp_norm",
-                    "op_types": ["loss"],
-                },
-            ],
-        }
-    raise TypeError("Unexpected distill strategy " + str(distill_style))
+        tool_style, raw_config = raw_config, None
+    configer_cls = msc_utils.get_registered_tool_configer(tool_type, tool_style)
+    assert configer_cls, "Can not find configer for {}:{}".format(tool_type, tool_style)
+    return configer_cls().config(raw_config, **kwargs)
 
 
 class BaseWrapper(object):
@@ -249,30 +49,26 @@ class BaseWrapper(object):
         The data loading method.
     max_batch: int
         The max data batch.
+    check_baseline: bool
+        Whether to check baseline.
     inputs: list<dict>
         The inputs info,
     outputs: list<str>
         The output names.
-    prune_style: dict/str
+    prune_config: dict/str
         The prune config or style.
-    quantize_style: dict/str
+    quantize_config: dict/str
         The quantize config or style.
-    track_style: dict/str
+    track_config: dict/str
         The track config or style.
-    distill_style: dict/str
+    distill_config: dict/str
         The distill config or style.
-    gym_styles: dict<str, dict/str>
+    gym_configs: dict<str, dict/str>
         The gym configs for tools.
     profile_strategys: dict<str, dict/str>
         The profile configs for tools.
     plugins: dict
         The plugins for pipeline.
-    workspace: str
-        The workspace.
-    debug_leve: int
-        The debug level.
-    verbose: str
-        The verbose level.
     extra_config: dict
         The extra config.
     """
@@ -286,16 +82,14 @@ class BaseWrapper(object):
         optimize_type: str = None,
         dataloader: Union[callable, str] = None,
         max_batch: int = -1,
-        prune_style: Union[dict, str] = None,
-        quantize_style: Union[dict, str] = None,
-        track_style: Union[dict, str] = None,
-        distill_style: Union[dict, str] = None,
-        gym_styles: Dict[str, Union[dict, str]] = None,
+        check_baseline: bool = True,
+        prune_config: Union[dict, str] = None,
+        quantize_config: Union[dict, str] = None,
+        track_config: Union[dict, str] = None,
+        distill_config: Union[dict, str] = None,
+        gym_configs: Dict[str, Union[dict, str]] = None,
         profile_strategys: Dict[str, Union[dict, str]] = None,
         plugins: dict = None,
-        workspace: str = "msc_workspace",
-        debug_level: int = 0,
-        verbose: str = "info",
         **extra_config,
     ):
         self._meta_model = model
@@ -307,41 +101,40 @@ class BaseWrapper(object):
         self._plugins = plugins
         self._manager = None
         self._config = {
-            "workspace": workspace,
-            "debug_level": debug_level,
-            "verbose": verbose,
             "model_type": self.model_type,
             "inputs": inputs,
             "outputs": outputs,
             "dataset": {"loader": dataloader or "from_random", "max_batch": max_batch},
-            "prepare": {"profile": {"benchmark": {"repeat": 10}}},
-            "baseline": {
-                "run_type": self.model_type,
-                "profile": {"check": {"atol": 1e-3, "rtol": 1e-3}, "benchmark": {"repeat": 10}},
-            },
+            "prepare": {"profile": {"benchmark": {"repeat": -1}}},
             "optimize": {
                 "run_type": optimize_type,
-                "profile": {"check": {"atol": 1e-3, "rtol": 1e-3}, "benchmark": {"repeat": 10}},
+                "profile": {"check": {"atol": 1e-3, "rtol": 1e-3}, "benchmark": {"repeat": -1}},
             },
             "compile": {
                 "run_type": compile_type,
-                "profile": {"check": {"atol": 1e-3, "rtol": 1e-3}, "benchmark": {"repeat": 10}},
+                "profile": {"check": {"atol": 1e-3, "rtol": 1e-3}, "benchmark": {"repeat": -1}},
             },
         }
+        if check_baseline:
+            self._config["baseline"] = {
+                "run_type": self.model_type,
+                "profile": {"check": {"atol": 1e-3, "rtol": 1e-3}, "benchmark": {"repeat": -1}},
+            }
+
         # config optimize
         tools_config = {}
-        if prune_style:
-            tools_config[ToolType.PRUNER] = config_pruner(
-                prune_style, gym_styles.get(ToolType.PRUNER), optimize_type
+        if prune_config:
+            tools_config[ToolType.PRUNER] = config_tool(
+                ToolType.PRUNER, prune_config, gym_configs=gym_configs.get(ToolType.PRUNER)
             )
-        if quantize_style:
-            tools_config[ToolType.QUANTIZER] = config_quantizer(
-                quantize_style, gym_styles.get(ToolType.QUANTIZER), optimize_type
+        if quantize_config:
+            tools_config[ToolType.QUANTIZER] = config_tool(
+                ToolType.QUANTIZER, quantize_config, gym_configs=gym_configs.get(ToolType.QUANTIZER)
             )
-        if track_style:
-            tools_config[ToolType.TRACKER] = config_tracker(track_style, optimize_type)
-        if distill_style:
-            tools_config[ToolType.DISTILLER] = config_distiller(distill_style, optimize_type)
+        if track_config:
+            tools_config[ToolType.TRACKER] = config_tool(ToolType.TRACKER, track_config)
+        if distill_config:
+            tools_config[ToolType.DISTILLER] = config_tool(ToolType.DISTILLER, distill_config)
         if tools_config:
             self._config["optimize"].update(**tools_config)
         # update profile
@@ -363,10 +156,32 @@ class BaseWrapper(object):
             phase = "meta"
         return "({}) {}".format(phase, self._get_model().__str__())
 
+    def __getattr__(self, name):
+        if hasattr(self._get_model(), name):
+            return getattr(self._get_model(), name)
+        return self._get_model().__getattr__(name)
+
     def setup(self):
         """Setup the wrapper"""
 
         pass
+
+    def optimize(self):
+        """Optimize the model"""
+
+        self._create_manager()
+        self._manager.prepare()
+        self._manager.parse()
+        if "baseline" in self._config:
+            self._manager.baseline()
+        self._manager.optimize()
+        self._optimized_model = self._manager.get_runnable("runnable")
+
+    def compile(self):
+        self._create_manager()
+        if not self._optimized_model:
+            self.optimize()
+        self._compiled_model = self._manager.get_runnable("runnable")
 
     def _create_manager(self):
         if not self._manager:
@@ -388,7 +203,7 @@ class BaseWrapper(object):
         return MSCFramework.MSC
 
 
-class TorchWrapper(object):
+class TorchWrapper(BaseWrapper):
     """Wrapper of torch models"""
 
     @property

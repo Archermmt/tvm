@@ -439,9 +439,8 @@ const MSCJoint RelaxGraphBuilder::AddNode(const Expr& expr, const Optional<Expr>
     const auto& t_info = Downcast<relax::TensorStructInfo>(relax::GetStructInfo(expr));
     const auto& shape_opt = t_info->GetShape();
     ICHECK(shape_opt.defined()) << "Constant shape is not defined";
-    const auto& w_layout = SpanUtils::GetAttr(expr->span, msc_attr::kLayout);
     const auto& weight =
-        MSCTensor(node_name, t_info->dtype, w_layout, ArrayUtils::Cast<Integer>(shape_opt.value()));
+        MSCTensor(node_name, t_info->dtype, layout, ArrayUtils::Cast<Integer>(shape_opt.value()));
     node_weights.Set("const", weight);
   }
   std::vector<std::pair<BaseJoint, size_t>> inputs;

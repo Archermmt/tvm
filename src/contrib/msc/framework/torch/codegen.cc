@@ -47,8 +47,11 @@ void TorchCodeGen::CodeGenGraph() {
   if (config()->use_plugin) {
     stack_.func_arg("plugin", "Any");
   }
-  stack_.func_start();
-  stack_.func_call("super").call_arg(graph()->name).call_arg("self").method_call("__init__");
+  stack_.func_start()
+      .func_call("super")
+      .call_arg(graph()->name)
+      .call_arg("self")
+      .method_call("__init__");
   for (const auto& n : graph()->node_names) {
     const auto& node = graph()->FindNode(n);
     if (node->optype == "input") {
@@ -98,24 +101,36 @@ void TorchCodeGen::CodeGenGraph() {
     stack_.assign("outputs", DocUtils::ToList(idx_outputs));
   }
   stack_.func_end("outputs");
+  // train and eval method
+  stack_.func_def("train")
+      .func_arg("self", "torch.nn.Module")
+      .func_arg("mode", "bool", "True")
+      .func_start()
+      .for_start("tool", "msc_tools.get_tools(\"" + config()->tools_tag + "\")")
+      .cond_if("mode")
+      .func_call("train", "", "tool")
+      .cond_else()
+      .func_call("eval", "", "tool")
+      .cond_end()
+      .for_end()
+      .func_call("super", "model")
+      .method_call("train")
+      .call_arg("mode")
+      .func_end("model");
   stack_.class_end();
 }
 
 void TorchCodeGen::CodeGenInference() {
-  /*
   if (config()->use_plugin) {
     stack_.comment("Import Plugin")
         .line("from msc_plugin.torch import PluginManager")
         .line()
         .func_call("PluginManager", "plugin");
   }
-  */
   stack_.comment("Build Model").func_call(graph()->name, "model");
-  /*
   if (config()->use_plugin) {
     stack_.call_arg("plugin");
   }
-  */
   stack_.comment("Load weights")
       .func_call("torch.load", "weights")
       .call_arg(DocUtils::ToStr(graph()->name + ".pth"))

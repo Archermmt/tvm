@@ -27,6 +27,7 @@ class MSCRegistery:
     MSC_FUNCS = "msc_funcs"
     MSC_TOOLS_CLS = "msc_tools_cls"
     MSC_TOOLS_METHOD = "msc_tools_method"
+    MSC_TOOLS_CONFIGER = "msc_tools_configer"
     GYM_CONFIGERS = "gym_configers"
     GYM_CONTROLLERS = "gym_controllers"
     GYM_AGENTS = "gym_agents"
@@ -157,9 +158,8 @@ def register_tool_method(method_cls: Any, method_style: str = "default"):
     """
 
     tools_method = MSCRegistery.get(MSCRegistery.MSC_TOOLS_METHOD, {})
-    assert hasattr(method_cls, "framework") and hasattr(
-        method_cls, "tool_type"
-    ), "framework and tool_type should be given to register tool method"
+    for key in ["framework", "tool_type"]:
+        assert hasattr(method_cls, key), "{} should be given to register tool method".format(key)
     if method_cls.framework() not in tools_method:
         tools_method[method_cls.framework()] = {}
     register_name = "{}.{}".format(method_cls.tool_type(), method_style)
@@ -190,6 +190,44 @@ def get_registered_tool_method(
     tools_method = MSCRegistery.get(MSCRegistery.MSC_TOOLS_METHOD, {})
     register_name = "{}.{}".format(tool_type, method_style)
     return tools_method.get(framework, {}).get(register_name)
+
+
+def register_tool_configer(configer: Any):
+    """Register a tool configer.
+
+    Parameters
+    ----------
+    configer: class
+        The configer class.
+    """
+
+    configers = MSCRegistery.get(MSCRegistery.MSC_TOOLS_CONFIGER, {})
+    for key in ["tool_type", "tool_style"]:
+        assert hasattr(configer, key), "{} should be given to register tool configer".format(key)
+    if configer.tool_type() not in configers:
+        configers[configer.tool_type()] = {}
+    configers[configer.tool_type()][configer.tool_style()] = configer
+    MSCRegistery.register(MSCRegistery.MSC_TOOLS_CONFIGER, configers)
+
+
+def get_registered_tool_configer(tool_type: str, tool_style: str) -> Any:
+    """Get the registered configer.
+
+    Parameters
+    ----------
+    tool_type: string
+        The type of tool.
+    tool_style: string
+        The style of tool.
+
+    Returns
+    -------
+    configer: class
+        The configer class.
+    """
+
+    configers = MSCRegistery.get(MSCRegistery.MSC_TOOLS_CONFIGER, {})
+    return configers.get(tool_type, {}).get(tool_style)
 
 
 def register_gym_configer(configer: Any):

@@ -184,6 +184,26 @@ class TensorflowRunner(ModelRunner):
         return MSCFramework.TENSORFLOW
 
     @classmethod
+    def native_device(cls, model: tf_v1.GraphDef) -> str:
+        """Get the device of the model
+
+        Parameters
+        -------
+        model: tf_v1.GraphDef
+            The graph def.
+
+        Returns
+        -------
+        device: str
+            The device name.
+        """
+
+        device_protos = device_lib.list_local_devices()
+        if any(dev.device_type == "GPU" for dev in device_protos):
+            return "cuda"
+        return "cpu"
+
+    @classmethod
     def run_native(
         cls,
         model: tf_v1.GraphDef,
@@ -209,7 +229,6 @@ class TensorflowRunner(ModelRunner):
             The warm_up num for profile.
         repeat: int
             The repeat num for profile.
-
 
         Returns
         -------

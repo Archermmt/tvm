@@ -43,8 +43,6 @@ class BaseEnv(object):
         The extra options for the environment.
     debug_level: int
         The debug level.
-    verbose: str
-        The verbose level.
     logger: logging.Logger
         The logger
     """
@@ -60,7 +58,6 @@ class BaseEnv(object):
         options: dict = None,
         max_tasks: int = -1,
         debug_level: int = 0,
-        verbose: str = None,
         logger: logging.Logger = None,
     ):
         self._name = name
@@ -72,12 +69,7 @@ class BaseEnv(object):
         self._options = options or {}
         self._max_tasks = max_tasks
         self._debug_level = debug_level
-        if logger:
-            self._logger = logger
-        else:
-            if not verbose:
-                verbose = "debug" if debug_level > 0 else "info"
-            self._logger = msc_utils.create_file_logger(verbose, workspace.relpath("ENV_LOG"))
+        self._logger = logger or msc_utils.get_global_logger()
         self._logger.info(
             msc_utils.msg_block("ENV.SETUP({})".format(self.env_type()), self.setup())
         )

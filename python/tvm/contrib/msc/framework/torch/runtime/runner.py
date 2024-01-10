@@ -135,6 +135,27 @@ class TorchRunner(ModelRunner):
         return MSCFramework.TORCH
 
     @classmethod
+    def native_device(cls, model: torch.nn.Module) -> str:
+        """Get the device of the model
+
+        Parameters
+        -------
+        model: torch.nn.Module
+            The runnable model.
+
+        Returns
+        -------
+        device: str
+            The device name.
+        """
+
+        parameters = list(model.parameters())
+        if not parameters:
+            return "cpu"
+        ref_device = parameters[0].device
+        return "{}:{}".format(ref_device.type, ref_device.index)
+
+    @classmethod
     def run_native(
         cls,
         model: torch.nn.Module,
