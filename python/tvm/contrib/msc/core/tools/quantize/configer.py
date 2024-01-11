@@ -42,10 +42,10 @@ class QuantizeConfiger(object):
             The update config.
         """
 
-        self._config = self.update(raw_config) if raw_config else self.get_default()
+        config = self.update(raw_config) if raw_config else self.get_default()
         if gym_configs:
-            self._config["gym_configs"] = self.config_gym(gym_configs)
-        return self._config
+            config["gym_configs"] = [self.config_gym(g) for g in gym_configs]
+        return config
 
     def get_default(self) -> dict:
         """Get the default config"""
@@ -68,34 +68,25 @@ class QuantizeConfiger(object):
 
         return raw_config
 
-    def config_gym(self, gym_configs: List[Union[dict, str]]) -> List[dict]:
-        configs = []
-        for g_config in gym_configs:
-            if isinstance(g_config, dict):
-                configs.append(g_config)
-            elif g_config == "default":
-                configs.append(
-                    {
-                        "env": {
-                            "executors": {
-                                "action_space": {
-                                    "method": "action_quantize_scale",
-                                    "start": 0.8,
-                                    "end": 1.2,
-                                    "step": 0.1,
-                                }
-                            },
-                        },
-                        "agent": {"agent_type": "search.grid", "executors": {}},
-                    }
-                )
-            else:
-                raise TypeError("Unexpected gym config " + str(g_config))
-        return configs
-
-    @property
-    def config(self):
-        return self._config
+    def config_gym(self, raw_config: Union[dict, str]) -> dict:
+        if isinstance(raw_config, dict):
+            return raw_config
+        if raw_config == "default":
+            return {
+                "env": {
+                    "executors": {
+                        "action_space": {
+                            "method": "action_quantize_scale",
+                            "start": 0.8,
+                            "end": 1.2,
+                            "step": 0.1,
+                        }
+                    },
+                },
+                "agent": {"agent_type": "search.grid", "executors": {}},
+            }
+        else:
+            raise TypeError("Unexpected gym config " + str(raw_config))
 
 
 class DefaultQuantizeConfiger(QuantizeConfiger):

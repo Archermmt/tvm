@@ -510,7 +510,7 @@ class TorchReshapeCodeGen : public TorchOpCode {
     const auto& out_layout = node()->OutputAt(0)->layout;
     if (out_layout.defined()) {
       int32_t batch_dim = out_layout.IndexOf(tvm::tir::LayoutAxis::Get("N"));
-      if (batch_dim > 0) {
+      if (batch_dim >= 0) {
         shape.Set(batch_dim, Integer(-1));
       }
     }

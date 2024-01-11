@@ -350,6 +350,12 @@ class BasePluginCodeGen {
         .inplace_start("os.path.isdir")
         .call_arg(DocUtils::ToAttrAccess("self", "_include_folder"))
         .inplace_end()
+        .assign(DocUtils::ToAttrAccess("self", "_manager_file"),
+                "os.path.join(root, \"manager.py\")")
+        .func_call("assert")
+        .inplace_start("os.path.isfile")
+        .call_arg(DocUtils::ToAttrAccess("self", "_manager_file"))
+        .inplace_end()
         .func_call("setup", "", "self")
         .func_end();
     // list headers
@@ -431,6 +437,28 @@ class BasePluginCodeGen {
         .call_arg("lib")
         .inplace_end()
         .for_end()
+        .func_end();
+    // export method
+    this->stack_.func_def("export")
+        .func_arg("self", "object")
+        .func_arg("dst", "str")
+        .func_start()
+        .func_call("copy_includes", "", "self")
+        .inplace_start("os.path.join")
+        .call_arg("dst")
+        .call_arg(DocUtils::ToStr("include"))
+        .inplace_end()
+        .func_call("copy_libs", "", "self")
+        .inplace_start("os.path.join")
+        .call_arg("dst")
+        .call_arg(DocUtils::ToStr("lib"))
+        .inplace_end()
+        .func_call("shutil.copyfile")
+        .call_arg(DocUtils::ToAttrAccess("self", "_manager_file"))
+        .inplace_start("os.path.join")
+        .call_arg("dst")
+        .call_arg(DocUtils::ToStr("manager.py"))
+        .inplace_end()
         .func_end();
     // get op names
     this->stack_.func_def("get_op_names", "List[str]")

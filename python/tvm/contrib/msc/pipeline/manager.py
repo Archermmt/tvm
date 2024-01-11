@@ -32,6 +32,7 @@ from tvm.contrib.msc.core.utils.message import MSCStage
 from tvm.contrib.msc.core import utils as msc_utils
 from tvm.contrib.msc.core.gym.control import create_controller
 from tvm.contrib.msc.core import _ffi_api
+from tvm.contrib.msc.plugin.utils import export_plugins, load_plugins
 
 
 class BaseManager(object):
@@ -53,7 +54,10 @@ class BaseManager(object):
             assert stage in config, "{} should be given to run the pipeline".format(stage)
         MSCMap.reset()
         self._model = model
-        self._plugins = plugins or {}
+        if plugins:
+            self._plugins = load_plugins(plugins)
+        else:
+            self._plugins = {}
         use_cache = config.get("use_cache", True)
         self._workspace = msc_utils.set_workspace(config.get("workspace"), use_cache)
         self._verbose = config.get("verbose", "info")
@@ -64,6 +68,7 @@ class BaseManager(object):
                 "MSC_LOG", keep_history=False
             )
             self._logger = msc_utils.set_global_logger(self._verbose, log_path)
+        self._optimized, self._compiled = False, False
         msc_utils.time_stamp(MSCStage.SETUP)
         self._logger.info(msc_utils.msg_block("SETUP", self.setup(config)))
 
@@ -184,8 +189,10 @@ class BaseManager(object):
                 self.baseline()
             if "optimize" in self._config:
                 self.optimize()
+            self._optimized = True
             if "compile" in self._config:
                 self.compile()
+            self._compiled = True
         except Exception as exc:  # pylint: disable=broad-exception-caught
             err_msg = "Pipeline failed:{}\nTrace: {}".format(exc, traceback.format_exc())
         self.summary(err_msg)
@@ -457,6 +464,117 @@ class BaseManager(object):
             self._report["success"] = True
         self._report["duration"] = msc_utils.get_duration()
         return self._report
+
+    def export(self, path: str = None) -> str:
+        """Export the pipeline
+
+        Parameters
+        ----------
+        path: str
+            The export path
+
+        Returns
+        -------
+        export_path: str
+            The exported path.
+        """
+
+        print("calling export of manager!!")
+        pipeline = {}
+        if path:
+            if path.endswith(".tar.gz"):
+                folder = msc_utils.msc_dir(path.replace(".tar.gz", ""), keep_history=False)
+            else:
+                folder = msc_utils.msc_dir(path, keep_history=False)
+        else:
+            folder = None
+        pipeline["model"] = self.export_model(folder)
+        pipeline["config"] = self.export_config(folder)
+        if self._plugins:
+            pipeline["plugins"] = export_plugins(self._plugins, folder)
+        if folder:
+            with open(folder.relpath("pipeline.json"), "w") as f:
+                f.write(json.dumps(pipeline, indent=2))
+            if path.endswith(".tar.gz"):
+                msc_utils.pack_folder(path.replace(".tar.gz", ""), "tar")
+            return path
+        return pipeline
+
+    def export_model(self, folder: msc_utils.MSCDirectory = None) -> str:
+        """Export the model
+
+        Parameters
+        ----------
+        folder: MSCDirectory
+            The export folder
+
+        Returns
+        -------
+        model_path: str
+            The exported model path.
+        """
+
+        print("export the model now!!")
+        raise Exception("stop here!!")
+
+        if self._compiled_model:
+            return self._manager.runner.export("runnable", folder)
+        if self._optimized_model:
+            return self._manager.runner.export("meta", folder)
+        raise NotImplementedError("Export the meta model is not implemented in BaseWrapper")
+
+    def export_config(self, folder: msc_utils.MSCDirectory = None) -> dict:
+        """Export the config
+
+        Parameters
+        ----------
+        folder: MSCDirectory
+            The export folder.
+        dump_datas: bool
+            Whether to dump datas.
+
+        Returns
+        -------
+        config: dict
+            The updated config.
+        """
+
+        if self._compiled_model:
+            return {"model_info": self._manager.runner.model_info}
+
+        # dump the dataloader
+        def _dump_datas():
+            loader = self._dataloader
+            if isinstance(loader, str) and msc_utils.is_callable(loader):
+                path, func_name = loader.split(":")
+                folder.copy(path)
+                return os.path.basename(path) + ":" + func_name
+            if isinstance(loader, callable):
+                input_names = [i[0] for i in self._config["inputs"]]
+                saver_options = {
+                    "input_names": input_names,
+                    "output_names": self._config["outputs"],
+                }
+                data_folder = folder.create_dir("msc_datas")
+                batch_cnt = 0
+                with msc_utils.IODataSaver(data_folder, saver_options) as saver:
+                    for inputs in loader():
+                        if batch_cnt >= self._max_batch:
+                            break
+                        batch_cnt = saver.save_batch(inputs)
+                return data_folder.path
+            return loader
+
+        config = msc_utils.copy_dict(self._config)
+        if dump_datas:
+            config["dataset"]["loader"] = _dump_datas()
+        if self._optimized_model:
+            config["model_type"] = self._compile_type
+            config.pop("optimize")
+            if self._tools_config:
+                config["compile"].update(**self._tools_config)
+            return config
+        return config
 
     def destory(self, keep_workspace: bool = False):
         """Destroy the manager

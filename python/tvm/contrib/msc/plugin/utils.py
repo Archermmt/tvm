@@ -16,10 +16,12 @@
 # under the License.
 """tvm.contrib.msc.plugin.utils"""
 
+import os
 from typing import Any
 
 from tvm import relax
 from tvm import tir
+from tvm.contrib.msc.core import utils as msc_utils
 
 
 def to_expr(value: Any) -> relax.Expr:
@@ -49,3 +51,55 @@ def to_expr(value: Any) -> relax.Expr:
     else:
         raise TypeError(f"Unsupported input type: {type(value)}")
     return expr
+
+
+def export_plugins(plugins: dict, folder: msc_utils.MSCDirectory) -> dict:
+    """Export the plugins
+
+    Parameters
+    ----------
+    plugins: dict
+        The plugins.
+    folder: MSCDirectory
+        The export folder.
+
+    Returns
+    -------
+    info: dict
+        The loadable plugins info.
+    """
+
+    info = {}
+    for name, plugin in plugins.items():
+        with folder.create_dir(name) as sub_folder:
+            info[name] = sub_folder.path
+            plugin.export(info[name])
+    return info
+
+
+def load_plugins(info: dict) -> dict:
+    """Load the plugins
+
+    Parameters
+    ----------
+    info: dict
+        The plugins info.
+
+    Returns
+    -------
+    plugins: dict
+        The plugins.
+    """
+
+    plugins = {}
+    for name, plugin in info.items():
+        if isinstance(plugin, str):
+            manager_file = os.path.join(plugin, "manager.py")
+            assert os.path.isfile(manager_file), "Can not find manager file for plugin: " + str(
+                manager_file
+            )
+            manager_cls = msc_utils.load_callable(manager_file + ":PluginManager")
+            plugins[name] = manager_cls(plugin)
+        else:
+            plugins[name] = plugin
+    return plugins

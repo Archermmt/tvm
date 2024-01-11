@@ -37,8 +37,8 @@ class DistillConfiger(object):
             The update config.
         """
 
-        self._config = self.update(raw_config) if raw_config else self.get_default()
-        return self._config
+        config = self.update(raw_config) if raw_config else self.get_default()
+        return config
 
     def get_default(self) -> dict:
         """Get the default config"""
@@ -60,10 +60,6 @@ class DistillConfiger(object):
         """
 
         return raw_config
-
-    @property
-    def config(self):
-        return self._config
 
 
 class DefaultDistillConfiger(DistillConfiger):

@@ -16,6 +16,8 @@
 # under the License.
 """tvm.contrib.msc.pipeline.wrapper"""
 
+import os
+import json
 from typing import List, Any, Union, Dict
 
 from tvm.contrib.msc.core.tools import ToolType
@@ -122,21 +124,23 @@ class BaseWrapper(object):
             }
 
         # config optimize
-        tools_config = {}
+        self._tools_config = {}
+        gym_configs = gym_configs or {}
         if prune_config:
-            tools_config[ToolType.PRUNER] = config_tool(
+            self._tools_config[ToolType.PRUNER] = config_tool(
                 ToolType.PRUNER, prune_config, gym_configs=gym_configs.get(ToolType.PRUNER)
             )
         if quantize_config:
-            tools_config[ToolType.QUANTIZER] = config_tool(
+            self._tools_config[ToolType.QUANTIZER] = config_tool(
                 ToolType.QUANTIZER, quantize_config, gym_configs=gym_configs.get(ToolType.QUANTIZER)
             )
         if track_config:
-            tools_config[ToolType.TRACKER] = config_tool(ToolType.TRACKER, track_config)
+            self._tools_config[ToolType.TRACKER] = config_tool(ToolType.TRACKER, track_config)
         if distill_config:
-            tools_config[ToolType.DISTILLER] = config_tool(ToolType.DISTILLER, distill_config)
-        if tools_config:
-            self._config["optimize"].update(**tools_config)
+            self._tools_config[ToolType.DISTILLER] = config_tool(ToolType.DISTILLER, distill_config)
+        if self._tools_config:
+            self._config["optimize"].update(**self._tools_config)
+
         # update profile
         if profile_strategys:
             for stage, config in profile_strategys.items():
@@ -166,26 +170,38 @@ class BaseWrapper(object):
 
         pass
 
+    def preprocess(self, manager):
+        """Run the preprocess of optimize/compile"""
+
+        manager.prepare()
+        manager.parse()
+        if "baseline" in self._config:
+            manager.baseline()
+
     def optimize(self):
         """Optimize the model"""
 
-        self._create_manager()
-        self._manager.prepare()
-        self._manager.parse()
-        if "baseline" in self._config:
-            self._manager.baseline()
+        self._manager = MSCManager(self._meta_model, self._config, self._plugins)
+        self.preprocess(self._manager)
         self._manager.optimize()
         self._optimized_model = self._manager.get_runnable("runnable")
 
     def compile(self):
-        self._create_manager()
+        """Compile the model"""
+
         if not self._optimized_model:
             self.optimize()
+        pipeline = self._manager.export()
+        print("export pipeline " + str(pipeline))
+        raise Exception("stop here!!")
+        self._manager.destory()
+        self._manager = MSCManager(self._meta_model, self._config, self._plugins)
+        self.preprocess(self._manager)
+        self._manager.compile()
         self._compiled_model = self._manager.get_runnable("runnable")
 
     def _create_manager(self):
-        if not self._manager:
-            self._manager = MSCManager(self._get_model(), self._config, self._plugins)
+        self._manager = MSCManager(self._get_model(), self._config, self._plugins)
 
     def _get_model(self) -> Any:
         return self._compiled_model or self._optimized_model or self._meta_model
@@ -205,6 +221,9 @@ class BaseWrapper(object):
 
 class TorchWrapper(BaseWrapper):
     """Wrapper of torch models"""
+
+    def __call__(self, *inputs):
+        return self._get_model()(*inputs)
 
     @property
     def model_type(self):

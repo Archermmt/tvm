@@ -169,7 +169,7 @@ class BaseService(object):
         self._workspace = workspace
         tasks = tasks or [GYMObject.ENV + ":0", GYMObject.AGENT + ":0"]
         verbose = verbose or "info"
-        debug_level = int(verbose.spilt(":")[1]) if verbose.startswith("debug:") else 0
+        debug_level = int(verbose.split(":")[1]) if verbose.startswith("debug:") else 0
         self._logger = msc_utils.create_file_logger(verbose, self._workspace.relpath("SERVICE_LOG"))
 
         def _create_workers(config: dict, obj_type: str) -> List[BaseWorker]:
