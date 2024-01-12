@@ -106,7 +106,7 @@ class BaseRunner(object):
 
         if "build_folder" not in self._generate_config:
             self._generate_config["build_folder"] = msc_utils.get_build_dir()
-        self._graphs, self._weights = [], []
+        self._graphs, self._weights = [], {}
         self._model, self._model_info = None, {}
         self._runnable = None
         # Setup tools
@@ -161,7 +161,7 @@ class BaseRunner(object):
         """
 
         if force_build:
-            self._graphs, self._weights = [], []
+            self._graphs, self._weights = [], {}
             self._model, self._model_info = None, {}
             self._runnable = None
         if cache_dir and os.path.isfile(cache_dir.relpath("cache_info.json")):
@@ -172,12 +172,19 @@ class BaseRunner(object):
         # Load graphs from cache
         if not self._graphs and cache_info.get("graphs"):
             self._graphs, self._weights = self._load_graphs(cache_dir, cache_info["graphs"])
-            self._logger.info("Load %d graphs from %s", len(self._graphs), cache_dir)
+            self._logger.info(
+                "Load %d graphs %d weights from %s",
+                len(self._graphs),
+                len(self._weights),
+                cache_dir,
+            )
 
         # Translate graphs from module
         if not self._graphs:
             self._graphs, self._weights = self._translate()
-            self._logger.info("Translate %d graphs from module", len(self._graphs))
+            self._logger.info(
+                "Translate %d graphs %d weights from module", len(self._graphs), len(self._weights)
+            )
 
         # Load model from cache
         if not self._model and cache_info.get("model"):
@@ -258,10 +265,13 @@ class BaseRunner(object):
             Whether to save tools.
         """
 
-        cache_info = {"graphs": self._save_graphs(cache_dir)}
-        if save_model:
+        cache_info = {"graphs": self._save_graphs(cache_dir), "weights": "graph_weights.bin"}
+        with cache_dir:
+            with open(cache_info["weights"], "wb") as f_params:
+                f_params.write(tvm.runtime.save_param_dict(self._weights))
+        if save_model and cache_info.get("graphs"):
             cache_info["model"] = self._save_model(cache_dir)
-        if save_runnable:
+        if save_runnable and cache_info.get("model"):
             cache_info["runnable"] = self._save_runnable(cache_dir)
         if save_tools:
             for t_type, tool in self._tools.items():
@@ -518,6 +528,19 @@ class BaseRunner(object):
 
         return self._model_info["outputs"]
 
+    def get_weights(self) -> Iterable[tvm.nd.array]:
+        """Get the weights from graphs
+
+        Returns
+        -------
+        weights: generator<tvm.nd.array>
+            The generator of weight datas.
+        """
+
+        for g in self._graphs:
+            for w in g.get_weights():
+                yield self._weights[w.name]
+
     def destory(self):
         """Destory runner"""
 
@@ -542,10 +565,10 @@ class BaseRunner(object):
 
         raise NotImplementedError("_translate is not implemented for " + str(self.__class__))
 
-    def _load_graphs(
+    def _load_weights(
         self, cache_dir: msc_utils.MSCDirectory, cache_info: dict
-    ) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:
-        """Load MSCgraphs from cache
+    ) -> Dict[str, tvm.nd.array]:
+        """Load weights from cache
 
         Parameters
         -------
@@ -556,10 +579,35 @@ class BaseRunner(object):
 
         Returns
         -------
-        graph_list: list<MSCGraph>
+        weights: dict<str, tvm.nd.array>
+            The cached weights.
+        """
+
+        assert "weights" in cache_info, "weights should be given in cache_info, get " + str(
+            cache_info
+        )
+        with open(cache_dir.relpath(cache_info["weights"]), "rb") as f:
+            weights = tvm.runtime.load_param_dict(f.read())
+        return weights
+
+    def _load_graphs(
+        self, cache_dir: msc_utils.MSCDirectory, cache_info: dict
+    ) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:
+        """Load MSCGraphs from cache
+
+        Parameters
+        -------
+        cache_dir: MSCDirectory
+            cache path for save/load info
+        cache_info: dict
+            The cache info.
+
+        Returns
+        -------
+        graphs: list<MSCGraph>
             The translated graphs
-        weights_list: list<dict<str, tvm.nd.array>>
-            The translated weights
+        weights: dict<str, tvm.nd.array>
+            The cached weights.
         """
 
         raise NotImplementedError("_load_graphs is not implemented for " + str(self.__class__))
@@ -581,7 +629,7 @@ class BaseRunner(object):
         raise NotImplementedError("_save_graphs is not implemented for " + str(self.__class__))
 
     def _generate_model(
-        self, graphs: List[MSCGraph] = None, weights: List[Dict[str, tvm.nd.array]] = None
+        self, graphs: List[MSCGraph] = None, weights: Dict[str, tvm.nd.array] = None
     ) -> Any:
         """Codegen the model according to framework
 
@@ -589,8 +637,8 @@ class BaseRunner(object):
         -------
         graphs: list<MSCgraph>
             The msc graphs.
-        weights: list<dict<str, tvm.nd.array>>
-            The weights
+        weights: dict<str, tvm.nd.array>
+            The weights.
 
         Returns
         -------
@@ -734,10 +782,6 @@ class BaseRunner(object):
 
         return True
 
-    @classmethod
-    def support_tool(cls, tool_type: str) -> bool:
-        return True
-
     @property
     def stage(self):
         return self._stage
@@ -770,6 +814,63 @@ class BaseRunner(object):
     def framework(self):
         return MSCFramework.MSC
 
+    @classmethod
+    def load_native(cls, model: Any) -> Any:
+        """Load the native model
+
+        Parameters
+        -------
+        model:
+            The native model.
+
+        Returns
+        -------
+        model:
+            The loaded native model.
+        """
+
+        return model, "cpu"
+
+    @classmethod
+    def update_config(cls, stage: str, config: dict, model: Any = None) -> dict:
+        """Update the config for parse
+
+        Parameters
+        -------
+        stage: str
+            The stage to be updated
+        config: dict
+            The config for pipeline.
+        model:
+            The native model.
+
+        Returns
+        -------
+        config: dict
+            The updated config.
+        """
+
+        if stage not in config:
+            return config
+        if stage in (MSCStage.BASELINE, MSCStage.OPTIMIZE, MSCStage.COMPILE):
+            run_config = config[stage].get("run_config", {})
+            if "translate_config" not in run_config:
+                run_config["translate_config"] = {}
+            if "build" not in run_config["translate_config"]:
+                run_config["translate_config"]["build"] = {}
+            if "generate_config" not in run_config:
+                run_config["generate_config"] = {}
+            run_config["translate_config"]["build"]["input_aliases"] = [
+                i[0] for i in config["inputs"]
+            ]
+            run_config["translate_config"]["build"]["output_aliases"] = config["outputs"]
+            config[stage]["run_config"] = run_config
+        return config
+
+    @classmethod
+    def support_tool(cls, tool_type: str) -> bool:
+        return True
+
 
 class ModelRunner(BaseRunner):
     """Model runner of MSC"""
@@ -791,12 +892,12 @@ class ModelRunner(BaseRunner):
             build_config=self._translate_config.get("build"),
             opt_config=self._translate_config.get("optimize"),
         )
-        return [graph], [weights]
+        return [graph], weights
 
     def _load_graphs(
         self, cache_dir: msc_utils.MSCDirectory, cache_info: dict
     ) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:
-        """Load MSCgraphs from cache
+        """Load MSCGraphs from cache
 
         Parameters
         -------
@@ -807,17 +908,15 @@ class ModelRunner(BaseRunner):
 
         Returns
         -------
-        graph_list: list<MSCGraph>
+        graphs: list<MSCGraph>
             The translated graphs
-        weights_list: list<dict<str, tvm.nd.array>>
-            The translated weights
+        weights: dict<str, tvm.nd.array>
+            The cached weights.
         """
 
         assert "main" in cache_info, "main should be given in cache_info, get " + str(cache_info)
         graph = MSCGraph.from_json(cache_dir.relpath(cache_info["main"]["graph"]))
-        with open(cache_dir.relpath(cache_info["main"]["weights"]), "rb") as f:
-            weights = tvm.runtime.load_param_dict(f.read())
-        return [graph], [weights]
+        return [graph], self._load_weights(cache_dir, cache_info)
 
     def _save_graphs(self, cache_dir: msc_utils.MSCDirectory) -> dict:
         """Save MSCgraphs to cache
@@ -833,19 +932,14 @@ class ModelRunner(BaseRunner):
             The cache info.
         """
 
-        main_info = {
-            "graph": self._graphs[0].name + "_graph.json",
-            "weights": self._graphs[0].name + "_params.bin",
-        }
+        main_info = {"graph": self._graphs[0].name + "_graph.json"}
         with cache_dir:
             with open(main_info["graph"], "w") as f_graph:
                 f_graph.write(self._graphs[0].to_json())
-            with open(main_info["weights"], "wb") as f_params:
-                f_params.write(tvm.runtime.save_param_dict(self._weights[0]))
         return {"main": main_info}
 
     def _generate_model(
-        self, graphs: List[MSCGraph] = None, weights: List[Dict[str, tvm.nd.array]] = None
+        self, graphs: List[MSCGraph] = None, weights: Dict[str, tvm.nd.array] = None
     ) -> Any:
         """Codegen the model according to framework
 
@@ -853,8 +947,8 @@ class ModelRunner(BaseRunner):
         -------
         graphs: list<MSCgraph>
             The msc graphs.
-        weights: list<dict<str, tvm.nd.array>>
-            The weights
+        weights: dict<str, tvm.nd.array>
+            The weights.
 
         Returns
         -------
@@ -863,10 +957,9 @@ class ModelRunner(BaseRunner):
         """
 
         graph = graphs[0] if graphs else self._graphs[0]
-        weight = weights[0] if weights else self._weights[0]
         return self.codegen_func(
             graph,
-            weight,
+            weights or self._weights,
             codegen_config=self._generate_config.get("codegen"),
             print_config=self._generate_config.get("print"),
             build_folder=self._generate_config["build_folder"],
@@ -923,15 +1016,11 @@ class BYOCRunner(BaseRunner):
             The translated weights
         """
 
-        self._byoc_mod, graph_infos = self.partition_func(
+        self._byoc_mod, graphs, weights = self.partition_func(
             self._mod,
             trans_config=self._translate_config.get("transform"),
             build_config=self._translate_config.get("build"),
         )
-        graphs, weights = [], []
-        for graph, sub_weights in graph_infos:
-            graphs.append(graph)
-            weights.append(sub_weights)
         self._byoc_graph = _ffi_api.BuildFromRelax(
             self._byoc_mod, "main", msc_utils.dump_dict(self._translate_config.get("build"))
         )
@@ -951,10 +1040,10 @@ class BYOCRunner(BaseRunner):
 
         Returns
         -------
-        graph_list: list<MSCGraph>
+        graphs: list<MSCGraph>
             The translated graphs
-        weights_list: list<dict<str, tvm.nd.array>>
-            The translated weights
+        weights: dict<str, tvm.nd.array>
+            The cached weights.
         """
 
         assert "byoc_mod" in cache_info, "byoc_mod should be given in cache_info, get " + str(
@@ -966,16 +1055,11 @@ class BYOCRunner(BaseRunner):
         assert "sub_graphs" in cache_info, "sub_graphs should be given in cache_info, get " + str(
             cache_info
         )
-
         with open(cache_dir.relpath(cache_info["byoc_mod"]), "r") as f:
             self._byoc_mod = tvm.ir.load_json(f.read())
-        graphs, weights = [], []
-        for f_graph, f_weights in cache_info["sub_graphs"]:
-            graphs.append(MSCGraph.from_json(cache_dir.relpath(f_graph)))
-            with open(cache_dir.relpath(f_weights), "rb") as f:
-                weights = tvm.runtime.load_param_dict(f.read())
+        graphs = [MSCGraph.from_json(cache_dir.relpath(g)) for g in cache_info["sub_graphs"]]
         self._byoc_graph = MSCGraph.from_json(cache_dir.relpath(cache_info["byoc_graph"]))
-        return graphs, weights
+        return graphs, self._load_weights(cache_dir, cache_info)
 
     def _save_graphs(self, cache_dir: msc_utils.MSCDirectory) -> dict:
         """Save MSCgraphs to cache
@@ -991,15 +1075,11 @@ class BYOCRunner(BaseRunner):
             The cache info.
         """
 
-        sub_graphs = [
-            (graph.name + "_graph.info", graph.name + "_params.bin") for graph in self._graphs
-        ]
+        sub_graphs = [g.name + "_graph.info" for g in self._graphs]
         with cache_dir:
-            for graph, weights, info in zip(self._graphs, self._weights, sub_graphs):
-                with open(info[0], "w") as f_graph:
+            for graph, g_file in zip(self._graphs, sub_graphs):
+                with open(g_file, "w") as f_graph:
                     f_graph.write(graph.to_json())
-                with open(info[1], "wb") as f_params:
-                    f_params.write(tvm.runtime.save_param_dict(weights))
             with open("byoc_graph.json", "w") as f:
                 f.write(self._byoc_graph.to_json())
             with open("byoc_module.json", "w") as f:
@@ -1011,7 +1091,7 @@ class BYOCRunner(BaseRunner):
         }
 
     def _generate_model(
-        self, graphs: List[MSCGraph] = None, weights: List[Dict[str, tvm.nd.array]] = None
+        self, graphs: List[MSCGraph] = None, weights: Dict[str, tvm.nd.array] = None
     ) -> Any:
         """Codegen the model according to framework
 
@@ -1019,8 +1099,8 @@ class BYOCRunner(BaseRunner):
         -------
         graphs: list<MSCgraph>
             The msc graphs.
-        weights: list<dict<str, tvm.nd.array>>
-            The weights
+        weights: dict<str, tvm.nd.array>
+            The weights.
 
         Returns
         -------
@@ -1028,7 +1108,6 @@ class BYOCRunner(BaseRunner):
             The relax module
         """
 
-        graph_infos = list(zip(graphs or self._graphs, weights or self._weights))
         extra_option = self._generate_config.get("extra_option", {})
         if self._stage == MSCStage.COMPILE and not self.get_tool(ToolType.TRACKER):
             extra_option["tool_tag"] = ""
@@ -1036,7 +1115,8 @@ class BYOCRunner(BaseRunner):
             extra_option["tool_tag"] = self._name
         return self.codegen_func(
             self._byoc_mod,
-            graph_infos,
+            graphs or self._graphs,
+            weights or self._weights,
             codegen_configs=self._generate_config.get("codegen"),
             print_configs=self._generate_config.get("print"),
             extra_options=extra_option,

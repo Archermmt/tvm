@@ -61,6 +61,57 @@ def get_dataloaders(path, train_batch=32, test_batch=1, dataset="cifar10"):
     raise Exception("Unexpected dataset " + str(dataset))
 
 
+def eval_model(model, dataloader, max_iter=-1, log_step=100):
+    """Evaluate the model"""
+
+    model.eval()
+    device = next(model.parameters()).device
+    num_correct, num_datas = 0, 0
+    for i, (inputs, labels) in enumerate(dataloader, 0):
+        with torch.no_grad():
+            outputs = model(inputs.to(device))
+        cls_idices = torch.argmax(outputs, axis=1)
+        labels = labels.to(device)
+        num_datas += len(cls_idices)
+        num_correct += torch.where(cls_idices == labels, 1, 0).sum()
+        if num_datas > 0 and num_datas % log_step == 0:
+            print("[{}/{}] Torch eval acc: {}".format(i, len(dataloader), num_correct / num_datas))
+        if max_iter > 0 and num_datas >= max_iter:
+            break
+    acc = num_correct / num_datas
+    return acc.detach().cpu().numpy().tolist()
+
+
+def train_model(model, dataloader, optimizer, max_iter=-1, log_step=100):
+    """Train the model"""
+
+    model.train()
+    device = next(model.parameters()).device
+    num_correct, num_datas = 0, 0
+    criterion = nn.CrossEntropyLoss()
+    running_loss = 0.0
+    for i, (inputs, labels) in enumerate(dataloader, 0):
+        optimizer.zero_grad()
+        outputs = model(inputs.to(device))
+        cls_idices = torch.argmax(outputs, axis=1)
+        labels = labels.to(device)
+        num_datas += len(cls_idices)
+        num_correct += torch.where(cls_idices == labels, 1, 0).sum()
+        loss = criterion(outputs, labels)
+        loss.backward()
+        optimizer.step()
+        # gather loss
+        running_loss += loss.item()
+        if num_datas > 0 and num_datas % log_step == 0:
+            print(
+                "[{}/{}] Torch train loss: {}, acc {}".format(
+                    i, len(dataloader), running_loss / (i + 1), num_correct / num_datas
+                )
+            )
+        if max_iter > 0 and num_datas >= max_iter:
+            break
+
+
 def run_torch_model(model, dataloader, max_iter=-1, log_step=100, optimizer=None):
     """Run the torch model"""
 

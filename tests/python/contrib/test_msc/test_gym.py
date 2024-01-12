@@ -52,7 +52,7 @@ def _get_config(
         "model_type": model_type,
         "inputs": inputs,
         "outputs": outputs,
-        "dataset": {"loader": "from_random", "max_iter": 5},
+        "dataset": {"prepare": {"loader": "from_random", "max_iter": 5}},
         "prepare": {"profile": {"benchmark": {"repeat": 10}}},
         "baseline": {
             "run_type": model_type,

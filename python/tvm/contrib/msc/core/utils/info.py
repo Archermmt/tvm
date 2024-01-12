@@ -38,26 +38,36 @@ class MSCArray(object):
     """
 
     def __init__(self, data: Any):
-        self._type, self._data = self._analysis(data)
+        self._type, self._device, self._data = self._analysis(data)
 
     def __str__(self):
         return "<{}>{}".format(self._type, self.abstract())
 
-    def _analysis(self, data: Any) -> Tuple[str, np.ndarray]:
+    def _analysis(self, data: Any) -> Tuple[str, str, np.ndarray]:
         if isinstance(data, (list, tuple)) and all(isinstance(d, (int, float)) for d in data):
-            return "list", np.array(data)
+            return "list", "cpu", np.array(data)
         if isinstance(data, np.ndarray):
-            return "np", data
+            return "np", "cpu", data
         if isinstance(data, tvm.runtime.NDArray):
-            return "tvm", data.asnumpy()
+            ref_dev = data.device
+            if ref_dev.device_id:
+                device = "{}:{}".format(ref_dev.device_type, ref_dev.device_id)
+            else:
+                device = ref_dev.device_type
+            return "tvm", device, data.asnumpy()
         if isinstance(data, tvm.relax.Var):
             shape = [int(s) for s in data.struct_info.shape]
-            return "var", np.zeros(shape, dtype=data.struct_info.dtype)
+            return "var", "cpu", np.zeros(shape, dtype=data.struct_info.dtype)
         try:
             import torch  # pylint: disable=import-outside-toplevel
 
             if isinstance(data, torch.Tensor):
-                return "torch", data.detach().cpu().numpy()
+                ref_dev = data.device
+                if ref_dev.index:
+                    device = "{}:{}".format(ref_dev.type, ref_dev.index)
+                else:
+                    device = ref_dev.type
+                return "torch", device, data.detach().cpu().numpy()
         except:  # pylint: disable=bare-except
             pass
 
@@ -73,6 +83,36 @@ class MSCArray(object):
             self._data.min(),
             self._data.sum() / self._data.size,
         )
+
+    def cast(self, framework: str) -> Any:
+        """Cast np.ndarray to array like object
+
+        Parameters
+        ----------
+        framework: str
+            The target framework
+
+        Returns
+        -------
+        output:
+            The output as framework tensor.
+        """
+
+        if framework == MSCFramework.TORCH:
+            import torch  # pylint: disable=import-outside-toplevel
+
+            return torch.from_numpy(self._data).to(torch.device(self._device))
+        if framework == MSCFramework.TVM:
+            if self._device.startswith("cpu"):
+                device = tvm.cpu()
+            elif self._device == "cuda":
+                device = tvm.cuda()
+            elif self._device.startswith("cuda:"):
+                device = tvm.cuda(int(self._device.split(":")[1]))
+            else:
+                raise NotImplementedError("device {} is not supported for tvm")
+            return tvm.nd.array(self._data, device=device)
+        return self._data
 
     @classmethod
     def is_array(cls, data: Any) -> bool:
@@ -109,26 +149,34 @@ class MSCArray(object):
         return self._type
 
     @property
+    def device(self):
+        return self._device
+
+    @property
     def data(self):
         return self._data
 
 
-def cast_array(data: Any) -> np.ndarray:
+def cast_array(data: Any, framework: str = None) -> Any:
     """Cast array like object to np.ndarray
 
     Parameters
     ----------
     data: array_like: np.ndarray| torch.Tensor| tvm.ndarray| ...
         The data object.
+    framework: str
+        The target framework
 
     Returns
     -------
     output: np.ndarray
-        The output as numpy array.
+        The output as numpy array or framework tensor(if given).
     """
 
     assert MSCArray.is_array(data), "{} is not array like".format(data)
-    return MSCArray(data).data
+    if not framework:
+        return MSCArray(data).data
+    return MSCArray(data).cast(framework)
 
 
 def inspect_array(data: Any, as_str: bool = True) -> Union[Dict[str, Any], str]:
@@ -302,6 +350,8 @@ def dump_dict(dict_obj: dict, flavor: str = "dmlc") -> str:
             max_size = int(flavor.split(":")[1]) - indent - 2
             lines = []
             for k, v in value.items():
+                if v is None:
+                    continue
                 if isinstance(v, (dict, tuple, list)) and not v:
                     continue
                 if isinstance(v, dict) and len(str(k) + str(v)) > max_size:

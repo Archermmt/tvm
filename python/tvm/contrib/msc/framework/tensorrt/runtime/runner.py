@@ -23,6 +23,7 @@ import tvm
 from tvm.contrib.msc.core.ir import MSCGraph
 from tvm.contrib.msc.core.runtime import BYOCRunner
 from tvm.contrib.msc.core.tools import ToolType
+from tvm.contrib.msc.core.utils.message import MSCStage
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 from tvm.contrib.msc.framework.tensorrt.frontend import (
@@ -125,3 +126,33 @@ class TensorRTRunner(BYOCRunner):
     @property
     def framework(self):
         return MSCFramework.TENSORRT
+
+    @classmethod
+    def update_config(cls, stage: str, config: dict, model: Any = None) -> dict:
+        """Update the config for parse
+
+        Parameters
+        -------
+        stage: str
+            The stage to be updated
+        config: dict
+            The config for pipeline.
+        model:
+            The native model.
+
+        Returns
+        -------
+        config: dict
+            The updated config.
+        """
+
+        config = BYOCRunner.update_config(stage, config, model)
+        if stage not in config:
+            return config
+        if stage in (MSCStage.BASELINE, MSCStage.OPTIMIZE, MSCStage.COMPILE):
+            run_config = config[stage].get("run_config", {})
+            if "extra_option" not in run_config["generate_config"]:
+                run_config["generate_config"]["extra_option"] = {}
+            run_config["generate_config"]["extra_option"]["stage"] = stage
+            config[stage]["run_config"] = run_config
+        return config

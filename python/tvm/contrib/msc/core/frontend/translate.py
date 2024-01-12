@@ -66,7 +66,12 @@ def normalize_weights(
         return data
 
     weights = {t.name: _to_data(t, d) for t, d in t_weights.items() if graph.has_tensor(t.name)}
-    return weights
+    # sort the weights by graph weights
+    graph_weights = {}
+    for w in graph.get_weights():
+        assert w.name in weights, "Missing weight " + str(w)
+        graph_weights[w.name] = weights[w.name]
+    return graph_weights
 
 
 def from_relax(
@@ -327,10 +332,12 @@ def byoc_partition(
         assert len(func_names) == 1, "More than 1 target func is found: " + str(msc_mod)
         BYOCChecker().check(func_names, msc_mod[entry])
 
-    graphs_info, all_weights = [], _ffi_api.GetRelaxWeights(msc_mod, entry)
+    ref_weights = _ffi_api.GetRelaxWeights(msc_mod, entry)
+    graphs, weights = [], {}
     for name in func_names:
         graph_name = msc_mod[name].attrs[_ffi_api.ToAttrKey("unique")]
         build_config.update({"graph_name": graph_name, "byoc_entry": name})
         graph = _ffi_api.BuildFromRelax(msc_mod, entry, msc_utils.dump_dict(build_config))
-        graphs_info.append((graph, normalize_weights(all_weights, graph)))
-    return _partition_mod(mod, False), graphs_info
+        graphs.append(graph)
+        weights.update(normalize_weights(ref_weights, graph))
+    return _partition_mod(mod, False), graphs, weights

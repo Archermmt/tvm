@@ -38,11 +38,11 @@ def _get_config(model_type, compile_type, inputs, outputs, atol=1e-1, rtol=1e-1)
     path = "test_manager_{}_{}".format(model_type, compile_type)
     return {
         "workspace": msc_utils.msc_dir(path),
-        "verbose": "critical",
+        "verbose": "debug:1",
         "model_type": model_type,
         "inputs": inputs,
         "outputs": outputs,
-        "dataset": {"loader": "from_random", "max_iter": 5},
+        "dataset": {"prepare": {"loader": "from_random", "max_iter": 5}},
         "prepare": {"profile": {"benchmark": {"repeat": 10}}},
         "baseline": {
             "run_type": model_type,

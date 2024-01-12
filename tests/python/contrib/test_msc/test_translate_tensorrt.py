@@ -100,13 +100,13 @@ def verify_model(torch_model, input_info, allow_incomplete=False):
         golden = [golden]
     golden = [g.detach().cpu().numpy() for g in golden]
     # partition module for tensorrt
-    mod, graph_infos = translate.partition_for_tensorrt(
+    mod, graphs, weights = translate.partition_for_tensorrt(
         mod, trans_config={"allow_incomplete": allow_incomplete}
     )
     check_names(mod)
     output_folder = msc_utils.msc_dir()
     # tranalte to tensorrt
-    mod = codegen.to_tensorrt(mod, graph_infos, output_folder=output_folder)
+    mod = codegen.to_tensorrt(mod, graphs, weights, output_folder=output_folder)
     tvm_datas = [tvm.nd.array(i, device=tvm.cuda()) for i in datas]
     results = build_and_run(mod, tvm_datas)
     for gol, res in zip(golden, results):

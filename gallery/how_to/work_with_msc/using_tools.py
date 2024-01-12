@@ -47,14 +47,16 @@ parser.add_argument(
     help="The folder saving training and testing datas",
 )
 parser.add_argument("--compile_type", type=str, default="tvm", help="The compile type of model")
-parser.add_argument("--distill", action="store_true", help="Whether to use distiller for quantize")
-parser.add_argument("--gym", action="store_true", help="Whether to use gym for quantize")
+parser.add_argument("--prune", action="store_true", help="Whether to use pruner")
+parser.add_argument("--quantize", action="store_true", help="Whether to use quantizer")
+parser.add_argument("--distill", action="store_true", help="Whether to use distiller for tool")
+parser.add_argument("--gym", action="store_true", help="Whether to use gym for tool")
 parser.add_argument("--test_batch", type=int, default=1, help="The batch size for test")
 parser.add_argument("--test_iter", type=int, default=10, help="The iter for test")
 parser.add_argument("--calibrate_iter", type=int, default=10, help="The iter for calibration")
 parser.add_argument("--train_batch", type=int, default=32, help="The batch size for train")
 parser.add_argument("--train_iter", type=int, default=10, help="The iter for train")
-parser.add_argument("--train_epoch", type=int, default=1, help="The epoch for train")
+parser.add_argument("--train_epoch", type=int, default=0, help="The epoch for train")
 args = parser.parse_args()
 
 
@@ -71,16 +73,20 @@ if __name__ == "__main__":
     if torch.cuda.is_available():
         model = model.to(torch.device("cuda:0"))
 
-    acc = run_torch_model(model, testloader, max_iter=args.test_iter)
+    acc = eval_model(model, testloader, max_iter=args.test_iter)
     print("Baseline acc " + str(acc))
+
+    # A bug for torch->tvm: only train model can be parsed correctly
+    model.train()
 
     model = TorchWrapper(
         model,
-        inputs=[("input", [1, 3, 32, 32], "float32")],
+        inputs=[("input", [args.test_batch, 3, 32, 32], "float32")],
         outputs=["output"],
         compile_type=args.compile_type,
-        dataloader=_get_datas,
-        quantize_config="default",
+        dataset={"prepare": {"loader": _get_datas}},
+        prune_config="default" if args.prune else None,
+        quantize_config="default" if args.quantize else None,
         distill_config="default" if args.distill else None,
         gym_configs={ToolType.QUANTIZER: ["default"]} if args.gym else None,
         verbose="debug:1",
@@ -88,22 +94,17 @@ if __name__ == "__main__":
 
     # optimize the model with quantizer(PTQ)
     model.optimize()
-    acc = run_torch_model(model, testloader, max_iter=args.test_iter)
+    acc = eval_model(model, testloader, max_iter=args.test_iter)
     print("PTQ acc " + str(acc))
-    for k, v in model.state_dict().items():
-        print("ptq weight {} : {}".format(k, msc_utils.inspect_array(v)))
 
     # train the model with quantizer(QAT)
     optimizer = optim.Adam(model.parameters(), lr=0.0000001, weight_decay=0.08)
     for ep in range(args.train_epoch):
-        run_torch_model(model, trainloader, max_iter=args.train_iter, optimizer=optimizer)
-        acc = run_torch_model(model, testloader, max_iter=args.test_iter)
+        train_model(model, trainloader, optimizer, max_iter=args.train_iter)
+        acc = eval_model(model, testloader, max_iter=args.test_iter)
         print("QAT[{}] acc: {}".format(ep, acc))
-
-    for k, v in model.state_dict().items():
-        print("qat weight {} : {}".format(k, msc_utils.inspect_array(v)))
 
     # compile the model
     model.compile()
-    acc = run_tvm_model(model, testloader, max_iter=args.test_iter)
+    acc = eval_model(model, testloader, max_iter=args.test_iter)
     print("Compiled acc " + str(acc))

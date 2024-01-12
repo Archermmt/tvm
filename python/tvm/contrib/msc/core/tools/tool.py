@@ -415,26 +415,26 @@ class BaseTool(object):
     def reset(
         self,
         graphs: List[MSCGraph],
-        weights: List[Dict[str, tvm.nd.array]],
+        weights: Dict[str, tvm.nd.array],
         cache_dir: msc_utils.MSCDirectory = None,
-    ) -> Tuple[List[MSCGraph], List[Dict[str, tvm.nd.array]]]:
+    ) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:
         """Reset the tool with graphs and weights
 
         Parameters
         ----------
         graphs: list<MSCgraph>
             The msc graphs.
-        weights: list<dict<str, tvm.nd.array>>
-            The weights
+        weights: dict<str, tvm.nd.array>
+            The weights.
         cache_dir: MSCDirectory
-            cache path for save/load info
+            cache path for save/load info.
 
         Returns
         -------
         graphs: list<MSCgraph>
             The msc graphs.
-        weights: list<dict<str, tvm.nd.array>>
-            The weights
+        weights: dict<str, tvm.nd.array>
+            The weights.
         """
 
         self._forward_cnt = 0
@@ -445,36 +445,33 @@ class BaseTool(object):
             cache_info = {}
         if self.tool_type() in cache_info:
             self.load_cache(cache_dir, cache_info[self.tool_type()])
-        self._graphs, weights = self._reset(graphs, weights)
-        self._weights = {}
-        for sub_weights in weights:
-            self._weights.update(sub_weights)
+        self._graphs, self._weights = self._reset(graphs, weights)
         self._logger.debug(
             "%s reset %d graphs, %d weights",
             self.tool_type(),
             len(self._graphs),
             len(self._weights),
         )
-        return self._graphs, weights
+        return self._graphs, self._weights
 
     def _reset(
-        self, graphs: List[MSCGraph], weights: List[Dict[str, tvm.nd.array]]
-    ) -> Tuple[List[MSCGraph], List[Dict[str, tvm.nd.array]]]:
+        self, graphs: List[MSCGraph], weights: Dict[str, tvm.nd.array]
+    ) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:
         """Reset the tool
 
         Parameters
         ----------
         graphs: list<MSCgraph>
             The msc graphs.
-        weights: list<dict<str, tvm.nd.array>>
-            The weights
+        weights: dict<str, tvm.nd.array>
+            The weights.
 
         Returns
         -------
         graphs: list<MSCgraph>
             The msc graphs.
-        weights: list<dict<str, tvm.nd.array>>
-            The weights
+        weights: dict<str, tvm.nd.array>
+            The weights.
         """
 
         return graphs, weights
@@ -495,6 +492,13 @@ class BaseTool(object):
         """Destory tool"""
 
         self._graphs, self._weights = [], {}
+
+    def export_config(self, config: dict, folder: msc_utils.MSCDirectory):
+        """Export the config for tool"""
+
+        config = msc_utils.copy_dict(config)
+        config["plan_file"] = folder.copy(config["plan_file"])
+        return config
 
     def load_cache(self, cache_dir: msc_utils.MSCDirectory, cache_info: dict):
         """Save runner to cache
@@ -1303,25 +1307,23 @@ class WeightTool(BaseTool):
         return super().setup()
 
     def _reset(
-        self, graphs: List[MSCGraph], weights: List[Dict[str, tvm.nd.array]]
-    ) -> Tuple[List[MSCGraph], List[Dict[str, tvm.nd.array]]]:
+        self, graphs: List[MSCGraph], weights: Dict[str, tvm.nd.array]
+    ) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:
         """Reset the tool
 
         Parameters
         ----------
         graphs: list<MSCgraph>
             The msc graphs.
-        weights: list<dict<str, tvm.nd.array>>
-            The weights
-        as_cache: bool
-            Whether the graphs and weights are loaded from cache
+        weights: dict<str, tvm.nd.array>
+            The weights.
 
         Returns
         -------
         graphs: list<MSCgraph>
             The msc graphs.
-        weights: list<dict<str, tvm.nd.array>>
-            The weights
+        weights: dict<str, tvm.nd.array>
+            The weights.
         """
 
         graphs, weights = super()._reset(graphs, weights)

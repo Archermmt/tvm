@@ -25,10 +25,12 @@ import torch
 import tvm
 from tvm.contrib.msc.core.runtime import ModelRunner
 from tvm.contrib.msc.core.ir import MSCGraph
+from tvm.contrib.msc.core.utils.message import MSCStage
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
+from tvm.contrib.msc.core import utils as msc_utils
+from tvm.contrib.msc.framework.torch.frontend import from_torch
 from tvm.contrib.msc.framework.torch.codegen import to_torch
 from tvm.contrib.msc.framework.torch.frontend import set_weight_alias
-from tvm.contrib.msc.core import utils as msc_utils
 from tvm.contrib.msc.framework.torch import tools
 
 
@@ -135,25 +137,73 @@ class TorchRunner(ModelRunner):
         return MSCFramework.TORCH
 
     @classmethod
-    def native_device(cls, model: torch.nn.Module) -> str:
-        """Get the device of the model
+    def load_native(cls, model: Any) -> torch.nn.Module:
+        """Load the native model
 
         Parameters
         -------
-        model: torch.nn.Module
-            The runnable model.
+        model:
+            The native model.
 
         Returns
         -------
-        device: str
-            The device name.
+        model: torch.nn.Module
+            The loaded native model.
         """
 
+        if isinstance(model, torch.nn.Module):
+            native_model = model
+        else:
+            raise NotImplementedError(
+                "Load native model {} with type {} is not supported".format(model, type(model))
+            )
         parameters = list(model.parameters())
         if not parameters:
-            return "cpu"
+            return native_model, "cpu"
         ref_device = parameters[0].device
-        return "{}:{}".format(ref_device.type, ref_device.index)
+        if ref_device.index:
+            return native_model, "{}:{}".format(ref_device.type, ref_device.index)
+        return native_model, ref_device.type
+
+    @classmethod
+    def update_config(cls, stage: str, config: dict, model: Any = None) -> dict:
+        """Update the config for parse
+
+        Parameters
+        -------
+        stage: str
+            The stage to be updated
+        config: dict
+            The config for pipeline.
+        model:
+            The native model.
+
+        Returns
+        -------
+        config: dict
+            The updated config.
+        """
+
+        config = ModelRunner.update_config(stage, config, model)
+        if stage not in config:
+            return config
+        if stage == MSCStage.PARSE:
+            config["parse"]["parser"] = from_torch
+            parse_config = config["parse"].get("parse_config", {})
+            parse_config.update(
+                {
+                    "input_info": [
+                        [i[1], "float" if len(i) < 2 else i[2]] for i in config["inputs"]
+                    ],
+                    "input_names": [i[0] for i in config["inputs"]],
+                }
+            )
+            config["parse"]["parse_config"] = parse_config
+        elif stage in (MSCStage.BASELINE, MSCStage.OPTIMIZE, MSCStage.COMPILE):
+            run_config = config[stage].get("run_config", {})
+            run_config.update({"is_training": model.training})
+            config[stage]["run_config"] = run_config
+        return config
 
     @classmethod
     def run_native(
@@ -164,7 +214,7 @@ class TorchRunner(ModelRunner):
         output_names: List[str],
         warm_up: int = 10,
         repeat: int = 0,
-    ) -> Dict[str, np.ndarray]:
+    ) -> Tuple[Dict[str, np.ndarray], float]:
         """Run the datas and get outputs
 
         Parameters
@@ -186,6 +236,8 @@ class TorchRunner(ModelRunner):
         -------
         outputs: dict<str, np.array>
             The outputs in dict.
+        avg_time: float
+            The average time.
         """
 
         parameters = list(model.parameters())
@@ -193,9 +245,9 @@ class TorchRunner(ModelRunner):
             device = parameters[0].device
         else:
             device = torch.device("cpu")
+        torch_inputs = [torch.from_numpy(inputs[i_name]).to(device) for i_name in input_names]
 
         def _run_once():
-            torch_inputs = [torch.from_numpy(inputs[i_name]).to(device) for i_name in input_names]
             return model(*torch_inputs)
 
         if repeat > 0:
@@ -218,3 +270,25 @@ class TorchRunner(ModelRunner):
             o_name: msc_utils.cast_array(o_data) for o_name, o_data in zip(output_names, outputs)
         }
         return outputs, avg_time
+
+    @classmethod
+    def dump_nativate(cls, model: torch.nn.Module, folder: msc_utils.MSCDirectory) -> str:
+        """Dump the nativate model
+
+        Parameters
+        -------
+        model: torch.nn.Module
+            The runnable model.
+        folder: MSCDirectory
+            The export folder.
+
+        Returns
+        -------
+        export_path: str
+            The exported path
+        """
+
+        graph_model = torch.fx.symbolic_trace(model)
+        exp_path = folder.create_dir("meta").path
+        graph_model.to_folder(exp_path)
+        return exp_path
