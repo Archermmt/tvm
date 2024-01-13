@@ -77,7 +77,7 @@ if __name__ == "__main__":
     print("Baseline acc " + str(acc))
 
     # A bug for torch->tvm: only train model can be parsed correctly
-    model.train()
+    # model.train()
 
     model = TorchWrapper(
         model,
@@ -89,6 +89,7 @@ if __name__ == "__main__":
         quantize_config="default" if args.quantize else None,
         distill_config="default" if args.distill else None,
         gym_configs={ToolType.QUANTIZER: ["default"]} if args.gym else None,
+        check_accuracy=False,
         verbose="debug:1",
     )
 

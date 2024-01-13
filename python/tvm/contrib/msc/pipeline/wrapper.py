@@ -49,8 +49,8 @@ class BaseWrapper(object):
         The optimize type.
     dataset: dict<str, dict>
         The datasets for compile pipeline.
-    check_baseline: bool
-        Whether to check baseline.
+    check_accuracy: bool
+        Whether to check accuracy.
     inputs: list<dict>
         The inputs info,
     outputs: list<str>
@@ -87,7 +87,7 @@ class BaseWrapper(object):
         compile_type: str,
         optimize_type: str = None,
         dataset: Dict[str, dict] = None,
-        check_baseline: bool = True,
+        check_accuracy: bool = True,
         prune_config: Union[dict, str] = None,
         quantize_config: Union[dict, str] = None,
         track_config: Union[dict, str] = None,
@@ -105,10 +105,10 @@ class BaseWrapper(object):
         self._optimize_type = optimize_type or self.model_type
         self._compile_type = compile_type
         self._plugins = plugins
-        self._workspace = msc_utils.msc_dir(workspace, keep_history=debug)
+        self._debug = True if verbose.startswith("debug") else debug
+        self._workspace = msc_utils.msc_dir(workspace, keep_history=self._debug)
         log_path = self._workspace.relpath("MSC_LOG", keep_history=False)
         self._logger = msc_utils.create_file_logger(verbose, log_path)
-        self._debug = debug
         self._manager = None
         self._config = {
             "model_type": self.model_type,
@@ -118,6 +118,10 @@ class BaseWrapper(object):
             "outputs": outputs,
             "dataset": dataset,
             MSCStage.PREPARE: {"profile": {"benchmark": {"repeat": -1}}},
+            MSCStage.BASELINE: {
+                "run_type": self.model_type,
+                "profile": {"check": {"atol": 1e-3, "rtol": 1e-3}, "benchmark": {"repeat": -1}},
+            },
             MSCStage.OPTIMIZE: {
                 "run_type": self._optimize_type,
                 "profile": {"check": {"atol": 1e-3, "rtol": 1e-3}, "benchmark": {"repeat": -1}},
@@ -127,11 +131,10 @@ class BaseWrapper(object):
                 "profile": {"check": {"atol": 1e-3, "rtol": 1e-3}, "benchmark": {"repeat": -1}},
             },
         }
-        if check_baseline:
-            self._config[MSCStage.BASELINE] = {
-                "run_type": self.model_type,
-                "profile": {"check": {"atol": 1e-3, "rtol": 1e-3}, "benchmark": {"repeat": -1}},
-            }
+        if not check_accuracy:
+            self._config.pop(MSCStage.BASELINE)
+            for stage in [MSCStage.OPTIMIZE, MSCStage.COMPILE]:
+                self._config[stage]["profile"]["check"]["err_rate"] = -1
 
         # config optimize
         self._tools_config = {}
