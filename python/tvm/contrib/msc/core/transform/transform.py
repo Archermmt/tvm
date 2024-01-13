@@ -17,6 +17,8 @@
 # pylint: disable=invalid-name
 """tvm.contrib.msc.core.transform.transform"""
 
+from typing import Dict
+
 import tvm
 from tvm.relax.transform import _ffi_api as relax_api
 from tvm.relay.transform import _ffi_api as relay_api
@@ -136,3 +138,19 @@ def SetBYOCAttrs(target, entry_name: str = "main") -> tvm.ir.transform.Pass:
     """
 
     return relax_api.SetBYOCAttrs(target, entry_name)  # type: ignore
+
+
+def UpdateConsts(datas: Dict[str, tvm.nd.array]) -> tvm.ir.transform.Pass:
+    """update constant datas
+
+    Parameters
+    ----------
+    datas: dict<str, tvm.nd.array>
+        The datas to be updated
+
+    Returns
+    -------
+    ret: tvm.ir.transform.Pass
+    """
+
+    return relax_api.UpdateConsts(datas)  # type: ignore

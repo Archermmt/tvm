@@ -87,9 +87,11 @@ class PyCodeGen : public BaseCodeGen<ConfigType, HelperType> {
     this->stack_.line("import os")
         .line("import numpy as np")
         .line("from typing import List, Dict, Any")
-        .line("import tvm")
-        .line("from tvm.contrib.msc.core import tools as msc_tools")
-        .line("from tvm.contrib.msc.core import utils as msc_utils");
+        .line("import tvm");
+    if (this->config()->use_tools) {
+      this->stack_.line("from tvm.contrib.msc.core import tools as msc_tools");
+    }
+    this->stack_.line("from tvm.contrib.msc.core import utils as msc_utils");
   }
 
   /*! \brief Stack the docs for the helpers*/

@@ -18,8 +18,8 @@
  */
 
 /*!
- * \file src/contrib/msc/core/transform/fuse_shape.cc
- * \brief Pass for fuse ShapeExpr.
+ * \file src/contrib/msc/core/transform/inline_params.cc
+ * \brief Pass for inline Exprs.
  */
 
 #include <tvm/relax/expr.h>
@@ -35,11 +35,11 @@ namespace relax {
 using namespace tvm::contrib::msc;
 
 /*!
- * \brief Bind ShapeExpr to Reshape
+ * \brief Inline the exprs
  */
-class ShapeBinder : public ExprMutator {
+class ParamsInliner : public ExprMutator {
  public:
-  explicit ShapeBinder(IRModule ctx_module, const String& entry_name) : ExprMutator(ctx_module) {
+  explicit ParamsInliner(IRModule ctx_module, const String& entry_name) : ExprMutator(ctx_module) {
     mod_ = ctx_module;
     entry_name_ = entry_name;
   }
@@ -174,7 +174,7 @@ class ShapeBinder : public ExprMutator {
 };
 
 IRModule InlineParams(IRModule mod, const String& entry_name) {
-  return ShapeBinder(mod, entry_name).Bind();
+  return ParamsInliner(mod, entry_name).Bind();
 }
 
 namespace transform {

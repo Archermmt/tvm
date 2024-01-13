@@ -340,7 +340,7 @@ class BaseTool(object):
 
         self._tensor_cache = {}
         self._enabled = True
-        self._is_training, self._trained = False, False
+        self._is_training = False
         self._graphs, self._weights = [], {}
         self._graph_id, self._forward_cnt = 0, 0
         self._processed_tensor = {}
@@ -895,7 +895,6 @@ class BaseTool(object):
         """Set the tool to train mode"""
 
         self._is_training = True
-        self._trained = True
 
     def eval(self):
         """Set the tool to eval mode"""
@@ -1279,10 +1278,6 @@ class BaseTool(object):
 
     def get_graph(self):
         return self._graphs[self._graph_id]
-
-    @property
-    def trained(self):
-        return self._trained
 
     @classmethod
     def tool_type(cls):

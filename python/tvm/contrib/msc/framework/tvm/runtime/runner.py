@@ -44,10 +44,7 @@ class WrapRunnable(object):
         The entry funcname.
     """
 
-    def __init__(
-        self, runner: ModelRunner, runnable: tvm.relax.VirtualMachine, entry: str = "main"
-    ):
-        self._runner = runner
+    def __init__(self, runnable: tvm.relax.VirtualMachine, entry: str = "main"):
         self._runnable = runnable
         self._entry = entry
 
@@ -55,14 +52,6 @@ class WrapRunnable(object):
         execute_step("before_forward", *inputs)
         output = self._runnable[self._entry](*inputs)
         return execute_step("after_forward", output)
-
-    def eval(self):
-        for tool in self._runner.get_tools():
-            tool.eval()
-
-    def train(self):
-        for tool in self._runner.get_tools():
-            tool.train()
 
 
 class TVMRunner(ModelRunner):
@@ -106,7 +95,7 @@ class TVMRunner(ModelRunner):
                     runnable = tvm.relax.VirtualMachine(relax_exec, tvm.cuda())
             else:
                 raise NotImplementedError("Unsupported device " + str(self._device))
-        return WrapRunnable(self, runnable)
+        return WrapRunnable(runnable)
 
     def _call_runnable(
         self, runnable: WrapRunnable, inputs: Dict[str, np.ndarray], device: str

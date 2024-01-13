@@ -303,6 +303,20 @@ class TorchWrapper(BaseWrapper):
             return self._get_model().parameters()
         return self._manager.runner.get_weights(MSCFramework.TORCH)
 
+    def train(self):
+        if self._manager:
+            self._manager.runner.train()
+        if self._get_framework() == MSCFramework.TORCH:
+            return self._get_model().train()
+        return self._get_model()
+
+    def eval(self):
+        if self._manager:
+            self._manager.runner.eval()
+        if self._get_framework() == MSCFramework.TORCH:
+            return self._get_model().eval()
+        return self._get_model()
+
     def _get_framework(self) -> str:
         return self._manager.runner.framework if self._manager else MSCFramework.TORCH
 

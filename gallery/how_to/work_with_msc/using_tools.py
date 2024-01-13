@@ -56,7 +56,7 @@ parser.add_argument("--test_iter", type=int, default=10, help="The iter for test
 parser.add_argument("--calibrate_iter", type=int, default=10, help="The iter for calibration")
 parser.add_argument("--train_batch", type=int, default=32, help="The batch size for train")
 parser.add_argument("--train_iter", type=int, default=10, help="The iter for train")
-parser.add_argument("--train_epoch", type=int, default=0, help="The epoch for train")
+parser.add_argument("--train_epoch", type=int, default=2, help="The epoch for train")
 args = parser.parse_args()
 
 
@@ -105,7 +105,12 @@ if __name__ == "__main__":
         acc = eval_model(model, testloader, max_iter=args.test_iter)
         print("QAT[{}] acc: {}".format(ep, acc))
 
+    """
+    print("afeter qat!!")
+    for k, v in model.state_dict().items():
+        print("qat {}:{}".format(k, msc_utils.inspect_array(v)))
+    """
     # compile the model
-    model.compile()
+    model.compile(bind_params=True)
     acc = eval_model(model, testloader, max_iter=args.test_iter)
     print("Compiled acc " + str(acc))

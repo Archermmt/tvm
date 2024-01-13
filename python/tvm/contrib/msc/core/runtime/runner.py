@@ -89,6 +89,7 @@ class BaseRunner(object):
         self._plugin = plugin
         self._name = name
         self._debug_level = debug_level
+        self._is_training, self._trained = False, False
         self._logger = logger or msc_utils.get_global_logger()
         self._logger.info(
             msc_utils.msg_block(
@@ -354,11 +355,11 @@ class BaseRunner(object):
 
         mod = self._mod
         if apply_hooks:
-            for hook in self._translate_config.get("hooks", {}).get("before", []):
+            for hook in self._translate_config.get("pre_hooks", []):
                 mod = self._apply_hook("before translate", hook, mod)
         graphs, weights = self._translate(mod)
         if apply_hooks:
-            for hook in self._translate_config.get("hooks", {}).get("after", []):
+            for hook in self._translate_config.get("post_hooks", []):
                 graphs, weights = self._apply_hook("after translate", hook, graphs, weights)
         return graphs, weights
 
@@ -431,11 +432,11 @@ class BaseRunner(object):
 
         graphs, weights = self._graphs, self._weights
         if apply_hooks:
-            for hook in self._generate_config.get("hooks", {}).get("before", []):
+            for hook in self._generate_config.get("pre_hooks", []):
                 graphs, weights = self._apply_hook("before generate", hook, graphs, weights)
         model = self._generate_model(graphs, weights)
         if apply_hooks:
-            for hook in self._generate_config.get("hooks", {}).get("after", []):
+            for hook in self._generate_config.get("post_hooks", []):
                 model = self._apply_hook("after generate", hook, model)
         return model
 
@@ -473,11 +474,11 @@ class BaseRunner(object):
 
         model = self._model
         if apply_hooks:
-            for hook in self._build_config.get("hooks", {}).get("before", []):
+            for hook in self._build_config.get("pre_hooks", []):
                 model = self._apply_hook("before build", hook, model)
         runnable = self._build_runnable(model)
         if apply_hooks:
-            for hook in self._build_config.get("hooks", {}).get("after", []):
+            for hook in self._build_config.get("post_hooks", []):
                 runnable = self._apply_hook("after build", hook, runnable)
         return runnable
 
@@ -496,6 +497,21 @@ class BaseRunner(object):
         """
 
         raise NotImplementedError("_build_runnable is not implemented for " + str(self.__class__))
+
+    def train(self):
+        """Change status to train"""
+
+        self._is_training = True
+        self._trained = True
+        for tool in self.get_tools():
+            tool.train()
+
+    def eval(self):
+        """Change status to eval"""
+
+        self._is_training = False
+        for tool in self.get_tools():
+            tool.eval()
 
     def get_tool_config(self, tool_type: str) -> dict:
         """Get tool by type
@@ -594,16 +610,14 @@ class BaseRunner(object):
         self._logger.info("Save %d plan(%s) -> %s", len(plan), tool_type, plan_file)
         return plan_file
 
-    def _apply_hook(
-        self, desc: str, hook: Tuple[Union[str, callable], dict], *args, **kwargs
-    ) -> Any:
+    def _apply_hook(self, desc: str, hook_def: dict, *args, **kwargs) -> Any:
         """Load a registered hook
 
         Parameters
         ----------
         desc: str
             The description of the hook
-        hook: <callable/str, dict>
+        hook_def: dict
             The function and config of the hook.
         args: list<Any>
             The arguments for run method.
@@ -616,9 +630,8 @@ class BaseRunner(object):
             The result
         """
 
-        func, config = hook
-        hook = load_runner_hook(func, config)
-        self._logger.info("Apply %s hook: %s", desc, hook)
+        hook = load_runner_hook(hook_def)
+        self._logger.info("Apply %s hook:\n  %s", desc, hook)
         return hook.apply(self, *args, **kwargs)
 
     def _update_codegen(self, config: Dict[str, Any]):
@@ -710,9 +723,7 @@ class BaseRunner(object):
             The parameters from runtime.
         """
 
-        if not self._tools:
-            return {}
-        if all(not t.trained for t in self.get_tools()):
+        if not self._trained:
             return {}
         return self._get_runtime_params()
 

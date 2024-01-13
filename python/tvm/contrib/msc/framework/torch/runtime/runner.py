@@ -128,10 +128,8 @@ class TorchRunner(ModelRunner):
         params = {}
         for g in self._graphs:
             for w in g.get_weights():
-                print("has weight " + str(w))
                 assert w.alias in state_dict, "Missing weight {} in state_dict".format(w.alias)
                 params[w.name] = msc_utils.cast_array(state_dict[w.alias], MSCFramework.TVM, "cpu")
-        raise Exception("stop here!!")
         return params
 
     def _device_enabled(self, device: str) -> bool:

@@ -48,19 +48,17 @@ class ByocNameSetter : public ExprMutator {
   }
 
   IRModule SetNames() {
-    GlobalVar main_var;
     size_t func_cnt = 0;
     for (const auto& [gv, func] : mod_->functions) {
       if (gv->name_hint == entry_name_) {
-        main_var = gv;
-      } else {
-        const auto& name_opt = func->GetAttr<runtime::String>(attr::kCodegen);
-        if (name_opt.defined() && name_opt.value() == target_) {
-          const String& func_name = target_ + "_" + std::to_string(func_cnt);
-          const auto& new_func = Downcast<Function>(VisitExpr(func));
-          builder_->UpdateFunction(gv, WithAttr(new_func, msc_attr::kUnique, func_name));
-          func_cnt += 1;
-        }
+        continue;
+      }
+      const auto& name_opt = func->GetAttr<runtime::String>(attr::kCodegen);
+      if (name_opt.defined() && name_opt.value() == target_) {
+        const String& func_name = target_ + "_" + std::to_string(func_cnt);
+        const auto& new_func = Downcast<Function>(VisitExpr(func));
+        builder_->UpdateFunction(gv, WithAttr(new_func, msc_attr::kUnique, func_name));
+        func_cnt += 1;
       }
     }
     return builder_->GetContextIRModule();

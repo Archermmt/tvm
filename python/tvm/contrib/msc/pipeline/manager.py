@@ -25,6 +25,7 @@ import traceback
 import numpy as np
 
 import tvm
+from tvm.contrib.msc.core import transform as msc_transform
 from tvm.contrib.msc.core.runtime import BaseRunner
 from tvm.contrib.msc.core.tools import ToolType
 from tvm.contrib.msc.core.utils.namespace import MSCFramework, MSCMap, MSCKey
@@ -327,6 +328,7 @@ class BaseManager(object):
             self._relax_mod, _ = stage_config["parser"](self._model, **parse_config)
             if trans_func:
                 self._relax_mod = trans_func(self._relax_mod)
+            self._relax_mod = msc_transform.SetExprName()(self._relax_mod)
             if cache_path:
                 with open(cache_path, "w") as f:
                     f.write(tvm.ir.save_json(self._relax_mod))
@@ -504,6 +506,7 @@ class BaseManager(object):
             module, params = self._relax_mod, self._runner.get_runtime_params()
             if params and bind_params:
                 print("should bind the parameters!!")
+                module = msc_transform.UpdateConsts(params)(module)
                 raise Exception("stop here!!")
             elif params:
                 with open(folder.relpath("optimized_params.bin"), "wb") as f_params:
@@ -567,23 +570,26 @@ class BaseManager(object):
         config = msc_utils.copy_dict(self._meta_config)
         config["dataset"] = {k: _save_dataset(v, dump) for k, v in self._config["dataset"].items()}
         if self._optimized:
+            config.pop(MSCStage.OPTIMIZE)
             config["model_type"] = MSCFramework.TVM
             if MSCStage.BASELINE in config:
                 config[MSCStage.BASELINE]["run_type"] = MSCFramework.TVM
-            config.pop(MSCStage.OPTIMIZE)
-            if bind_params and MSCStage.BASELINE in config:
-                config.pop(MSCStage.BASELINE)
             weights_path = folder.relpath("optimized_params.bin")
-            if os.path.isfile(weights_path):
+            if bind_params:
+                for stage in [MSCStage.BASELINE, MSCStage.COMPILE]:
+                    if stage not in config or "profile" not in config[stage]:
+                        continue
+                    config[stage]["profile"].setdefault("check", {})["err_rate"] = -1
+            elif os.path.isfile(weights_path):
                 hooks = (
                     config[MSCStage.COMPILE]
                     .setdefault("run_config", {})
                     .setdefault("generate_config", {})
-                    .setdefault("hooks", {})
+                    .setdefault("pre_hooks", [])
                 )
-                if "before" not in hooks:
-                    hooks["before"] = []
-                hooks["before"].append({"hook": "update_weights", "weights_path": weights_path})
+                hooks.append({"hook": "update_weights", "weights_path": weights_path})
+                if "profile" in config[MSCStage.COMPILE]:
+                    config[MSCStage.COMPILE]["profile"].setdefault("check", {})["err_rate"] = -1
             for t_type, t_config in self._tools_config.items():
                 tool = self.runner.get_tool(t_type)
                 config[MSCStage.COMPILE][t_type] = tool.export_config(

@@ -70,6 +70,10 @@ def to_relax(
     # pylint: disable=unused-argument
     def _bind_weights(mod: tvm.IRModule, folder: msc_utils.MSCDirectory) -> tvm.IRModule:
         if weights:
+            print("calling codegen")
+            for k, v in weights.items():
+                print("tvm {}:{}".format(k, msc_utils.inspect_array(v)))
+
             mod = BindParams("main", weights)(mod)
         return mod
 

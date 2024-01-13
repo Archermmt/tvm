@@ -101,22 +101,6 @@ void TorchCodeGen::CodeGenGraph() {
     stack_.assign("outputs", DocUtils::ToList(idx_outputs));
   }
   stack_.func_end("outputs");
-  // train and eval method
-  stack_.func_def("train")
-      .func_arg("self", "torch.nn.Module")
-      .func_arg("mode", "bool", "True")
-      .func_start()
-      .for_start("tool", "msc_tools.get_tools(\"" + config()->tools_tag + "\")")
-      .cond_if("mode")
-      .func_call("train", "", "tool")
-      .cond_else()
-      .func_call("eval", "", "tool")
-      .cond_end()
-      .for_end()
-      .func_call("super", "model")
-      .method_call("train")
-      .call_arg("mode")
-      .func_end("model");
   stack_.class_end();
 }
 
