@@ -16,7 +16,7 @@
 # under the License.
 """tvm.contrib.msc.core.utils.register"""
 
-from typing import Any, Optional, Union
+from typing import Any, Optional
 from .namespace import MSCFramework
 
 

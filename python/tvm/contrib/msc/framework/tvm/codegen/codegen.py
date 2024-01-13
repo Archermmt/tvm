@@ -70,10 +70,6 @@ def to_relax(
     # pylint: disable=unused-argument
     def _bind_weights(mod: tvm.IRModule, folder: msc_utils.MSCDirectory) -> tvm.IRModule:
         if weights:
-            print("calling codegen")
-            for k, v in weights.items():
-                print("tvm {}:{}".format(k, msc_utils.inspect_array(v)))
-
             mod = BindParams("main", weights)(mod)
         return mod
 
@@ -81,4 +77,18 @@ def to_relax(
     model_args = inputs
     if plugin:
         model_args = model_args + [plugin]
-    return codegen.load(model_args, pre_load=_save_weights, post_load=_bind_weights)
+    mod = codegen.load(model_args, pre_load=_save_weights, post_load=_bind_weights)
+
+    mod = tvm.ir.transform.Sequential(
+        [
+            # The canonicalization of relax variable bindings is not required
+            # for correctness.  It does, however, remove trivial `x = y`
+            # bindings, preventing test cases from depending on their
+            # presence.
+            tvm.relax.transform.CanonicalizeBindings(),
+            tvm.relax.transform.ConvertToDataflow(min_size=1),
+        ],
+        name="tvm.contrib.msc.framework.tvm.codegen.to_relax_postproc",
+    )(mod)
+
+    return mod

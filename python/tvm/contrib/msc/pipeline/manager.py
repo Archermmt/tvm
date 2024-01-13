@@ -509,14 +509,14 @@ class BaseManager(object):
                 module = msc_transform.UpdateConsts(params)(module)
                 raise Exception("stop here!!")
             elif params:
-                with open(folder.relpath("optimized_params.bin"), "wb") as f_params:
-                    f_params.write(tvm.runtime.save_param_dict(params))
+                with open(folder.relpath("checkpoint.bin"), "wb") as f:
+                    f.write(tvm.runtime.save_param_dict(params))
             if not dump:
                 return module
             path = folder.relpath("meta_module.json")
             with open(path, "w") as f:
                 f.write(tvm.ir.save_json(module))
-            return path
+            return MSCKey.MSC_ROOT + "/meta_module.json"
         if not dump:
             return self._model
         return self._get_runner_cls(self._model_type).dump_nativate(self._model)
@@ -574,27 +574,27 @@ class BaseManager(object):
             config["model_type"] = MSCFramework.TVM
             if MSCStage.BASELINE in config:
                 config[MSCStage.BASELINE]["run_type"] = MSCFramework.TVM
-            weights_path = folder.relpath("optimized_params.bin")
+            ckpt_path = folder.relpath("checkpoint.bin")
             if bind_params:
                 for stage in [MSCStage.BASELINE, MSCStage.COMPILE]:
                     if stage not in config or "profile" not in config[stage]:
                         continue
                     config[stage]["profile"].setdefault("check", {})["err_rate"] = -1
-            elif os.path.isfile(weights_path):
+            elif os.path.isfile(ckpt_path):
                 hooks = (
                     config[MSCStage.COMPILE]
                     .setdefault("run_config", {})
                     .setdefault("generate_config", {})
                     .setdefault("pre_hooks", [])
                 )
-                hooks.append({"hook": "update_weights", "weights_path": weights_path})
+                hooks.append(
+                    {"hook": "update_weights", "weights_path": MSCKey.MSC_ROOT + "/checkpoint.bin"}
+                )
                 if "profile" in config[MSCStage.COMPILE]:
                     config[MSCStage.COMPILE]["profile"].setdefault("check", {})["err_rate"] = -1
             for t_type, t_config in self._tools_config.items():
                 tool = self.runner.get_tool(t_type)
-                config[MSCStage.COMPILE][t_type] = tool.export_config(
-                    t_config, folder.create_dir("tools")
-                )
+                config[MSCStage.COMPILE][t_type] = tool.export_config(t_config, folder)
             return config
         return config
 

@@ -18,7 +18,7 @@
 import pytest
 
 import tvm
-from tvm import topi, relax, tir
+from tvm import topi, relax, tir, dlight
 import tvm.script
 import tvm.testing
 from tvm.script import relax as R, tir as T, ir as I
@@ -29,88 +29,69 @@ from tvm.relax.backend import DispatchSortScan
 from tvm.ir.base import assert_structural_equal
 
 
-def test_dispatch_cumsum():
+def test_dispatch_scanop():
     @I.ir_module
     class Before:
-        I.module_global_infos({"vdevice": [I.vdevice("cuda", 0), I.vdevice("llvm", 0)]})
+        I.module_global_infos({"vdevice": [I.vdevice("llvm", 0)]})
 
         @R.function
         def foo(x: R.Tensor((2, 3), "float32", "llvm")):
             with R.dataflow():
-                gv = R.cumsum(x, axis=1, dtype="float64")
-                R.output(gv)
-            return gv
-
-    @I.ir_module
-    class Expected:
-        I.module_global_infos({"vdevice": [I.vdevice("cuda", 0), I.vdevice("llvm", 0)]})
-
-        @T.prim_func(private=True)
-        def cumsum(var_A: T.handle, out_buf: T.Buffer((T.int64(2), T.int64(3)), "float64")):
-            T.func_attr({"tir.noalias": T.bool(True)})
-            A = T.match_buffer(var_A, (T.int64(2), T.int64(3)), offset_factor=1)
-            with T.block("cumsum_generic"):
-                for fused in T.parallel(T.int64(2)):
-                    out_buf[
-                        fused * T.int64(3) // T.int64(3), fused * T.int64(3) % T.int64(3)
-                    ] = T.Cast(
-                        "float64",
-                        A[fused * T.int64(3) // T.int64(3), fused * T.int64(3) % T.int64(3)],
-                    )
-                    for _k in range(T.int64(2)):
-                        out_buf[
-                            (fused * T.int64(3) + (_k + T.int64(1))) // T.int64(3),
-                            (fused * T.int64(3) + (_k + T.int64(1))) % T.int64(3),
-                        ] = out_buf[
-                            (fused * T.int64(3) + (_k + T.int64(1) - T.int64(1))) // T.int64(3),
-                            (fused * T.int64(3) + (_k + T.int64(1) - T.int64(1))) % T.int64(3),
-                        ] + T.Cast(
-                            "float64",
-                            A[
-                                (fused * T.int64(3) + (_k + T.int64(1))) // T.int64(3),
-                                (fused * T.int64(3) + (_k + T.int64(1))) % T.int64(3),
-                            ],
-                        )
-
-        @R.function
-        def foo(
-            x: R.Tensor((2, 3), dtype="float32", vdevice="llvm")
-        ) -> R.Tensor((2, 3), dtype="float64", vdevice="llvm"):
-            cls = Expected
-            with R.dataflow():
-                gv = R.call_tir(cls.cumsum, (x,), out_sinfo=R.Tensor((2, 3), "float64", "llvm"))
+                lv0 = R.cumsum(x, axis=1, dtype="float64", exclusive=False)
+                lv1 = R.cumprod(lv0, axis=1, dtype="float64", exclusive=False)
+                gv = lv1
                 R.output(gv)
             return gv
 
     mod = DispatchSortScan()(Before)
-    assert_structural_equal(mod, Expected)
+
+    vdevices = [I.vdevice("llvm", 0)]
+    x = relax.Var("x", R.Tensor((2, 3), "float32", vdevices[0]))
+    bb = relax.BlockBuilder()
+
+    with bb.function("foo", (x,), {"global_symbol": "foo"}):
+        with bb.dataflow():
+            lv0 = bb.emit_te(topi.cumsum, x, axis=1, dtype="float64", exclusive=False)
+            out = bb.emit_te(topi.cumprod, lv0, axis=1, dtype="float64", exclusive=False)
+            out = bb.emit_output(out)
+        bb.emit_func_output(out)
+    expected_mod = bb.finalize()
+    expected_mod.update_global_info("vdevice", vdevices)
+
+    assert_structural_equal(mod, expected_mod)
 
 
-def test_dispatch_cumsum_cuda():
+def test_dispatch_scanop_cuda():
     @I.ir_module
     class Before:
-        I.module_global_infos({"vdevice": [I.vdevice("cuda", 0), I.vdevice("llvm", 0)]})
+        I.module_global_infos({"vdevice": [I.vdevice("cuda", 0)]})
 
         @R.function
         def main(x: R.Tensor(("m", 3), "float32", "cuda")):
             with R.dataflow():
-                lv = R.cumsum(x, axis=1)
-                gv = lv
+                lv0 = R.cumsum(x, axis=1)
+                lv1 = R.cumprod(lv0, axis=1)
+                gv = lv1
                 R.output(gv)
             return gv
 
     target = tvm.target.Target("cuda", host="llvm")
 
-    vdevices = [I.vdevice("cuda", 0), I.vdevice("llvm", 0)]
+    vdevices = [I.vdevice("cuda", 0)]
     m = tir.Var("m", "int64")
     x = relax.Var("x", R.Tensor((m, 3), "float32", vdevices[0]))
     bb = relax.BlockBuilder()
     with target:
         with bb.function("main", (x,), {"global_symbol": "main"}):
             with bb.dataflow():
-                out = bb.emit_te(
+                lv = bb.emit_te(
                     topi.cuda.cumsum,
                     x,
+                    axis=1,
+                )
+                out = bb.emit_te(
+                    topi.cuda.cumprod,
+                    lv,
                     axis=1,
                 )
                 out = bb.emit_output(out)
@@ -120,79 +101,46 @@ def test_dispatch_cumsum_cuda():
 
     with target:
         mod = DispatchSortScan()(Before)
+        expected_mod = dlight.ApplyDefaultSchedule(dlight.gpu.Fallback())(expected_mod)
 
-    assert_structural_equal(mod, expected_mod)
+    assert_structural_equal(mod, expected_mod, map_free_vars=True)
 
 
 def test_dispatch_sort():
     @I.ir_module
     class Before:
-        I.module_global_infos({"vdevice": [I.vdevice("cuda", 0), I.vdevice("llvm", 0)]})
+        I.module_global_infos({"vdevice": [I.vdevice("llvm", 0)]})
 
         @R.function
         def foo(x: R.Tensor(("m", 3), "float32", "llvm")):
             m = T.int64()
             with R.dataflow():
-                gv = R.sort(x, axis=1, descending=False)
+                lv = R.sort(x, axis=1, descending=False)
+                gv = lv
                 R.output(gv)
             return gv
 
-    @I.ir_module
-    class Expected:
-        I.module_global_infos({"vdevice": [I.vdevice("cuda", 0), I.vdevice("llvm", 0)]})
+    vdevices = [I.vdevice("llvm", 0)]
+    m = tir.Var("m", "int64")
+    x = relax.Var("x", R.Tensor((m, 3), "float32", vdevices[0]))
+    bb = relax.BlockBuilder()
 
-        @T.prim_func(private=True)
-        def sort(var_A: T.handle, var_sort_cpu: T.handle):
-            T.func_attr({"tir.noalias": T.bool(True)})
-            m = T.int64()
-            data_buf = T.match_buffer(var_A, (m, T.int64(3)), align=8)
-            out_buf = T.match_buffer(var_sort_cpu, (m, T.int64(3)), align=8)
-            with T.block("sort_cpu"):
-                T.reads()
-                T.writes()
-                T.call_packed(
-                    "tvm.contrib.sort.sort",
-                    T.tvm_stack_make_array(
-                        data_buf.data,
-                        T.tvm_stack_make_shape(m, T.int64(3)),
-                        0,
-                        2,
-                        T.float32(0),
-                        T.int64(0),
-                    ),
-                    T.tvm_stack_make_array(
-                        out_buf.data,
-                        T.tvm_stack_make_shape(m, T.int64(3)),
-                        0,
-                        2,
-                        T.float32(0),
-                        T.int64(0),
-                    ),
-                    1,
-                    T.bool(True),
-                )
-
-        @R.function
-        def foo(
-            x: R.Tensor(("m", 3), dtype="float32", vdevice="llvm")
-        ) -> R.Tensor(("m", 3), dtype="float32", vdevice="llvm"):
-            m = T.int64()
-            cls = Expected
-            with R.dataflow():
-                gv = R.call_tir(
-                    cls.sort, (x,), out_sinfo=R.Tensor((m, 3), dtype="float32", vdevice="llvm")
-                )
-                R.output(gv)
-            return gv
+    with bb.function("foo", (x,), {"global_symbol": "foo"}):
+        with bb.dataflow():
+            out = bb.emit_te(topi.sort, x, axis=1, is_ascend=True)
+            out = bb.emit_output(out)
+        bb.emit_func_output(out)
+    expected_mod = bb.finalize()
+    expected_mod.update_global_info("vdevice", vdevices)
 
     mod = DispatchSortScan()(Before)
-    assert_structural_equal(mod, Expected)
+    assert_structural_equal(mod, expected_mod)
 
 
 def test_dispatch_sort_cuda():
     @I.ir_module
     class Before:
-        I.module_global_infos({"vdevice": [I.vdevice("cuda"), I.vdevice("llvm")]})
+        I.module_global_infos({"vdevice": [I.vdevice("cuda")]})
 
         @R.function
         def foo(x: R.Tensor((2, 3), "float32", "cuda")):
@@ -212,7 +160,7 @@ def test_dispatch_sort_cuda():
 
     target = tvm.target.Target("cuda -libs=thrust", host="llvm")
 
-    vdevices = [I.vdevice("cuda", 0), I.vdevice("llvm", 0)]
+    vdevices = [I.vdevice("cuda", 0)]
     x = relax.Var("x", R.Tensor((2, 3), "float32", vdevices[0]))
     y = relax.Var("y", R.Tensor((2, 3), "float32"))
     bb = relax.BlockBuilder()
@@ -244,7 +192,158 @@ def test_dispatch_sort_cuda():
     with target:
         mod = DispatchSortScan()(Before)
 
-    assert_structural_equal(mod, expected_mod, map_free_vars=True)
+    assert_structural_equal(mod, expected_mod)
+
+
+def test_dispatch_argsort():
+    @I.ir_module
+    class Before:
+        I.module_global_infos({"vdevice": [I.vdevice("llvm", 0)]})
+
+        @R.function
+        def foo(x: R.Tensor(("m", 3), "float32", "llvm")):
+            m = T.int64()
+            with R.dataflow():
+                lv = R.argsort(x, axis=1, descending=False, dtype="int32")
+                gv = lv
+                R.output(gv)
+            return gv
+
+    vdevices = [I.vdevice("llvm", 0)]
+    m = tir.Var("m", "int64")
+    x = relax.Var("x", R.Tensor((m, 3), "float32", vdevices[0]))
+    bb = relax.BlockBuilder()
+
+    with bb.function("foo", (x,), {"global_symbol": "foo"}):
+        with bb.dataflow():
+            out = bb.emit_te(topi.argsort, x, axis=1, is_ascend=True, dtype="int32")
+            out = bb.emit_output(out)
+        bb.emit_func_output(out)
+    expected_mod = bb.finalize()
+    expected_mod.update_global_info("vdevice", vdevices)
+
+    mod = DispatchSortScan()(Before)
+    assert_structural_equal(mod, expected_mod)
+
+
+def test_dispatch_argsort_cuda():
+    @I.ir_module
+    class Before:
+        I.module_global_infos({"vdevice": [I.vdevice("cuda")]})
+
+        @R.function
+        def foo(x: R.Tensor((2, 3), "float32", "cuda")):
+            with R.dataflow():
+                lv = R.argsort(x, axis=1, descending=False)
+                gv = lv
+                R.output(gv)
+            return gv
+
+        @R.function
+        def foo2(y: R.Tensor((2, 3), "float32")):
+            with R.dataflow():
+                lv = R.argsort(y, axis=0, descending=True, dtype="int64")
+                gv = lv
+                R.output(gv)
+            return gv
+
+    target = tvm.target.Target("cuda -libs=thrust", host="llvm")
+
+    vdevices = [I.vdevice("cuda", 0)]
+    x = relax.Var("x", R.Tensor((2, 3), "float32", vdevices[0]))
+    y = relax.Var("y", R.Tensor((2, 3), "float32"))
+    bb = relax.BlockBuilder()
+    with target:
+        with bb.function("foo", (x,), {"global_symbol": "foo"}):
+            with bb.dataflow():
+                out = bb.emit_te(topi.cuda.argsort, x, axis=1, is_ascend=True, dtype="int32")
+                out = bb.emit_output(out)
+            bb.emit_func_output(out)
+        with bb.function("foo2", (y,), {"global_symbol": "foo2"}):
+            with bb.dataflow():
+                out = bb.emit_te(
+                    topi.cuda.argsort_thrust
+                    if can_use_thrust(target, "tvm.contrib.thrust.sort")
+                    else topi.cuda.argsort,
+                    y,
+                    0,
+                    False,
+                    "int64",
+                )
+                out = bb.emit_output(out)
+            bb.emit_func_output(out)
+    expected_mod = bb.finalize()
+    expected_mod.update_global_info("vdevice", vdevices)
+
+    with target:
+        mod = DispatchSortScan()(Before)
+
+    assert_structural_equal(mod, expected_mod)
+
+
+def test_dispatch_topk():
+    @I.ir_module
+    class Before:
+        I.module_global_infos({"vdevice": [I.vdevice("llvm", 0)]})
+
+        @R.function
+        def foo(x: R.Tensor(("m", 3), "float32", "llvm")):
+            m = T.int64()
+            with R.dataflow():
+                lv = R.topk(x, k=2, axis=1, largest=True)
+                gv = lv
+                R.output(gv)
+            return gv
+
+    vdevices = [I.vdevice("llvm", 0)]
+    m = tir.Var("m", "int64")
+    x = relax.Var("x", R.Tensor((m, 3), "float32", vdevices[0]))
+    bb = relax.BlockBuilder()
+
+    with bb.function("foo", (x,), {"global_symbol": "foo"}):
+        with bb.dataflow():
+            out = bb.emit_te(topi.topk, x, k=2, axis=1, is_ascend=False, dtype="int32")
+            out = bb.emit_output(out)
+        bb.emit_func_output(out)
+    expected_mod = bb.finalize()
+    expected_mod.update_global_info("vdevice", vdevices)
+
+    mod = DispatchSortScan()(Before)
+    assert_structural_equal(mod, expected_mod)
+
+
+def test_dispatch_topk_cuda():
+    @I.ir_module
+    class Before:
+        I.module_global_infos({"vdevice": [I.vdevice("cuda")]})
+
+        @R.function
+        def foo(x: R.Tensor((2, 3), "float32", "cuda")):
+            with R.dataflow():
+                lv = R.topk(x, k=2, axis=1, largest=True)
+                gv = lv
+                R.output(gv)
+            return gv
+
+    target = tvm.target.Target("cuda -libs=thrust", host="llvm")
+
+    vdevices = [I.vdevice("cuda", 0)]
+    x = relax.Var("x", R.Tensor((2, 3), "float32", vdevices[0]))
+    bb = relax.BlockBuilder()
+    with target:
+        with bb.function("foo", (x,), {"global_symbol": "foo"}):
+            with bb.dataflow():
+                out = bb.emit_te(topi.cuda.topk, x, k=2, axis=1, is_ascend=False, dtype="int32")
+                out = bb.emit_output(out)
+            bb.emit_func_output(out)
+    expected_mod = bb.finalize()
+    expected_mod.update_global_info("vdevice", vdevices)
+
+    with target:
+        mod = DispatchSortScan()(Before)
+        expected_mod = dlight.ApplyDefaultSchedule(dlight.gpu.Fallback())(expected_mod)
+
+    assert_structural_equal(mod, expected_mod)
 
 
 if __name__ == "__main__":

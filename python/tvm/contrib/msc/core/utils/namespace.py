@@ -67,6 +67,7 @@ class MSCKey:
     TRACKERS = "trackers"
 
     FUSED_CNT = "fused_cnt"
+    MSC_ROOT = "$<msc_root>"
 
 
 class MSCFramework:

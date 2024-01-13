@@ -23,7 +23,7 @@ import json
 from typing import List, Union, Dict, Any
 import numpy as np
 
-from .info import load_dict
+from .arguments import load_dict
 
 
 class BaseDataLoader(object):
