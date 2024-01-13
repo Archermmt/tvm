@@ -69,6 +69,8 @@ def export_plugins(plugins: dict, folder: msc_utils.MSCDirectory) -> dict:
         The loadable plugins info.
     """
 
+    if not plugins:
+        return {}
     info = {}
     for name, plugin in plugins.items():
         with folder.create_dir(name) as sub_folder:
@@ -91,6 +93,8 @@ def load_plugins(info: dict) -> dict:
         The plugins.
     """
 
+    if not info:
+        return {}
     plugins = {}
     for name, plugin in info.items():
         if isinstance(plugin, str):

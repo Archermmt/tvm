@@ -49,11 +49,9 @@ class MSCArray(object):
         if isinstance(data, np.ndarray):
             return "np", "cpu", data
         if isinstance(data, tvm.runtime.NDArray):
-            ref_dev = data.device
-            if ref_dev.device_id:
-                device = "{}:{}".format(ref_dev.device_type, ref_dev.device_id)
-            else:
-                device = ref_dev.device_type
+            device = tvm.runtime.Device.MASK2STR[data.device.device_type]
+            if data.device.device_id:
+                device += ":{}".format(data.device.device_id)
             return "tvm", device, data.asnumpy()
         if isinstance(data, tvm.relax.Var):
             shape = [int(s) for s in data.struct_info.shape]
@@ -84,13 +82,15 @@ class MSCArray(object):
             self._data.sum() / self._data.size,
         )
 
-    def cast(self, framework: str) -> Any:
+    def cast(self, framework: str, device: str = None) -> Any:
         """Cast np.ndarray to array like object
 
         Parameters
         ----------
         framework: str
-            The target framework
+            The target framework.
+        device: str
+            The device for tensor.
 
         Returns
         -------
@@ -98,20 +98,20 @@ class MSCArray(object):
             The output as framework tensor.
         """
 
+        device = device or self._device
         if framework == MSCFramework.TORCH:
             import torch  # pylint: disable=import-outside-toplevel
 
-            return torch.from_numpy(self._data).to(torch.device(self._device))
+            return torch.from_numpy(self._data).to(torch.device(device))
         if framework == MSCFramework.TVM:
-            if self._device.startswith("cpu"):
-                device = tvm.cpu()
-            elif self._device == "cuda":
-                device = tvm.cuda()
-            elif self._device.startswith("cuda:"):
-                device = tvm.cuda(int(self._device.split(":")[1]))
+            if device.startswith("cpu"):
+                t_device = tvm.cpu()
+            elif device.startswith("cuda"):
+                dev_id = int(device.split(":")[1]) if ":" in device else 0
+                t_device = tvm.cuda(dev_id)
             else:
                 raise NotImplementedError("device {} is not supported for tvm")
-            return tvm.nd.array(self._data, device=device)
+            return tvm.nd.array(self._data, device=t_device)
         return self._data
 
     @classmethod
@@ -157,7 +157,7 @@ class MSCArray(object):
         return self._data
 
 
-def cast_array(data: Any, framework: str = None) -> Any:
+def cast_array(data: Any, framework: str = None, device: str = None) -> Any:
     """Cast array like object to np.ndarray
 
     Parameters
@@ -165,7 +165,9 @@ def cast_array(data: Any, framework: str = None) -> Any:
     data: array_like: np.ndarray| torch.Tensor| tvm.ndarray| ...
         The data object.
     framework: str
-        The target framework
+        The target framework.
+    device: str
+        The device for tensor.
 
     Returns
     -------
@@ -176,7 +178,7 @@ def cast_array(data: Any, framework: str = None) -> Any:
     assert MSCArray.is_array(data), "{} is not array like".format(data)
     if not framework:
         return MSCArray(data).data
-    return MSCArray(data).cast(framework)
+    return MSCArray(data).cast(framework, device)
 
 
 def inspect_array(data: Any, as_str: bool = True) -> Union[Dict[str, Any], str]:

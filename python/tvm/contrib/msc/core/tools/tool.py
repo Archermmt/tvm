@@ -339,7 +339,8 @@ class BaseTool(object):
         """
 
         self._tensor_cache = {}
-        self._enabled, self._is_training = True, True
+        self._enabled = True
+        self._is_training, self._trained = False, False
         self._graphs, self._weights = [], {}
         self._graph_id, self._forward_cnt = 0, 0
         self._processed_tensor = {}
@@ -894,6 +895,7 @@ class BaseTool(object):
         """Set the tool to train mode"""
 
         self._is_training = True
+        self._trained = True
 
     def eval(self):
         """Set the tool to eval mode"""
@@ -1495,6 +1497,10 @@ class WeightTool(BaseTool):
         if w_node.weight.layout_of("C") >= 0:
             return w_node.weight.layout_of("C"), w_node.weight.layout_of("C")
         raise Exception("Can not infer in_axis/out_axis from " + str(w_node))
+
+    @property
+    def trained(self):
+        return self._trained
 
     @classmethod
     def tool_type(cls):

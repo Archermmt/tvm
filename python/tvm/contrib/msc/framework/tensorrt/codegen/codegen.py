@@ -82,7 +82,7 @@ def to_sub_tensorrt(
             # gather weights
             engine_wts = {}
             for node in graph.get_nodes():
-                for weight in node.get_weights.values():
+                for weight in node.get_weights().values():
                     engine_wts[weight.name] = weights[weight.name]
                 if node.optype in ("nn.conv2d", "msc.linear"):
                     weight = node.weight_at("weight")

@@ -196,7 +196,13 @@ class BaseWrapper(object):
         self._manager.run_pipe(run_compile=False)
         self._optimized_model = self._manager.get_runnable("runnable")
 
-    def compile(self, workspace: str = "Compile", ckpt_path: str = "Checkpoint"):
+    def compile(
+        self,
+        workspace: str = "Compile",
+        ckpt_path: str = "Checkpoint",
+        dump: bool = False,
+        bind_params: bool = False,
+    ):
         """Compile the model
 
         Parameters
@@ -205,12 +211,16 @@ class BaseWrapper(object):
             The workspace.
         ckpt_path: str
             The path to export checkpoint.
+        dump: bool
+            Whether to dump the info.
+        bind_params: bool
+            Whether to bind parameters for optimize.
         """
 
         if self._optimized_model:
             self._logger.info("[Wrapper] Start compile checkpoint")
             ckpt_path = self._workspace.create_dir(ckpt_path).path
-            pipeline = self.export(ckpt_path, dump=False)
+            pipeline = self.export(ckpt_path, dump=dump, bind_params=bind_params)
             pipeline["config"]["workspace"] = self._workspace.create_dir(workspace)
             self._manager = MSCManager(**pipeline)
             self._manager.run_pipe(run_optimize=False)
@@ -225,7 +235,12 @@ class BaseWrapper(object):
             self._manager.run_pipe()
             self._compiled_model = self._manager.get_runnable("runnable")
 
-    def export(self, path: str, dump: bool = True) -> Union[str, dict]:
+    def export(
+        self,
+        path: str,
+        dump: bool = True,
+        bind_params: bool = False,
+    ) -> Union[str, dict]:
         """Export compile pipeline
 
         Parameters
@@ -234,6 +249,8 @@ class BaseWrapper(object):
             The export path.
         dump: bool
             Whether to dump the info.
+        bind_params: bool
+            Whether to bind parameters for optimize.
 
         Returns
         -------
@@ -242,7 +259,7 @@ class BaseWrapper(object):
         """
 
         assert self._manager, "manager is needed to export wrapper"
-        exported = self._manager.export(path, dump=dump)
+        exported = self._manager.export(path, dump=dump, bind_params=bind_params)
         if not self._debug:
             self._manager.destory()
         return exported
@@ -280,12 +297,8 @@ class TorchWrapper(BaseWrapper):
     def parameters(self):
         framework = self._get_framework()
         if framework == MSCFramework.TORCH:
-            res = self._get_model().parameters()
-            print("normal parmeters " + str(res))
-            return res
-        for w in self._manager.runner.get_weights():
-            print("has weight {}({})".format(w, type(w)))
-        raise Exception("stop here!!")
+            return self._get_model().parameters()
+        return self._manager.runner.get_weights(MSCFramework.TORCH)
 
     def _get_framework(self) -> str:
         return self._manager.runner.framework if self._manager else MSCFramework.TORCH

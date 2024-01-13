@@ -113,6 +113,26 @@ class TorchRunner(ModelRunner):
         torch_inputs = [torch.from_numpy(inputs[i["name"]]).to(in_dev) for i in model_inputs]
         return runnable(*torch_inputs)
 
+    def _get_runtime_params(self) -> Dict[str, tvm.nd.array]:
+        """Get the runtime parameters
+
+        Returns
+        -------
+        params: dict<str, tvm.nd.array>
+            The parameters from runtime.
+        """
+
+        assert self._runnable, "runnable is needed to get params"
+        state_dict = self._runnable.state_dict()
+        params = {}
+        for g in self._graphs:
+            for w in g.get_weights():
+                print("has weight " + str(w))
+                assert w.alias in state_dict, "Missing weight {} in state_dict".format(w.alias)
+                params[w.name] = msc_utils.cast_array(state_dict[w.alias], MSCFramework.TVM, "cpu")
+        raise Exception("stop here!!")
+        return params
+
     def _device_enabled(self, device: str) -> bool:
         """Check if the device is enabled
 

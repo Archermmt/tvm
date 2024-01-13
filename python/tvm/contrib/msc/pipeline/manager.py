@@ -89,13 +89,14 @@ class BaseManager(object):
         """
 
         # register plugins
-        if self._plugins:
-            assert MSCFramework.TVM in self._plugins, "tvm plugin is needed to compile"
-            for name, plugin in self._plugins[MSCFramework.TVM].get_ops_info().items():
-                _ffi_api.RegisterPlugin(name, msc_utils.dump_dict(plugin))
         self._meta_config = config
         self._optimize_type = config.get(MSCStage.OPTIMIZE, {}).get("run_type", self._model_type)
         self._compile_type = config.get(MSCStage.COMPILE, {}).get("run_type", self._model_type)
+        if self._plugins:
+            for t in [self._model_type, self._optimize_type, self._compile_type]:
+                assert t in self._plugins, "Missing plugin for {}".format(t)
+            for name, plugin in self._plugins[self._model_type].get_ops_info().items():
+                _ffi_api.RegisterPlugin(name, msc_utils.dump_dict(plugin))
         self._config, self._debug_levels = self.update_config(config)
         self._tools_config = {}
         self._relax_mod, self._runner = None, None
@@ -439,7 +440,9 @@ class BaseManager(object):
         self._report["duration"] = msc_utils.get_duration()
         return self._report
 
-    def export(self, path: str = None, dump: bool = True) -> Union[str, dict]:
+    def export(
+        self, path: str = None, dump: bool = True, bind_params: bool = False
+    ) -> Union[str, dict]:
         """Export the pipeline
 
         Parameters
@@ -448,6 +451,8 @@ class BaseManager(object):
             The export path.
         dump: bool
             Whether to dump the info.
+        bind_params: bool
+            Whether to bind parameters for optimize.
 
         Returns
         -------
@@ -455,42 +460,67 @@ class BaseManager(object):
             The exported path/pipeline info.
         """
 
-        pipeline = {}
         path = path or "msc_export"
         if path.endswith(".tar.gz"):
             folder, dump = msc_utils.msc_dir(path.replace(".tar.gz", ""), keep_history=False), True
         else:
             folder = msc_utils.msc_dir(path, keep_history=False)
-        if dump:
-            if self._compiled:
-                pipeline["model"] = self.runner._save_runnable(folder)
-            elif self._optimized:
-                pipeline["model"] = folder.relpath("meta_module.json")
-                with open(pipeline["model"], "w") as f:
-                    f.write(tvm.ir.save_json(self._relax_mod))
-            else:
-                runner_cls = self._get_runner_cls(self._model_type)
-                pipeline["model"] = runner_cls.dump_nativate(self._model)
-            pipeline["config"] = self.export_config(folder, dump)
-            if self._plugins:
-                pipeline["plugins"] = export_plugins(self._plugins, folder)
-            with open(folder.relpath("pipeline.json"), "w") as f:
-                f.write(json.dumps(pipeline, indent=2))
-            if path.endswith(".tar.gz"):
-                msc_utils.pack_folder(path.replace(".tar.gz", ""), "tar")
-            return path
-        if self._compiled:
-            pipeline["model"] = self.runner.runnable
-        elif self._optimized:
-            pipeline["model"] = self._relax_mod
-        else:
-            pipeline["model"] = self._model
-        pipeline["config"] = self.export_config(folder, dump)
-        if self._plugins:
-            pipeline["plugins"] = self._plugins
-        return pipeline
+        pipeline = {
+            "model": self.export_model(folder, dump, bind_params),
+            "config": self.export_config(folder, dump, bind_params),
+            "plugins": export_plugins(self._plugins, folder) if dump else self._plugins,
+        }
+        if not dump:
+            return pipeline
+        with open(folder.relpath("pipeline.json"), "w") as f:
+            f.write(json.dumps(pipeline, indent=2))
+        if path.endswith(".tar.gz"):
+            msc_utils.pack_folder(path.replace(".tar.gz", ""), "tar")
+        return path
 
-    def export_config(self, folder: msc_utils.MSCDirectory, dump: bool = True) -> dict:
+    def export_model(
+        self, folder: msc_utils.MSCDirectory, dump: bool = True, bind_params: bool = False
+    ) -> Any:
+        """Export the model
+
+        Parameters
+        ----------
+        folder: MSCDirectory
+            The export folder.
+        dump: bool
+            Whether to dump info.
+        bind_params: bool
+            Whether to bind parameters for optimize.
+
+        Returns
+        -------
+        exported:
+            The exported model.
+        """
+
+        if self._compiled:
+            return self._runner._save_runnable(folder) if dump else self._runner.runnable
+        if self._optimized:
+            module, params = self._relax_mod, self._runner.get_runtime_params()
+            if params and bind_params:
+                print("should bind the parameters!!")
+                raise Exception("stop here!!")
+            elif params:
+                with open(folder.relpath("optimized_params.bin"), "wb") as f_params:
+                    f_params.write(tvm.runtime.save_param_dict(params))
+            if not dump:
+                return module
+            path = folder.relpath("meta_module.json")
+            with open(path, "w") as f:
+                f.write(tvm.ir.save_json(module))
+            return path
+        if not dump:
+            return self._model
+        return self._get_runner_cls(self._model_type).dump_nativate(self._model)
+
+    def export_config(
+        self, folder: msc_utils.MSCDirectory, dump: bool = True, bind_params: bool = False
+    ) -> dict:
         """Export the config
 
         Parameters
@@ -499,6 +529,8 @@ class BaseManager(object):
             The export folder.
         dump: bool
             Whether to dump info.
+        bind_params: bool
+            Whether to bind parameters for optimize.
 
         Returns
         -------
@@ -539,6 +571,18 @@ class BaseManager(object):
             if MSCStage.BASELINE in config:
                 config[MSCStage.BASELINE]["run_type"] = MSCFramework.TVM
             config.pop(MSCStage.OPTIMIZE)
+            if bind_params and MSCStage.BASELINE in config:
+                config.pop(MSCStage.BASELINE)
+            if os.path.isfile(folder.relpath("optimized_params.bin")):
+                translate_config = (
+                    config[MSCStage.COMPILE]
+                    .setdefault("run_config", {})
+                    .setdefault("translate_config", {})
+                )
+                translate_config["postproc"] = (
+                    "update_weights",
+                    {"weights_path": folder.relpath("optimized_params.bin")},
+                )
             for t_type, t_config in self._tools_config.items():
                 tool = self.runner.get_tool(t_type)
                 config[MSCStage.COMPILE][t_type] = tool.export_config(
