@@ -573,16 +573,17 @@ class BaseManager(object):
             config.pop(MSCStage.OPTIMIZE)
             if bind_params and MSCStage.BASELINE in config:
                 config.pop(MSCStage.BASELINE)
-            if os.path.isfile(folder.relpath("optimized_params.bin")):
-                translate_config = (
+            weights_path = folder.relpath("optimized_params.bin")
+            if os.path.isfile(weights_path):
+                hooks = (
                     config[MSCStage.COMPILE]
                     .setdefault("run_config", {})
-                    .setdefault("translate_config", {})
+                    .setdefault("generate_config", {})
+                    .setdefault("hooks", {})
                 )
-                translate_config["postproc"] = (
-                    "update_weights",
-                    {"weights_path": folder.relpath("optimized_params.bin")},
-                )
+                if "before" not in hooks:
+                    hooks["before"] = []
+                hooks["before"].append({"hook": "update_weights", "weights_path": weights_path})
             for t_type, t_config in self._tools_config.items():
                 tool = self.runner.get_tool(t_type)
                 config[MSCStage.COMPILE][t_type] = tool.export_config(

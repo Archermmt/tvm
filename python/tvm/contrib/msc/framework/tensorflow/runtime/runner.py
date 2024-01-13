@@ -87,20 +87,20 @@ class TensorflowRunner(ModelRunner):
         super().destory()
 
     def _generate_model(
-        self, graphs: List[MSCGraph] = None, weights: List[Dict[str, tvm.nd.array]] = None
-    ) -> Any:
+        self, graphs: List[MSCGraph], weights: Dict[str, tvm.nd.array]
+    ) -> tf_v1.Graph:
         """Codegen the model according to framework
 
         Parameters
         -------
         graphs: list<MSCgraph>
             The msc graphs.
-        weights: list<dict<str, tvm.nd.array>>
-            The weights
+        weights: dict<str, tvm.nd.array>
+            The weights.
 
         Returns
         -------
-        model: Any
+        model: tf_v1.Graph
             The runnable model
         """
 
@@ -111,17 +111,13 @@ class TensorflowRunner(ModelRunner):
             self._tf_outputs = super()._generate_model(graphs, weights)
         return self._tf_graph
 
-    def _to_runnable(self, model: Any, device: str, is_training: bool) -> Any:
+    def _build_runnable(self, model: Any) -> Any:
         """Build runnable object
 
         Parameters
         -------
         model: Any
             The meta model.
-        device: str
-            The device for place model
-        is_training: bool
-            Whether to load model for training
 
         Returns
         -------

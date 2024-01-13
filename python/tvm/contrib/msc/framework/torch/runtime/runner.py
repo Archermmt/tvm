@@ -37,8 +37,13 @@ from tvm.contrib.msc.framework.torch import tools
 class TorchRunner(ModelRunner):
     """Runner of Torch"""
 
-    def _translate(self) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:
+    def _translate(self, mod: tvm.IRModule) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:
         """Translate IRModule to MSCgraphs
+
+        Parameters
+        -------
+        mod: tvm.IRModule
+            The module to be translated.
 
         Returns
         -------
@@ -47,20 +52,16 @@ class TorchRunner(ModelRunner):
         weights_list: list<dict<str, tvm.nd.array>>
             The translated weights
         """
-        graphs, weights = super()._translate()
+        graphs, weights = super()._translate(mod)
         return [set_weight_alias(graphs[0])], weights
 
-    def _to_runnable(self, model: Any, device: str, is_training: bool) -> Any:
+    def _build_runnable(self, model: Any) -> Any:
         """Build runnable object
 
         Parameters
         -------
         model: Any
             The meta model.
-        device: str
-            The device for place model
-        is_training: bool
-            Whether to load model for training
 
         Returns
         -------
@@ -68,13 +69,13 @@ class TorchRunner(ModelRunner):
             The runnable
         """
 
-        if device == "cpu":
+        if self._device.startswith("cpu"):
             pass
-        elif device.startswith("cuda"):
-            model = model.to(torch.device(device))
+        elif self._device.startswith("cuda"):
+            model = model.to(torch.device(self._device))
         else:
-            raise NotImplementedError("Unsupported device " + str(device))
-        if is_training:
+            raise NotImplementedError("Unsupported device " + str(self._device))
+        if self._build_config.get("is_training", False):
             model = model.train()
         else:
             model = model.eval()
@@ -221,7 +222,13 @@ class TorchRunner(ModelRunner):
             config["parse"]["parse_config"] = parse_config
         elif stage in (MSCStage.BASELINE, MSCStage.OPTIMIZE, MSCStage.COMPILE):
             run_config = config[stage].get("run_config", {})
-            run_config.update({"is_training": model.training})
+            if "generate_config" not in run_config:
+                run_config["generate_config"] = {}
+            run_config["generate_config"].update({"is_training": model.training})
+            if "build_config" not in run_config:
+                run_config["build_config"] = {}
+            run_config["build_config"].update({"is_training": model.training})
+
             config[stage]["run_config"] = run_config
         return config
 

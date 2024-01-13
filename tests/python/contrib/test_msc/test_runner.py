@@ -94,7 +94,8 @@ def _test_from_torch(runner_cls, device, is_training=False, atol=1e-1, rtol=1e-1
         with torch.no_grad():
             golden = torch_model(*torch_datas)
             mod = from_fx(graph_model, input_info)
-        runner = runner_cls(mod, device=device, is_training=is_training)
+        build_config = {"is_training": is_training}
+        runner = runner_cls(mod, build_config=build_config, device=device)
         runner.build()
         outputs = runner.run(datas, ret_type="list")
         golden = [msc_utils.cast_array(golden)]

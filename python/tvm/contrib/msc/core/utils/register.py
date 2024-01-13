@@ -16,7 +16,7 @@
 # under the License.
 """tvm.contrib.msc.core.utils.register"""
 
-from typing import Any, Optional
+from typing import Any, Optional, Union
 from .namespace import MSCFramework
 
 
@@ -33,6 +33,7 @@ class MSCRegistery:
     GYM_AGENTS = "gym_agents"
     GYM_ENVS = "gym_envs"
     GYM_METHODS = "gym_agents_method"
+    RUNNER_HOOKS = "runner_hooks"
 
     @classmethod
     def register(cls, key: str, value: Any):
@@ -380,7 +381,7 @@ def register_gym_method(method: Any):
 
 
 def get_registered_gym_method(method_type: str) -> Any:
-    """Get the registered agent.
+    """Get the registered gym method.
 
     Parameters
     ----------
@@ -395,3 +396,36 @@ def get_registered_gym_method(method_type: str) -> Any:
 
     methods = MSCRegistery.get(MSCRegistery.GYM_METHODS, {})
     return methods.get(method_type)
+
+
+def register_runner_hook(hook: Any):
+    """Register a runner hook.
+
+    Parameters
+    ----------
+    hook: class
+        The hook class.
+    """
+
+    hooks = MSCRegistery.get(MSCRegistery.RUNNER_HOOKS, {})
+    assert hasattr(hook, "name"), "name should be given to register hook"
+    hooks[hook.name()] = hook
+    MSCRegistery.register(MSCRegistery.RUNNER_HOOKS, hooks)
+
+
+def get_registered_runner_hook(name: str) -> Any:
+    """Get the registered runner hook.
+
+    Parameters
+    ----------
+    name: str
+        The name hook.
+
+    Returns
+    -------
+    method: class
+        The method class.
+    """
+
+    hooks = MSCRegistery.get(MSCRegistery.RUNNER_HOOKS, {})
+    return hooks.get(name)

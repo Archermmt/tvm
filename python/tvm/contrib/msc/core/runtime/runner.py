@@ -31,6 +31,7 @@ from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core.utils.message import MSCStage
 from tvm.contrib.msc.core import utils as msc_utils
 from tvm.contrib.msc.core import _ffi_api
+from .hook import load_runner_hook
 
 
 class BaseRunner(object):
@@ -48,16 +49,16 @@ class BaseRunner(object):
         The config for translate IRModule to MSCGraph.
     codegen_config: dict
         The config for build MSCGraph to runnable model.
-    plugin: PluginManager
-        The plugin manager.
+    build_config: dict
+        The config for build runnable.
+    device: str
+        The device to build runnable.
     stage: str
         The stage of runner.
+    plugin: PluginManager
+        The plugin manager.
     name: str
         The name of the runner
-    device: str
-        The device of the model, cpu| cuda| cuda:0|...
-    is_training: bool
-        Whether use model in training
     debug_level: int
         The debug level.
     logger: logging.Logger
@@ -70,11 +71,11 @@ class BaseRunner(object):
         tools_config: Optional[Dict[str, Any]] = None,
         translate_config: Optional[Dict[str, str]] = None,
         generate_config: Optional[Dict[str, str]] = None,
-        plugin: Any = None,
-        stage: str = "default",
-        name: str = "main",
+        build_config: Optional[Dict[str, str]] = None,
         device: str = "cpu",
-        is_training: bool = False,
+        stage: str = "default",
+        plugin: Any = None,
+        name: str = "main",
         debug_level: int = 0,
         logger: logging.Logger = None,
     ):
@@ -82,11 +83,11 @@ class BaseRunner(object):
         self._tools_config = msc_utils.copy_dict(tools_config)
         self._translate_config = msc_utils.copy_dict(translate_config)
         self._generate_config = msc_utils.copy_dict(generate_config)
-        self._plugin = plugin
-        self._stage = stage
-        self._name = name
+        self._build_config = msc_utils.copy_dict(build_config)
         self._device = device if self._device_enabled(device) else "cpu"
-        self._is_training = is_training
+        self._stage = stage
+        self._plugin = plugin
+        self._name = name
         self._debug_level = debug_level
         self._logger = logger or msc_utils.get_global_logger()
         self._logger.info(
@@ -124,9 +125,9 @@ class BaseRunner(object):
             "plugin": self._plugin,
             "translate_config": self._translate_config,
             "generate_config": self._generate_config,
-            "name": self._name,
+            "build_config": self._build_config,
             "device": self._device,
-            "is_training": self._is_training,
+            "name": self._name,
             "debug_level": self._debug_level,
         }
 
@@ -184,12 +185,7 @@ class BaseRunner(object):
 
         # Translate graphs from module
         if not self._graphs:
-            self._graphs, self._weights = self._translate()
-            if "postproc" in self._translate_config:
-                func, func_config = self._translate_config["postproc"]
-                self._logger.info("Post translate %s(%s)", func, func_config)
-                func = msc_utils.load_callable(func)
-                self._graphs, self._weights = func(self._graphs, self._weights, **func_config)
+            self._graphs, self._weights = self.translate()
             self._logger.info(
                 "Translate %d graphs %d weights from module", len(self._graphs), len(self._weights)
             )
@@ -206,27 +202,21 @@ class BaseRunner(object):
             if distiller and not distiller.distilled:
                 build_root = self._generate_config["build_folder"]
 
-                def _build_scope_model(scope: str):
+                def _build_scope_model(scope: str, apply_hooks: bool):
                     self._update_codegen({"tools_scope": scope})
                     self._generate_config["build_folder"] = build_root.create_dir(scope)
-                    return self._generate_model()
+                    return self.generate_model(apply_hooks=apply_hooks)
 
                 # Generate distill model
-                teacher_model = _build_scope_model(ToolScope.TEACHER)
+                teacher_model = _build_scope_model(ToolScope.TEACHER, False)
                 self._graphs, self._weights = self.reset_tools(cache_dir=cache_dir)
-                student_model = _build_scope_model(ToolScope.STUDENT)
+                student_model = _build_scope_model(ToolScope.STUDENT, True)
                 self._model = distiller.build_model(teacher_model, student_model)
             else:
                 # Generate normal model
                 self._graphs, self._weights = self.reset_tools(cache_dir=cache_dir)
-                self._model = self._generate_model()
+                self._model = self.generate_model()
 
-            # Log generate info
-            if "postproc" in self._generate_config:
-                func, func_config = self._generate_config["postproc"]
-                self._logger.info("Post generate %s(%s)", func, func_config)
-                func = msc_utils.load_callable(func)
-                self._model = func(self._model, **func_config)
             generate_msg = "Generate model({})".format(self.framework)
             if self._tools:
                 self._logger.info("%s with tools: %s", generate_msg, ",".join(self._tools.keys()))
@@ -238,10 +228,7 @@ class BaseRunner(object):
         if self._debug_level >= 2:
             self._logger.debug(msc_utils.msg_block("RUNNER.MODEL_INFO", self._model_info))
 
-        runnable_msg = "runnable({}, {}) @ {}".format(
-            self.framework, "train" if self._is_training else "eval", self._device
-        )
-
+        runnable_msg = "runnable({}) @ {}".format(self.framework, self._device)
         # Load runnable from cache
         if not self._runnable and cache_info.get("runnable"):
             self._runnable = self._load_runnable(cache_dir, cache_info["runnable"])
@@ -249,82 +236,9 @@ class BaseRunner(object):
 
         # Build runnable
         if not self._runnable:
-            self._runnable = self._to_runnable(self._model, self._device, self._is_training)
+            self._runnable = self.build_runnable()
             self._logger.info("Build %s", runnable_msg)
         return self._runnable
-
-    def save_cache(
-        self,
-        cache_dir: msc_utils.MSCDirectory,
-        save_model: bool = True,
-        save_runnable: bool = True,
-        save_tools: bool = True,
-    ):
-        """Save runner to cache
-
-        Parameters
-        -------
-        cache_dir: MSCDirectory
-            cache path for save/load info
-        save_model: bool
-            Whether to save model.
-        save_runnable: bool
-            Whether to save runnable.
-        save_tools: bool
-            Whether to save tools.
-        """
-
-        cache_info = {"graphs": self._save_graphs(cache_dir), "weights": "graph_weights.bin"}
-        with cache_dir:
-            with open(cache_info["weights"], "wb") as f_params:
-                f_params.write(tvm.runtime.save_param_dict(self._weights))
-        if save_model and cache_info.get("graphs"):
-            cache_info["model"] = self._save_model(cache_dir)
-        if save_runnable and cache_info.get("model"):
-            cache_info["runnable"] = self._save_runnable(cache_dir)
-        if save_tools:
-            for t_type, tool in self._tools.items():
-                cache_info[t_type] = tool.save_cache(cache_dir)
-        with open(cache_dir.relpath("cache_info.json"), "w") as f:
-            f.write(json.dumps(cache_info, indent=2))
-        self._logger.debug(
-            msc_utils.msg_block("RUNNER.SAVE_CACHE", {"folder": cache_dir, "info": cache_info})
-        )
-
-    def reset_tools(
-        self,
-        graphs: List[MSCGraph] = None,
-        weights: List[Dict[str, tvm.nd.array]] = None,
-        tools: List[BaseTool] = None,
-        cache_dir: msc_utils.MSCDirectory = None,
-    ):
-        """Reset the tools
-
-        Parameters
-        -------
-        graphs: list<MSCgraph>
-            The msc graphs.
-        weights: list<dict<str, tvm.nd.array>>
-            The weights.
-        tools: list<BaseTool>
-            The tools.
-        cache_dir: MSCDirectory
-            cache path for save/load info.
-
-        Returns
-        -------
-        graphs: list<MSCgraph>
-            The msc graphs.
-        weights: list<dict<str, tvm.nd.array>>
-            The weights.
-        """
-
-        graphs = graphs or self._graphs
-        weights = weights or self._weights
-        tools = tools or self._tools.values()
-        for tool in tools:
-            graphs, weights = tool.reset(graphs, weights, cache_dir)
-        return graphs, weights
 
     def run(
         self, inputs: Union[List[np.ndarray], Dict[str, np.ndarray]], ret_type="dict"
@@ -383,6 +297,205 @@ class BaseRunner(object):
                 outputs = [outputs]
             outputs = [msc_utils.cast_array(data) for data in outputs]
         return outputs
+
+    def save_cache(
+        self,
+        cache_dir: msc_utils.MSCDirectory,
+        save_model: bool = True,
+        save_runnable: bool = True,
+        save_tools: bool = True,
+    ):
+        """Save runner to cache
+
+        Parameters
+        -------
+        cache_dir: MSCDirectory
+            cache path for save/load info
+        save_model: bool
+            Whether to save model.
+        save_runnable: bool
+            Whether to save runnable.
+        save_tools: bool
+            Whether to save tools.
+        """
+
+        cache_info = {"graphs": self._save_graphs(cache_dir), "weights": "graph_weights.bin"}
+        with cache_dir:
+            with open(cache_info["weights"], "wb") as f_params:
+                f_params.write(tvm.runtime.save_param_dict(self._weights))
+        if save_model and cache_info.get("graphs"):
+            cache_info["model"] = self._save_model(cache_dir)
+        if save_runnable and cache_info.get("model"):
+            cache_info["runnable"] = self._save_runnable(cache_dir)
+        if save_tools:
+            for t_type, tool in self._tools.items():
+                cache_info[t_type] = tool.save_cache(cache_dir)
+        with open(cache_dir.relpath("cache_info.json"), "w") as f:
+            f.write(json.dumps(cache_info, indent=2))
+        self._logger.debug(
+            msc_utils.msg_block("RUNNER.SAVE_CACHE", {"folder": cache_dir, "info": cache_info})
+        )
+
+    def translate(self, apply_hooks: bool = True) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:
+        """Translate IRModule to MSCgraphs
+
+        Parameters
+        -------
+        apply_hooks: bool
+            Whether to apply hooks.
+
+        Returns
+        -------
+        graphs: list<MSCGraph>
+            The translated graphs
+        weights: dict<str, tvm.nd.array>
+            The translated weights.
+        """
+
+        mod = self._mod
+        if apply_hooks:
+            for hook in self._translate_config.get("hooks", {}).get("before", []):
+                mod = self._apply_hook("before translate", hook, mod)
+        graphs, weights = self._translate(mod)
+        if apply_hooks:
+            for hook in self._translate_config.get("hooks", {}).get("after", []):
+                graphs, weights = self._apply_hook("after translate", hook, graphs, weights)
+        return graphs, weights
+
+    def _translate(self, mod: tvm.IRModule) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:
+        """Translate IRModule to MSCgraphs
+
+        Parameters
+        -------
+        mod: tvm.IRModule
+            The module to be translated.
+
+        Returns
+        -------
+        graphs: list<MSCGraph>
+            The translated graphs
+        weights: dict<str, tvm.nd.array>
+            The translated weights.
+        """
+
+        raise NotImplementedError("_translate is not implemented for " + str(self.__class__))
+
+    def reset_tools(
+        self,
+        graphs: List[MSCGraph] = None,
+        weights: List[Dict[str, tvm.nd.array]] = None,
+        tools: List[BaseTool] = None,
+        cache_dir: msc_utils.MSCDirectory = None,
+    ):
+        """Reset the tools
+
+        Parameters
+        -------
+        graphs: list<MSCgraph>
+            The msc graphs.
+        weights: list<dict<str, tvm.nd.array>>
+            The weights.
+        tools: list<BaseTool>
+            The tools.
+        cache_dir: MSCDirectory
+            cache path for save/load info.
+
+        Returns
+        -------
+        graphs: list<MSCgraph>
+            The msc graphs.
+        weights: list<dict<str, tvm.nd.array>>
+            The weights.
+        """
+
+        graphs = graphs or self._graphs
+        weights = weights or self._weights
+        tools = tools or self._tools.values()
+        for tool in tools:
+            graphs, weights = tool.reset(graphs, weights, cache_dir)
+        return graphs, weights
+
+    def generate_model(self, apply_hooks: bool = True) -> Any:
+        """Codegen the model according to framework
+
+        Parameters
+        -------
+        apply_hooks: bool
+            Whether to apply hooks.
+
+        Returns
+        -------
+        model: Any
+            The meta model
+        """
+
+        graphs, weights = self._graphs, self._weights
+        if apply_hooks:
+            for hook in self._generate_config.get("hooks", {}).get("before", []):
+                graphs, weights = self._apply_hook("before generate", hook, graphs, weights)
+        model = self._generate_model(graphs, weights)
+        if apply_hooks:
+            for hook in self._generate_config.get("hooks", {}).get("after", []):
+                model = self._apply_hook("after generate", hook, model)
+        return model
+
+    def _generate_model(self, graphs: List[MSCGraph], weights: Dict[str, tvm.nd.array]) -> Any:
+        """Codegen the model according to framework
+
+        Parameters
+        -------
+        graphs: list<MSCgraph>
+            The msc graphs.
+        weights: dict<str, tvm.nd.array>
+            The weights.
+
+        Returns
+        -------
+        model: Any
+            The meta model
+        """
+
+        raise NotImplementedError("_load is not implemented for " + str(self.__class__))
+
+    def build_runnable(self, apply_hooks: bool = True) -> Any:
+        """Build runnable object
+
+        Parameters
+        -------
+        apply_hooks: bool
+            Whether to apply hooks.
+
+        Returns
+        -------
+        runnable: Any
+            The runnable
+        """
+
+        model = self._model
+        if apply_hooks:
+            for hook in self._build_config.get("hooks", {}).get("before", []):
+                model = self._apply_hook("before build", hook, model)
+        runnable = self._build_runnable(model)
+        if apply_hooks:
+            for hook in self._build_config.get("hooks", {}).get("after", []):
+                runnable = self._apply_hook("after build", hook, runnable)
+        return runnable
+
+    def _build_runnable(self, model: Any) -> Any:
+        """Build runnable object
+
+        Parameters
+        -------
+        model: Any
+            The meta model.
+
+        Returns
+        -------
+        runnable: Any
+            The runnable
+        """
+
+        raise NotImplementedError("_build_runnable is not implemented for " + str(self.__class__))
 
     def get_tool_config(self, tool_type: str) -> dict:
         """Get tool by type
@@ -480,6 +593,33 @@ class BaseRunner(object):
             f.write(json.dumps(plan, indent=2))
         self._logger.info("Save %d plan(%s) -> %s", len(plan), tool_type, plan_file)
         return plan_file
+
+    def _apply_hook(
+        self, desc: str, hook: Tuple[Union[str, callable], dict], *args, **kwargs
+    ) -> Any:
+        """Load a registered hook
+
+        Parameters
+        ----------
+        desc: str
+            The description of the hook
+        hook: <callable/str, dict>
+            The function and config of the hook.
+        args: list<Any>
+            The arguments for run method.
+        kwargs: dict<Any>
+            The key word arguments for run method.
+
+        Returns
+        -------
+        result:
+            The result
+        """
+
+        func, config = hook
+        hook = load_runner_hook(func, config)
+        self._logger.info("Apply %s hook: %s", desc, hook)
+        return hook.apply(self, *args, **kwargs)
 
     def _update_codegen(self, config: Dict[str, Any]):
         """Update the codegen in generate_config
@@ -600,19 +740,6 @@ class BaseRunner(object):
             tool.destory()
         remove_tools(self._name)
 
-    def _translate(self) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:
-        """Translate IRModule to MSCgraphs
-
-        Returns
-        -------
-        graphs: list<MSCGraph>
-            The translated graphs
-        weights: dict<str, tvm.nd.array>
-            The translated weights.
-        """
-
-        raise NotImplementedError("_translate is not implemented for " + str(self.__class__))
-
     def _load_graphs(self, cache_dir: msc_utils.MSCDirectory, cache_info: dict) -> List[MSCGraph]:
         """Load MSCGraphs from cache
 
@@ -646,26 +773,6 @@ class BaseRunner(object):
         """
 
         raise NotImplementedError("_save_graphs is not implemented for " + str(self.__class__))
-
-    def _generate_model(
-        self, graphs: List[MSCGraph] = None, weights: Dict[str, tvm.nd.array] = None
-    ) -> Any:
-        """Codegen the model according to framework
-
-        Parameters
-        -------
-        graphs: list<MSCgraph>
-            The msc graphs.
-        weights: dict<str, tvm.nd.array>
-            The weights.
-
-        Returns
-        -------
-        model: Any
-            The meta model
-        """
-
-        raise NotImplementedError("_load is not implemented for " + str(self.__class__))
 
     def _load_model(self, cache_dir: msc_utils.MSCDirectory, cache_info: dict) -> Any:
         """Load the model from cache
@@ -701,26 +808,6 @@ class BaseRunner(object):
 
         # disable save model by default
         return {}
-
-    def _to_runnable(self, model: Any, device: str, is_training: bool) -> Any:
-        """Build runnable object
-
-        Parameters
-        -------
-        model: Any
-            The meta model.
-        device: str
-            The device for place model
-        is_training: bool
-            Whether to load model for training
-
-        Returns
-        -------
-        runnable: Any
-            The runnable
-        """
-
-        raise NotImplementedError("_to_runnable is not implemented for " + str(self.__class__))
 
     def _load_runnable(self, cache_dir: msc_utils.MSCDirectory, cache_info: dict) -> Any:
         """Load the runnable from cache
@@ -894,8 +981,13 @@ class BaseRunner(object):
 class ModelRunner(BaseRunner):
     """Model runner of MSC"""
 
-    def _translate(self) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:
+    def _translate(self, mod: tvm.IRModule) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:
         """Translate IRModule to MSCgraphs
+
+        Parameters
+        -------
+        mod: tvm.IRModule
+            The module to be translated.
 
         Returns
         -------
@@ -906,7 +998,7 @@ class ModelRunner(BaseRunner):
         """
 
         graph, weights = from_relax(
-            self._mod,
+            mod,
             trans_config=self._translate_config.get("transform"),
             build_config=self._translate_config.get("build"),
             opt_config=self._translate_config.get("optimize"),
@@ -953,9 +1045,7 @@ class ModelRunner(BaseRunner):
                 f_graph.write(self._graphs[0].to_json())
         return {"main": main_info}
 
-    def _generate_model(
-        self, graphs: List[MSCGraph] = None, weights: Dict[str, tvm.nd.array] = None
-    ) -> Any:
+    def _generate_model(self, graphs: List[MSCGraph], weights: Dict[str, tvm.nd.array]) -> Any:
         """Codegen the model according to framework
 
         Parameters
@@ -971,10 +1061,9 @@ class ModelRunner(BaseRunner):
             The runnable model
         """
 
-        graph = graphs[0] if graphs else self._graphs[0]
         return self.codegen_func(
-            graph,
-            weights or self._weights,
+            graphs[0],
+            weights,
             codegen_config=self._generate_config.get("codegen"),
             print_config=self._generate_config.get("print"),
             build_folder=self._generate_config["build_folder"],
@@ -1020,8 +1109,13 @@ class BYOCRunner(BaseRunner):
         super().visualize(visual_dir)
         self._byoc_graph.visualize(visual_dir.relpath(self._byoc_graph.name + ".prototxt"))
 
-    def _translate(self) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:
+    def _translate(self, mod: tvm.IRModule) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:
         """Translate IRModule to MSCgraphs
+
+        Parameters
+        -------
+        mod: tvm.IRModule
+            The module to be translated.
 
         Returns
         -------
@@ -1032,7 +1126,7 @@ class BYOCRunner(BaseRunner):
         """
 
         self._byoc_mod, graphs, weights = self.partition_func(
-            self._mod,
+            mod,
             trans_config=self._translate_config.get("transform"),
             build_config=self._translate_config.get("build"),
         )
@@ -1101,9 +1195,7 @@ class BYOCRunner(BaseRunner):
             "byoc_mod": "byoc_module.json",
         }
 
-    def _generate_model(
-        self, graphs: List[MSCGraph] = None, weights: Dict[str, tvm.nd.array] = None
-    ) -> Any:
+    def _generate_model(self, graphs: List[MSCGraph], weights: Dict[str, tvm.nd.array]) -> Any:
         """Codegen the model according to framework
 
         Parameters
@@ -1126,8 +1218,8 @@ class BYOCRunner(BaseRunner):
             extra_option["tool_tag"] = self._name
         return self.codegen_func(
             self._byoc_mod,
-            graphs or self._graphs,
-            weights or self._weights,
+            graphs,
+            weights,
             codegen_configs=self._generate_config.get("codegen"),
             print_configs=self._generate_config.get("print"),
             extra_options=extra_option,
@@ -1136,17 +1228,13 @@ class BYOCRunner(BaseRunner):
             plugin=self._plugin,
         )
 
-    def _to_runnable(self, model: Any, device: str, is_training: bool) -> Any:
+    def _build_runnable(self, model: Any) -> Any:
         """Build runnable object
 
         Parameters
         -------
         model: Any
-            The runnable model on cpu.
-        device: str
-            The device for place model
-        is_training: bool
-            Whether to load model for training
+            The meta model.
 
         Returns
         -------
@@ -1155,12 +1243,12 @@ class BYOCRunner(BaseRunner):
         """
 
         model = tvm.relax.transform.LegalizeOps()(model)
-        if device == "cpu":
+        if self._device == "cpu":
             target = tvm.target.Target("llvm")
             with tvm.transform.PassContext(opt_level=3):
                 relax_exec = tvm.relax.build(model, target)
                 runnable = tvm.relax.VirtualMachine(relax_exec, tvm.cpu())
-        elif device.startswith("cuda"):
+        elif self._device.startswith("cuda"):
             target = tvm.target.Target("cuda")
             with target:
                 model = tvm.tir.transform.DefaultGPUSchedule()(model)
@@ -1168,7 +1256,7 @@ class BYOCRunner(BaseRunner):
                 relax_exec = tvm.relax.build(model, target)
                 runnable = tvm.relax.VirtualMachine(relax_exec, tvm.cuda())
         else:
-            raise NotImplementedError("Unsupported device " + str(device))
+            raise NotImplementedError("Unsupported device " + str(self._device))
         return runnable
 
     def _call_runnable(

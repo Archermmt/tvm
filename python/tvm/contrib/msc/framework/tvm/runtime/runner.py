@@ -68,17 +68,13 @@ class WrapRunnable(object):
 class TVMRunner(ModelRunner):
     """Runner of Relax"""
 
-    def _to_runnable(self, model: Any, device: str, is_training: bool) -> Any:
+    def _build_runnable(self, model: Any) -> Any:
         """Build runnable object
 
         Parameters
         -------
         model: Any
             The meta model.
-        device: str
-            The device for place model
-        is_training: bool
-            Whether to load model for training
 
         Returns
         -------
@@ -96,12 +92,12 @@ class TVMRunner(ModelRunner):
             )
         else:
             model = tvm.relax.transform.LegalizeOps()(model)
-            if device == "cpu":
+            if self._device.startswith("cpu"):
                 target = tvm.target.Target("llvm")
                 with tvm.transform.PassContext(opt_level=3):
                     relax_exec = tvm.relax.build(model, target)
                     runnable = tvm.relax.VirtualMachine(relax_exec, tvm.cpu())
-            elif device.startswith("cuda"):
+            elif self._device.startswith("cuda"):
                 target = tvm.target.Target("cuda")
                 with target:
                     model = tvm.tir.transform.DefaultGPUSchedule()(model)
@@ -109,7 +105,7 @@ class TVMRunner(ModelRunner):
                     relax_exec = tvm.relax.build(model, target)
                     runnable = tvm.relax.VirtualMachine(relax_exec, tvm.cuda())
             else:
-                raise NotImplementedError("Unsupported device " + str(device))
+                raise NotImplementedError("Unsupported device " + str(self._device))
         return WrapRunnable(self, runnable)
 
     def _call_runnable(
