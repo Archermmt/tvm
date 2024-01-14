@@ -14,11 +14,14 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+
 """
 Wrap pytorch model with quantizer.
 This example shows how to run PTQ, QAT, PTQ with distill...
 Reference for MSC:
 https://discuss.tvm.apache.org/t/rfc-unity-msc-introduction-to-multi-system-compiler/15251/5
+
+This example use resnet50 from https://github.com/huyvnphan/PyTorch_CIFAR10/tree/master
 """
 
 import argparse
@@ -27,11 +30,8 @@ import torch.optim as optim
 
 from tvm.contrib.msc.pipeline import TorchWrapper
 from tvm.contrib.msc.core.tools import ToolType
-from tvm.contrib.msc.core import utils as msc_utils
 from _resnet import resnet50
 from utils import *
-
-"Use resnet50 from https://github.com/huyvnphan/PyTorch_CIFAR10/tree/master"
 
 parser = argparse.ArgumentParser(description="Qauntizer example")
 parser.add_argument(
@@ -52,11 +52,11 @@ parser.add_argument("--quantize", action="store_true", help="Whether to use quan
 parser.add_argument("--distill", action="store_true", help="Whether to use distiller for tool")
 parser.add_argument("--gym", action="store_true", help="Whether to use gym for tool")
 parser.add_argument("--test_batch", type=int, default=1, help="The batch size for test")
-parser.add_argument("--test_iter", type=int, default=10, help="The iter for test")
-parser.add_argument("--calibrate_iter", type=int, default=10, help="The iter for calibration")
+parser.add_argument("--test_iter", type=int, default=100, help="The iter for test")
+parser.add_argument("--calibrate_iter", type=int, default=100, help="The iter for calibration")
 parser.add_argument("--train_batch", type=int, default=32, help="The batch size for train")
-parser.add_argument("--train_iter", type=int, default=10, help="The iter for train")
-parser.add_argument("--train_epoch", type=int, default=2, help="The epoch for train")
+parser.add_argument("--train_iter", type=int, default=100, help="The iter for train")
+parser.add_argument("--train_epoch", type=int, default=5, help="The epoch for train")
 args = parser.parse_args()
 
 
@@ -76,9 +76,6 @@ if __name__ == "__main__":
     acc = eval_model(model, testloader, max_iter=args.test_iter)
     print("Baseline acc " + str(acc))
 
-    # A bug for torch->tvm: only train model can be parsed correctly
-    # model.train()
-
     model = TorchWrapper(
         model,
         inputs=[("input", [args.test_batch, 3, 32, 32], "float32")],
@@ -90,7 +87,6 @@ if __name__ == "__main__":
         distill_config="default" if args.distill else None,
         gym_configs={ToolType.QUANTIZER: ["default"]} if args.gym else None,
         check_accuracy=False,
-        verbose="debug:1",
     )
 
     # optimize the model with quantizer(PTQ)
@@ -105,11 +101,6 @@ if __name__ == "__main__":
         acc = eval_model(model, testloader, max_iter=args.test_iter)
         print("QAT[{}] acc: {}".format(ep, acc))
 
-    """
-    print("afeter qat!!")
-    for k, v in model.state_dict().items():
-        print("qat {}:{}".format(k, msc_utils.inspect_array(v)))
-    """
     # compile the model
     model.compile(bind_params=True)
     acc = eval_model(model, testloader, max_iter=args.test_iter)

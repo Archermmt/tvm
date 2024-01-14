@@ -32,11 +32,6 @@ from tvm.contrib.msc.plugin import build_plugins
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 
-requires_tensorrt = pytest.mark.skipif(
-    tvm.get_global_func("relax.ext.tensorrt", True) is None,
-    reason="TENSORRT is not enabled",
-)
-
 
 def _get_externs_header():
     """Get the header source for externs"""
@@ -211,16 +206,18 @@ def _get_torch_model(torch_manager):
     """Build model with plugin"""
 
     class MyModel(nn.Module):
+        """Test model with plugin"""
+
         def __init__(self):
             super(MyModel, self).__init__()
             self.conv = torch.nn.Conv2d(3, 6, 7, bias=True)
             self.relu = torch_manager.MyRelu(max_val=0.5)
             self.maxpool = nn.MaxPool2d(kernel_size=[1, 1])
 
-        def forward(self, x):
-            x = self.conv(x)
-            x = self.relu(x)
-            return self.maxpool(x)
+        def forward(self, data):
+            data = self.conv(data)
+            data = self.relu(data)
+            return self.maxpool(data)
 
     return MyModel()
 
@@ -230,21 +227,21 @@ def _get_tvm_model(tvm_manager):
 
     block_builder = relax.BlockBuilder()
     weights = np.random.rand(6, 3, 7, 7).astype("float32")
-    x = relax.Var("x", R.Tensor((1, 3, 224, 224), "float32"))
-    w = relax.Var("w", R.Tensor(weights.shape, weights.dtype.name))
-    inputs = [x, w]
+    data = relax.Var("data", R.Tensor((1, 3, 224, 224), "float32"))
+    weight = relax.Var("weight", R.Tensor(weights.shape, weights.dtype.name))
+    inputs = [data, weight]
     with block_builder.function(name="main", params=inputs.copy()):
         with block_builder.dataflow():
-            x = relax.op.nn.conv2d(x, w)
-            x = block_builder.emit(x, "conv2d")
-            x = tvm_manager.MyRelu(x, max_val=0.5)
-            x = block_builder.emit(x, "relu")
-            x = relax.op.nn.max_pool2d(x)
-            x = block_builder.emit(x, "max_pool2d")
-            x = block_builder.emit_output(x)
-        block_builder.emit_func_output(x)
+            data = relax.op.nn.conv2d(data, weight)
+            data = block_builder.emit(data, "conv2d")
+            data = tvm_manager.MyRelu(data, max_val=0.5)
+            data = block_builder.emit(data, "relu")
+            data = relax.op.nn.max_pool2d(data)
+            data = block_builder.emit(data, "max_pool2d")
+            data = block_builder.emit_output(data)
+        block_builder.emit_func_output(data)
     mod = block_builder.finalize()
-    return BindParams("main", {"w": tvm.nd.array(weights)})(mod)
+    return BindParams("main", {"weight": tvm.nd.array(weights)})(mod)
 
 
 def _build_plugin(frameworks, plugin_root):

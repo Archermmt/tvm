@@ -20,6 +20,7 @@ import os
 import json
 import copy
 import numpy as np
+from .info import MSCArray
 
 
 def load_dict(str_dict: str, flavor: str = "json") -> dict:
@@ -219,7 +220,7 @@ def map_dict(dict_obj: dict, mapper: callable) -> dict:
     new_dict = {}
     for k, v in dict_obj.items():
         if isinstance(v, (tuple, list)):
-            new_dict[k] = [map_dict(e) if isinstance(e, dict) else e for e in v]
+            new_dict[k] = [map_dict(e, mapper) if isinstance(e, dict) else e for e in v]
         elif isinstance(v, dict):
             new_dict[k] = map_dict(v, mapper)
         else:

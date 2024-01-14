@@ -112,7 +112,7 @@ class BaseWrapper(object):
         self._manager = None
         self._config = {
             "model_type": self.model_type,
-            "versboe": verbose,
+            "verbose": verbose,
             "logger": self._logger,
             "inputs": inputs,
             "outputs": outputs,
@@ -132,8 +132,7 @@ class BaseWrapper(object):
             },
         }
         if not check_accuracy:
-            self._config.pop(MSCStage.BASELINE)
-            for stage in [MSCStage.OPTIMIZE, MSCStage.COMPILE]:
+            for stage in [MSCStage.BASELINE, MSCStage.OPTIMIZE, MSCStage.COMPILE]:
                 self._config[stage]["profile"]["check"]["err_rate"] = -1
 
         # config optimize
@@ -242,7 +241,7 @@ class BaseWrapper(object):
         self,
         path: str,
         dump: bool = True,
-        bind_params: bool = False,
+        bind_params: bool = True,
     ) -> Union[str, dict]:
         """Export compile pipeline
 
@@ -261,7 +260,9 @@ class BaseWrapper(object):
             The exported path/pipeline info.
         """
 
-        assert self._manager, "manager is needed to export wrapper"
+        if not self._manager:
+            config = msc_utils.copy_dict(self._config)
+            self._manager = MSCManager(self._meta_model, config, self._plugins)
         exported = self._manager.export(path, dump=dump, bind_params=bind_params)
         if not self._debug:
             self._manager.destory()

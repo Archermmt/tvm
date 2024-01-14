@@ -16,9 +16,6 @@
 # under the License.
 """tvm.contrib.msc.core.utils.info"""
 
-import os
-import json
-import copy
 from typing import List, Tuple, Dict, Any, Union
 from distutils.version import LooseVersion
 import numpy as np

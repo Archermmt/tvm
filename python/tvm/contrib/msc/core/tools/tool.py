@@ -26,7 +26,7 @@ import numpy as np
 
 import tvm
 from tvm.contrib.msc.core.ir import MSCGraph, WeightGraph, MSCJoint, WeightJoint, MSCTensor
-from tvm.contrib.msc.core.utils.namespace import MSCFramework, MSCKey
+from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 from tvm.contrib.msc.core import _ffi_api
 
@@ -498,10 +498,7 @@ class BaseTool(object):
         """Export the config for tool"""
 
         config = msc_utils.copy_dict(config)
-        folder.create_dir("tools").copy(config["plan_file"])
-        config["plan_file"] = os.path.join(
-            MSCKey.MSC_ROOT, "tools", os.path.basename(config["plan_file"])
-        )
+        config["plan_file"] = folder.create_dir("tools").copy(config["plan_file"])
         return config
 
     def load_cache(self, cache_dir: msc_utils.MSCDirectory, cache_info: dict):

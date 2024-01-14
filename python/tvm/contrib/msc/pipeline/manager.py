@@ -47,12 +47,27 @@ class BaseManager(object):
         The config for pipeline.
     plugins: dict
         The plugins for pipeline.
+    root: str
+        The root path for files.
     """
 
-    def __init__(self, model: Any, config: dict, plugins: dict = None):
-        # check config
+    def __init__(self, model: Any, config: dict, plugins: dict = None, root: str = None):
+        # change path to root path
+        if root:
+
+            def _from_root_mark(val):
+                if root and isinstance(val, str) and MSCKey.ROOT_MARK in val:
+                    return val.replace(MSCKey.ROOT_MARK, root)
+                return val
+
+            model = _from_root_mark(model)
+            config = msc_utils.map_dict(config, _from_root_mark)
+            plugins = msc_utils.map_dict(plugins, _from_root_mark)
+
+        # check stage
         for stage in ["inputs", "outputs", "dataset", MSCStage.PREPARE, MSCStage.COMPILE]:
             assert stage in config, "{} should be given to run the pipeline".format(stage)
+
         MSCMap.reset()
         self._model_type = config["model_type"]
         self._model, self._device = self._get_runner_cls(self._model_type).load_native(model)
@@ -467,11 +482,19 @@ class BaseManager(object):
             folder, dump = msc_utils.msc_dir(path.replace(".tar.gz", ""), keep_history=False), True
         else:
             folder = msc_utils.msc_dir(path, keep_history=False)
+
+        def _to_root_mark(val):
+            if isinstance(val, str) and folder.path in val:
+                return val.replace(folder.path, MSCKey.ROOT_MARK)
+            return val
+
         pipeline = {
             "model": self.export_model(folder, dump, bind_params),
             "config": self.export_config(folder, dump, bind_params),
             "plugins": export_plugins(self._plugins, folder) if dump else self._plugins,
         }
+        pipeline = msc_utils.map_dict(pipeline, _to_root_mark)
+        pipeline["root"] = folder.path
         if not dump:
             return pipeline
         with open(folder.relpath("pipeline.json"), "w") as f:
@@ -505,9 +528,7 @@ class BaseManager(object):
         if self._optimized:
             module, params = self._relax_mod, self._runner.get_runtime_params()
             if params and bind_params:
-                print("should bind the parameters!!")
                 module = msc_transform.UpdateConsts(params)(module)
-                raise Exception("stop here!!")
             elif params:
                 with open(folder.relpath("checkpoint.bin"), "wb") as f:
                     f.write(tvm.runtime.save_param_dict(params))
@@ -516,7 +537,7 @@ class BaseManager(object):
             path = folder.relpath("meta_module.json")
             with open(path, "w") as f:
                 f.write(tvm.ir.save_json(module))
-            return MSCKey.MSC_ROOT + "/meta_module.json"
+            return path
         if not dump:
             return self._model
         return self._get_runner_cls(self._model_type).dump_nativate(self._model)
@@ -587,15 +608,12 @@ class BaseManager(object):
                     .setdefault("generate_config", {})
                     .setdefault("pre_hooks", [])
                 )
-                hooks.append(
-                    {"hook": "update_weights", "weights_path": MSCKey.MSC_ROOT + "/checkpoint.bin"}
-                )
+                hooks.append({"hook": "update_weights", "weights_path": ckpt_path})
                 if "profile" in config[MSCStage.COMPILE]:
                     config[MSCStage.COMPILE]["profile"].setdefault("check", {})["err_rate"] = -1
             for t_type, t_config in self._tools_config.items():
                 tool = self.runner.get_tool(t_type)
                 config[MSCStage.COMPILE][t_type] = tool.export_config(t_config, folder)
-            return config
         return config
 
     def destory(self, keep_workspace: bool = False):

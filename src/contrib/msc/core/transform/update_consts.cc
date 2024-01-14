@@ -41,25 +41,13 @@ class ConstResetter : public ExprMutator {
  public:
   explicit ConstResetter(const Map<String, tvm::runtime::NDArray>& datas) : datas_(datas) {}
 
-  void VisitBinding_(const VarBindingNode* binding, const ConstantNode* val) final {
-    std::cout << "visiting binding constant " << val->span << std::endl;
-    const auto& name = SpanUtils::GetAttr(val->span, msc_attr::kName);
-    std::cout << "const has name " << name << std::endl;
-    if (datas_.count(name)) {
-      std::cout << "should reset the constant!!" << std::endl;
-    }
-    ExprMutator::VisitBinding_(binding, val);
-  }
-
  private:
   using ExprMutator::VisitExpr_;
 
   Expr VisitExpr_(const ConstantNode* op) final {
-    std::cout << "visiting normal constant " << op->span << std::endl;
     const auto& name = SpanUtils::GetAttr(op->span, msc_attr::kName);
-    std::cout << "const has name " << name << std::endl;
     if (datas_.count(name)) {
-      std::cout << "should reset the constant!!" << std::endl;
+      return Constant(datas_[name], Downcast<StructInfo>(op->struct_info_), op->span);
     }
     return ExprMutator::VisitExpr_(op);
   }

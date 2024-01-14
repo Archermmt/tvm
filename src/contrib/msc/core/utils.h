@@ -28,6 +28,7 @@
 #include <tvm/relax/expr.h>
 #include <tvm/relay/expr.h>
 
+#include <string>
 #include <tuple>
 #include <vector>
 
