@@ -17,6 +17,7 @@
 # pylint: disable=unused-import
 """tvm.contrib.msc.framework.runtime.tvm.runner"""
 
+import os
 import time
 from typing import Dict, List, Union, Any, Tuple
 import numpy as np
@@ -168,7 +169,10 @@ class TVMRunner(ModelRunner):
             The loaded native model.
         """
 
-        if isinstance(model, tvm.IRModule):
+        if isinstance(model, str) and os.path.isfile(model):
+            with open(model, "r") as f:
+                native_model = tvm.ir.load_json(f.read())
+        elif isinstance(model, tvm.IRModule):
             native_model = model
         else:
             raise NotImplementedError(

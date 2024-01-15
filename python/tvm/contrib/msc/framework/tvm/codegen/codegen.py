@@ -68,27 +68,23 @@ def to_relax(
                 f_params.write(tvm.runtime.save_param_dict(weights))
 
     # pylint: disable=unused-argument
-    def _bind_weights(mod: tvm.IRModule, folder: msc_utils.MSCDirectory) -> tvm.IRModule:
+    def _post_proc(mod: tvm.IRModule, folder: msc_utils.MSCDirectory) -> tvm.IRModule:
         if weights:
             mod = BindParams("main", weights)(mod)
-        return mod
+        return tvm.ir.transform.Sequential(
+            [
+                # The canonicalization of relax variable bindings is not required
+                # for correctness.  It does, however, remove trivial `x = y`
+                # bindings, preventing test cases from depending on their
+                # presence.
+                tvm.relax.transform.CanonicalizeBindings(),
+                tvm.relax.transform.ConvertToDataflow(min_size=1),
+            ],
+            name="tvm.contrib.msc.framework.tvm.codegen.to_relax_postproc",
+        )(mod)
 
     codegen = CodeGen(graph, _ffi_api.GetRelaxSources, codegen_config, print_config, build_folder)
     model_args = inputs
     if plugin:
         model_args = model_args + [plugin]
-    mod = codegen.load(model_args, pre_load=_save_weights, post_load=_bind_weights)
-
-    mod = tvm.ir.transform.Sequential(
-        [
-            # The canonicalization of relax variable bindings is not required
-            # for correctness.  It does, however, remove trivial `x = y`
-            # bindings, preventing test cases from depending on their
-            # presence.
-            tvm.relax.transform.CanonicalizeBindings(),
-            tvm.relax.transform.ConvertToDataflow(min_size=1),
-        ],
-        name="tvm.contrib.msc.framework.tvm.codegen.to_relax_postproc",
-    )(mod)
-
-    return mod
+    return codegen.load(model_args, pre_load=_save_weights, post_load=_post_proc)

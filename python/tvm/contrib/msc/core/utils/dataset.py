@@ -307,6 +307,7 @@ class BaseDataSaver(object):
     def finalize(self):
         """Finalize the saver"""
 
+        assert self._info["num_datas"] > 0, "No datas saved"
         with open(os.path.join(self._folder, "datas_info.json"), "w") as f:
             f.write(json.dumps(self._info, indent=2))
 
@@ -433,6 +434,8 @@ class IODataSaver(BaseDataSaver):
                 info = self._info["inputs"][name]
                 f.write("{} {} {}\n".format(name, info.get("save_name", name), info["bytes"]))
             for name in self._output_names:
+                if name not in self._info["outputs"]:
+                    continue
                 info = self._info["outputs"][name]
                 f.write("{} {} {}\n".format(name, info.get("save_name", name), info["bytes"]))
 

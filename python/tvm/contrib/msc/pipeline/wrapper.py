@@ -261,8 +261,7 @@ class BaseWrapper(object):
         """
 
         if not self._manager:
-            config = msc_utils.copy_dict(self._config)
-            self._manager = MSCManager(self._meta_model, config, self._plugins)
+            self._manager = MSCManager(self._meta_model, self._config, self._plugins)
         exported = self._manager.export(path, dump=dump, bind_params=bind_params)
         if not self._debug:
             self._manager.destory()

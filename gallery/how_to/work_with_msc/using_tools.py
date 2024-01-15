@@ -94,6 +94,9 @@ if __name__ == "__main__":
     acc = eval_model(model, testloader, max_iter=args.test_iter)
     print("PTQ acc " + str(acc))
 
+    model.export("msc_export")
+    raise Exception("stop here!!")
+
     # train the model with quantizer(QAT)
     optimizer = optim.Adam(model.parameters(), lr=0.0000001, weight_decay=0.08)
     for ep in range(args.train_epoch):

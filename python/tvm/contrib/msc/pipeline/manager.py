@@ -534,13 +534,13 @@ class BaseManager(object):
                     f.write(tvm.runtime.save_param_dict(params))
             if not dump:
                 return module
-            path = folder.relpath("meta_module.json")
+            path = folder.relpath("model.json")
             with open(path, "w") as f:
                 f.write(tvm.ir.save_json(module))
             return path
         if not dump:
             return self._model
-        return self._get_runner_cls(self._model_type).dump_nativate(self._model)
+        return self._get_runner_cls(self._model_type).dump_nativate(self._model, folder)
 
     def export_config(
         self, folder: msc_utils.MSCDirectory, dump: bool = True, bind_params: bool = False
@@ -566,30 +566,34 @@ class BaseManager(object):
             return {"model_info": self.runner.model_info}
 
         # dump the dataloader
-        def _save_dataset(info, dump: bool):
-            loader = info["loader"]
+        def _save_dataset(name, info, dump: bool):
+            loader, max_batch = info["loader"], info.get("max_batch", -1)
+            data_folder = folder.create_dir("dataset")
             if isinstance(loader, str) and msc_utils.is_callable(loader):
                 path, func_name = loader.split(":")
-                loader = os.path.basename(folder.copy(path)) + ":" + func_name
+                loader_path = data_folder.copy(path) + ":" + func_name
             elif msc_utils.is_io_dataset(loader):
-                loader = folder.create_dir("dataset").copy(loader)
+                loader_path = data_folder.copy(loader, name)
             elif callable(loader) and dump:
                 saver_options = {
                     "input_names": [i[0] for i in self._config["inputs"]],
                     "output_names": self._config["outputs"],
                 }
-                data_folder = folder.create_dir("msc_datas")
                 batch_cnt = 0
-                with msc_utils.IODataSaver(data_folder, saver_options) as saver:
+                loader_path = data_folder.create_dir(name).path
+                with msc_utils.IODataSaver(loader_path, saver_options) as saver:
                     for inputs in loader():
-                        if batch_cnt >= self._max_batch:
+                        if batch_cnt >= max_batch > 0:
                             break
                         batch_cnt = saver.save_batch(inputs)
-                loader = data_folder.path
-            return {"loader": loader, "max_batch": info.get("max_batch", -1)}
+            else:
+                raise TypeError("unexpected loader {}({})".format(loader, type(loader)))
+            return {"loader": loader_path, "max_batch": max_batch}
 
         config = msc_utils.copy_dict(self._meta_config)
-        config["dataset"] = {k: _save_dataset(v, dump) for k, v in self._config["dataset"].items()}
+        config["dataset"] = {
+            k: _save_dataset(k, v, dump) for k, v in self._config["dataset"].items()
+        }
         if self._optimized:
             config.pop(MSCStage.OPTIMIZE)
             config["model_type"] = MSCFramework.TVM
@@ -614,6 +618,10 @@ class BaseManager(object):
             for t_type, t_config in self._tools_config.items():
                 tool = self.runner.get_tool(t_type)
                 config[MSCStage.COMPILE][t_type] = tool.export_config(t_config, folder)
+        # remove not serializable items
+        if dump:
+            remove_keys = {"workspace", "logger"}
+            config = {k: v for k, v in config.items() if k not in remove_keys}
         return config
 
     def destory(self, keep_workspace: bool = False):

@@ -17,6 +17,7 @@
 # pylint: disable=unused-import
 """tvm.contrib.msc.framework.torch.runtime.runner"""
 
+import os
 import time
 from typing import Dict, List, Union, Tuple, Any
 import numpy as np
@@ -170,7 +171,9 @@ class TorchRunner(ModelRunner):
             The loaded native model.
         """
 
-        if isinstance(model, torch.nn.Module):
+        if isinstance(model, str) and os.path.isfile(model) and ".py:" in model:
+            native_model = msc_utils.load_callable(model)
+        elif isinstance(model, torch.nn.Module):
             native_model = model
         else:
             raise NotImplementedError(
@@ -314,6 +317,6 @@ class TorchRunner(ModelRunner):
         """
 
         graph_model = torch.fx.symbolic_trace(model)
-        exp_path = folder.create_dir("meta").path
-        graph_model.to_folder(exp_path)
-        return exp_path
+        exp_path = folder.create_dir("model")
+        graph_model.to_folder(exp_path.path, "native_model")
+        return exp_path.relpath("module.py") + ":native_model"
