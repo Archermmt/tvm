@@ -289,6 +289,8 @@ class BaseTool(object):
         The plan file path.
     strategys: list[dict]
         The strategys of the tool.
+    training: bool
+        Whether the tool is training.
     cache_processed: bool
         Whether to cache processed tensor.
     options: dict
@@ -306,6 +308,7 @@ class BaseTool(object):
         stage: str,
         plan_file: str,
         strategys: List[dict],
+        training: bool = False,
         cache_processed: bool = True,
         options: dict = None,
         debug_level: int = 0,
@@ -318,6 +321,7 @@ class BaseTool(object):
         else:
             self._plan = {}
         self._strategys = self._parse_strategys(msc_utils.copy_dict(strategys))
+        self._training = training
         self._cache_processed = cache_processed
         self._options = options or {}
         self._debug_level = debug_level
@@ -340,7 +344,6 @@ class BaseTool(object):
 
         self._tensor_cache = {}
         self._enabled = True
-        self._is_training = False
         self._graphs, self._weights = [], {}
         self._graph_id, self._forward_cnt = 0, 0
         self._processed_tensor = {}
@@ -391,7 +394,11 @@ class BaseTool(object):
             if not method:
                 method = msc_utils.get_registered_func(method_name)
             assert method, "Can not find method with " + str(method_name)
-            tensor_types = strategy.pop("tensor_types") if "tensor_types" in strategy else ["all"]
+            tensor_types = (
+                strategy.pop("tensor_types")
+                if "tensor_types" in strategy
+                else ["input", "output", "weight"]
+            )
             if "op_types" in strategy:
                 op_types = strategy.pop("op_types")
                 marks = [("{}.{}".format(s, t), t) for s, t in product(op_types, tensor_types)]
@@ -400,9 +407,9 @@ class BaseTool(object):
                 marks = [("{}.{}".format(s, t), t) for s, t in product(op_names, tensor_types)]
             elif "tensor_names" in strategy:
                 tensor_names = strategy.pop("tensor_names")
-                marks = [(n, "all") for n in tensor_names]
+                marks = [(n, "tensor") for n in tensor_names]
             else:
-                marks = [("default", "all")]
+                marks = [("default", t) for t in ["input", "output", "weight"]]
             stages = strategy.pop("stages") if "stages" in strategy else ["default"]
             for mark, t_type in marks:
                 if mark not in strategys:
@@ -894,12 +901,12 @@ class BaseTool(object):
     def train(self):
         """Set the tool to train mode"""
 
-        self._is_training = True
+        self._training = True
 
     def eval(self):
         """Set the tool to eval mode"""
 
-        self._is_training = False
+        self._training = False
 
     def to_tensor_id(self, name: str, consumer: str) -> str:
         """Concat name to unique id
@@ -1215,28 +1222,18 @@ class BaseTool(object):
         if mark not in self._tensor_cache.get(tensor_id, {}):
             if self.is_weight(name):
                 consumer = self.find_node(consumer)
-                name_refs = [
-                    consumer.name + ".weight",
-                    consumer.optype + ".weight",
-                    consumer.optype + ".all",
-                ]
+                name_refs = [consumer.name + ".weight", consumer.optype + ".weight"]
             elif consumer == "exit":
                 producer = self.find_producer(name)
-                name_refs = [
-                    producer.name + ".output",
-                    producer.optype + ".output",
-                    producer.optype + ".all",
-                ]
+                name_refs = [producer.name + ".output", producer.optype + ".output"]
             else:
                 consumer = self.find_node(consumer)
                 producer = self.find_producer(name)
                 name_refs = [
                     producer.name + ".output",
                     producer.optype + ".output",
-                    producer.optype + ".all",
                     consumer.name + ".input",
                     consumer.optype + ".input",
-                    consumer.optype + ".all",
                 ]
             strategys = []
             tensor_strategy = self._strategys.get(tensor_id)

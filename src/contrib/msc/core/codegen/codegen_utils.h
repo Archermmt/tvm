@@ -40,7 +40,7 @@ namespace msc {
 using namespace tvm::script::printer;
 
 #define CODEGEN_CONFIG_MEMBERS             \
-  bool is_train{false};                    \
+  bool training{false};                    \
   bool use_tools{false};                   \
   bool use_plugin{false};                  \
   bool need_test{true};                    \
@@ -52,8 +52,8 @@ using namespace tvm::script::printer;
   std::vector<size_t> version{0, 0, 0};
 
 #define CODEGEN_CONFIG_PARSE                    \
-  if (key == "is_train") {                      \
-    reader->Read(&is_train);                    \
+  if (key == "training") {                      \
+    reader->Read(&training);                    \
   } else if (key == "use_tools") {              \
     reader->Read(&use_tools);                   \
   } else if (key == "use_plugin") {             \

@@ -151,7 +151,7 @@ def get_tool_config(tool_type):
     return {tool_type: config}
 
 
-def _get_torch_model(name, is_training=False):
+def _get_torch_model(name, training=False):
     """Get model from torch vision"""
 
     # pylint: disable=import-outside-toplevel
@@ -159,7 +159,7 @@ def _get_torch_model(name, is_training=False):
         import torchvision
 
         model = getattr(torchvision.models, name)()
-        if is_training:
+        if training:
             model = model.train()
         else:
             model = model.eval()
@@ -189,12 +189,12 @@ def _test_from_torch(
     compile_type,
     tools_config,
     expected_info,
-    is_training=False,
+    training=False,
     atol=1e-1,
     rtol=1e-1,
     optimize_type=None,
 ):
-    torch_model = _get_torch_model("resnet50", is_training)
+    torch_model = _get_torch_model("resnet50", training)
     if torch_model:
         if torch.cuda.is_available():
             torch_model = torch_model.to(torch.device("cuda:0"))
@@ -252,9 +252,7 @@ def test_tvm_gym(tool_type):
     """Test tools for tvm with gym"""
 
     tool_config = get_tool_config(tool_type)
-    _test_from_torch(
-        MSCFramework.TVM, tool_config, get_model_info(MSCFramework.TVM), is_training=True
-    )
+    _test_from_torch(MSCFramework.TVM, tool_config, get_model_info(MSCFramework.TVM), training=True)
 
 
 @requires_tensorrt
@@ -264,7 +262,7 @@ def test_tensorrt_gym(tool_type):
 
     tool_config = get_tool_config(tool_type)
     _test_from_torch(
-        MSCFramework.TENSORRT, tool_config, get_model_info(MSCFramework.TENSORRT), is_training=False
+        MSCFramework.TENSORRT, tool_config, get_model_info(MSCFramework.TENSORRT), training=False
     )
 
 

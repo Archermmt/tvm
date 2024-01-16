@@ -182,7 +182,7 @@ class TensorflowRunner(ModelRunner):
         return MSCFramework.TENSORFLOW
 
     @classmethod
-    def load_native(cls, model: Any) -> tf_v1.GraphDef:
+    def load_native(cls, model: Any) -> Tuple[tf_v1.GraphDef, str, bool]:
         """Load the native model
 
         Parameters
@@ -194,6 +194,10 @@ class TensorflowRunner(ModelRunner):
         -------
         model: tf_v1.GraphDef
             The loaded native model.
+        device: str
+            The device of the model.
+        training:
+            Whether the model is for training.
         """
 
         if isinstance(model, tf_v1.GraphDef):
@@ -204,8 +208,10 @@ class TensorflowRunner(ModelRunner):
             )
         device_protos = device_lib.list_local_devices()
         if any(dev.device_type == "GPU" for dev in device_protos):
-            return native_model, "cuda"
-        return native_model, "cpu"
+            device = "cuda"
+        else:
+            device = "cpu"
+        return native_model, device, False
 
     @classmethod
     def update_config(cls, stage: str, config: dict, model: Any = None) -> dict:

@@ -53,6 +53,8 @@ class BaseRunner(object):
         The config for build runnable.
     device: str
         The device to build runnable.
+    training: bool
+        Whether compile model to trainable
     stage: str
         The stage of runner.
     plugin: PluginManager
@@ -73,6 +75,7 @@ class BaseRunner(object):
         generate_config: Optional[Dict[str, str]] = None,
         build_config: Optional[Dict[str, str]] = None,
         device: str = "cpu",
+        training: bool = False,
         stage: str = "default",
         plugin: Any = None,
         name: str = "main",
@@ -89,7 +92,7 @@ class BaseRunner(object):
         self._plugin = plugin
         self._name = name
         self._debug_level = debug_level
-        self._is_training, self._trained = False, False
+        self._training, self._trained = training, training
         self._logger = logger or msc_utils.get_global_logger()
         self._logger.info(
             msc_utils.msg_block(
@@ -117,7 +120,12 @@ class BaseRunner(object):
             self._update_codegen({"use_tools": True, "tools_tag": self._name})
             for t_type, config in self._tools_config.items():
                 self._tools[t_type] = create_tool(
-                    self.framework, t_type, self._name, stage=self._stage, **config
+                    self.framework,
+                    t_type,
+                    self._name,
+                    training=self._training,
+                    stage=self._stage,
+                    **config,
                 )
         if self._plugin:
             self._update_codegen({"use_plugin": True})
@@ -229,7 +237,9 @@ class BaseRunner(object):
         if self._debug_level >= 2:
             self._logger.debug(msc_utils.msg_block("RUNNER.MODEL_INFO", self._model_info))
 
-        runnable_msg = "runnable({}) @ {}".format(self.framework, self._device)
+        runnable_msg = "runnable({}, {}) @ {}".format(
+            self.framework, "train" if self._training else "eval", self._device
+        )
         # Load runnable from cache
         if not self._runnable and cache_info.get("runnable"):
             self._runnable = self._load_runnable(cache_dir, cache_info["runnable"])
@@ -501,17 +511,31 @@ class BaseRunner(object):
     def train(self):
         """Change status to train"""
 
-        self._is_training = True
-        self._trained = True
-        for tool in self.get_tools():
-            tool.train()
+        if not self._training:
+            self._training = True
+            for tool in self.get_tools():
+                tool.train()
+            self._train()
+
+    def _train(self):
+        """Change status to train"""
+
+        self._runnable = self.build_runnable()
 
     def eval(self):
         """Change status to eval"""
 
-        self._is_training = False
-        for tool in self.get_tools():
-            tool.eval()
+        if self._training:
+            self._trained = True
+            self._training = False
+            for tool in self.get_tools():
+                tool.eval()
+            self._eval()
+
+    def _eval(self):
+        """Change status to eval"""
+
+        self._runnable = self.build_runnable()
 
     def get_tool_config(self, tool_type: str) -> dict:
         """Get tool by type

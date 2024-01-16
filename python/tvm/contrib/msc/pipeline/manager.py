@@ -70,7 +70,9 @@ class BaseManager(object):
 
         MSCMap.reset()
         self._model_type = config["model_type"]
-        self._model, self._device = self._get_runner_cls(self._model_type).load_native(model)
+        self._model, self._device, self._training = self._get_runner_cls(
+            self._model_type
+        ).load_native(model)
         if plugins:
             self._plugins = load_plugins(plugins)
         else:
@@ -489,10 +491,13 @@ class BaseManager(object):
             return val
 
         pipeline = {
-            "model": self.export_model(folder, dump, bind_params),
+            "model": self.export_model(folder.create_dir("model"), dump, bind_params),
             "config": self.export_config(folder, dump, bind_params),
-            "plugins": export_plugins(self._plugins, folder) if dump else self._plugins,
         }
+        if dump:
+            pipeline["plugins"] = export_plugins(self._plugins, folder.create_dir("plugin"))
+        else:
+            pipeline["plugins"] = self._plugins
         pipeline = msc_utils.map_dict(pipeline, _to_root_mark)
         pipeline["root"] = folder.path
         if not dump:
@@ -537,7 +542,7 @@ class BaseManager(object):
             path = folder.relpath("model.json")
             with open(path, "w") as f:
                 f.write(tvm.ir.save_json(module))
-            return path
+            return {"model": path}
         if not dump:
             return self._model
         return self._get_runner_cls(self._model_type).dump_nativate(self._model, folder)
@@ -571,24 +576,24 @@ class BaseManager(object):
             data_folder = folder.create_dir("dataset")
             if isinstance(loader, str) and msc_utils.is_callable(loader):
                 path, func_name = loader.split(":")
-                loader_path = data_folder.copy(path) + ":" + func_name
+                exp_loader = data_folder.copy(path) + ":" + func_name
             elif msc_utils.is_io_dataset(loader):
-                loader_path = data_folder.copy(loader, name)
+                exp_loader = data_folder.copy(loader, name)
             elif callable(loader) and dump:
                 saver_options = {
                     "input_names": [i[0] for i in self._config["inputs"]],
                     "output_names": self._config["outputs"],
                 }
                 batch_cnt = 0
-                loader_path = data_folder.create_dir(name).path
-                with msc_utils.IODataSaver(loader_path, saver_options) as saver:
+                exp_loader = data_folder.create_dir(name).path
+                with msc_utils.IODataSaver(exp_loader, saver_options) as saver:
                     for inputs in loader():
                         if batch_cnt >= max_batch > 0:
                             break
                         batch_cnt = saver.save_batch(inputs)
             else:
-                raise TypeError("unexpected loader {}({})".format(loader, type(loader)))
-            return {"loader": loader_path, "max_batch": max_batch}
+                exp_loader = loader
+            return {"loader": exp_loader, "max_batch": max_batch}
 
         config = msc_utils.copy_dict(self._meta_config)
         config["dataset"] = {
@@ -599,7 +604,7 @@ class BaseManager(object):
             config["model_type"] = MSCFramework.TVM
             if MSCStage.BASELINE in config:
                 config[MSCStage.BASELINE]["run_type"] = MSCFramework.TVM
-            ckpt_path = folder.relpath("checkpoint.bin")
+            ckpt_path = folder.create_dir("model").relpath("checkpoint.bin")
             if bind_params:
                 for stage in [MSCStage.BASELINE, MSCStage.COMPILE]:
                     if stage not in config or "profile" not in config[stage]:
@@ -685,6 +690,8 @@ class BaseManager(object):
         )
         if "device" not in run_config:
             run_config["device"] = self._device
+        if "training" not in run_config:
+            run_config["training"] = self._training
         opt_config = self._config.get(MSCStage.OPTIMIZE, {})
         if ToolType.TRACKER in opt_config and runner_cls.support_tool(ToolType.TRACKER):
             tools_config = {**tools_config, ToolType.TRACKER: opt_config[ToolType.TRACKER]}

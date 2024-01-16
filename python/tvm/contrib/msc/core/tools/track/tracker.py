@@ -16,6 +16,7 @@
 # under the License.
 """tvm.contrib.msc.core.tools.track.tracker"""
 
+import os
 from typing import Any, List
 from tvm.contrib.msc.core.tools.tool import ToolType, BaseTool, ToolStrategy
 from tvm.contrib.msc.core import utils as msc_utils
@@ -33,9 +34,16 @@ class BaseTracker(BaseTool):
             The setup info.
         """
 
+        # filter plan
+        def _filter_info(info: dict) -> dict:
+            return {k: v for k, v in info.items() if k != self._stage}
+
+        self._plan = {k: _filter_info(v) for k, v in self._plan.items()}
         data_folder = msc_utils.get_dataset_dir().create_dir("Track")
         self._loaders = {}
         for folder in data_folder.listdir():
+            if folder == self._stage:
+                continue
             if msc_utils.is_simple_dataset(data_folder.relpath(folder)):
                 self._loaders[folder] = msc_utils.SimpleDataLoader(data_folder.relpath(folder))
         self._saver = msc_utils.SimpleDataSaver(data_folder.relpath(self._stage))
@@ -49,6 +57,13 @@ class BaseTracker(BaseTool):
 
         self._saver.finalize()
         return super().finalize()
+
+    def export_config(self, config: dict, folder: msc_utils.MSCDirectory):
+        """Export the config for tool"""
+
+        config = msc_utils.copy_dict(config)
+        config["plan_file"] = os.path.basename(config["plan_file"])
+        return config
 
     def _execute_after_forward(self, output: Any) -> Any:
         """Execute after model forward
@@ -163,12 +178,9 @@ class BaseTracker(BaseTool):
 
         if self._stage in self._plan.get(name, {}):
             return tensor
-        if name not in self._plan:
-            self._plan[name] = {}
-        plan = {}
+        plan = self._plan.setdefault(name, {}).setdefault(self._stage, {})
         for strategy in strategys:
             plan.update(strategy(self, tensor, name, consumer))
-        self._plan[name][self._stage] = plan
         return tensor
 
     @classmethod

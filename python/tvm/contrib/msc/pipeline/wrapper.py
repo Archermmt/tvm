@@ -239,7 +239,7 @@ class BaseWrapper(object):
 
     def export(
         self,
-        path: str,
+        path: str = "msc_export",
         dump: bool = True,
         bind_params: bool = True,
     ) -> Union[str, dict]:
@@ -269,6 +269,9 @@ class BaseWrapper(object):
 
     def _get_model(self) -> Any:
         return self._compiled_model or self._optimized_model or self._meta_model
+
+    def _get_framework(self) -> str:
+        return self._manager.runner.framework if self._manager else self.model_type
 
     @property
     def optimized(self):
@@ -316,9 +319,6 @@ class TorchWrapper(BaseWrapper):
         if self._get_framework() == MSCFramework.TORCH:
             return self._get_model().eval()
         return self._get_model()
-
-    def _get_framework(self) -> str:
-        return self._manager.runner.framework if self._manager else MSCFramework.TORCH
 
     @property
     def model_type(self):

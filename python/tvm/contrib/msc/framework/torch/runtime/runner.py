@@ -76,7 +76,7 @@ class TorchRunner(ModelRunner):
             model = model.to(torch.device(self._device))
         else:
             raise NotImplementedError("Unsupported device " + str(self._device))
-        if self._build_config.get("is_training", False):
+        if self._training:
             model = model.train()
         else:
             model = model.eval()
@@ -157,7 +157,7 @@ class TorchRunner(ModelRunner):
         return MSCFramework.TORCH
 
     @classmethod
-    def load_native(cls, model: Any) -> torch.nn.Module:
+    def load_native(cls, model: Any) -> Tuple[torch.nn.Module, str, bool]:
         """Load the native model
 
         Parameters
@@ -169,10 +169,14 @@ class TorchRunner(ModelRunner):
         -------
         model: torch.nn.Module
             The loaded native model.
+        device: str
+            The device of the model.
+        training:
+            Whether the model is for training.
         """
 
-        if isinstance(model, str) and os.path.isfile(model) and ".py:" in model:
-            native_model = msc_utils.load_callable(model)
+        if isinstance(model, dict) and "model" in model:
+            native_model = msc_utils.load_callable(model["model"])
         elif isinstance(model, torch.nn.Module):
             native_model = model
         else:
@@ -180,12 +184,15 @@ class TorchRunner(ModelRunner):
                 "Load native model {} with type {} is not supported".format(model, type(model))
             )
         parameters = list(model.parameters())
-        if not parameters:
-            return native_model, "cpu"
-        ref_device = parameters[0].device
-        if ref_device.index:
-            return native_model, "{}:{}".format(ref_device.type, ref_device.index)
-        return native_model, ref_device.type
+        if parameters:
+            ref_device = parameters[0].device
+            if ref_device.index:
+                device = "{}:{}".format(ref_device.type, ref_device.index)
+            else:
+                device = ref_device.type
+        else:
+            device = "cpu"
+        return native_model, device, model.training
 
     @classmethod
     def update_config(cls, stage: str, config: dict, model: Any = None) -> dict:
@@ -221,16 +228,6 @@ class TorchRunner(ModelRunner):
                 }
             )
             config["parse"]["parse_config"] = parse_config
-        elif stage in (MSCStage.BASELINE, MSCStage.OPTIMIZE, MSCStage.COMPILE):
-            run_config = config[stage].get("run_config", {})
-            if "generate_config" not in run_config:
-                run_config["generate_config"] = {}
-            run_config["generate_config"].update({"is_training": model.training})
-            if "build_config" not in run_config:
-                run_config["build_config"] = {}
-            run_config["build_config"].update({"is_training": model.training})
-
-            config[stage]["run_config"] = run_config
         return config
 
     @classmethod
@@ -319,4 +316,4 @@ class TorchRunner(ModelRunner):
         graph_model = torch.fx.symbolic_trace(model)
         exp_path = folder.create_dir("model")
         graph_model.to_folder(exp_path.path, "native_model")
-        return exp_path.relpath("module.py") + ":native_model"
+        return {"model": exp_path.relpath("module.py") + ":native_model"}

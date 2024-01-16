@@ -72,6 +72,10 @@ class TVMRunner(ModelRunner):
             The runnable
         """
 
+        if self._training:
+            model = tvm.relax.transform.DecomposeOpsForTraining()(model)
+        else:
+            model = tvm.relax.transform.DecomposeOpsForInference()(model)
         if "builder" in self._generate_config:
             builder, build_config = self._generate_config["builder"]
             runnable = builder(model, **build_config)
@@ -169,8 +173,8 @@ class TVMRunner(ModelRunner):
             The loaded native model.
         """
 
-        if isinstance(model, str) and os.path.isfile(model):
-            with open(model, "r") as f:
+        if isinstance(model, dict) and "model" in model:
+            with open(model["model"], "r") as f:
                 native_model = tvm.ir.load_json(f.read())
         elif isinstance(model, tvm.IRModule):
             native_model = model
@@ -179,8 +183,10 @@ class TVMRunner(ModelRunner):
                 "Load native model {} with type {} is not supported".format(model, type(model))
             )
         if tvm.cuda().exist:
-            return native_model, "cuda"
-        return native_model, "cpu"
+            device = "cuda"
+        else:
+            device = "cpu"
+        return native_model, device, False
 
     @classmethod
     def update_config(cls, stage: str, config: dict, model: Any = None) -> dict:

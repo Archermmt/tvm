@@ -48,7 +48,13 @@ class TensorRTRunner(BYOCRunner):
 
         if not self._device.startswith("cuda"):
             self._device = "cuda"
+        assert not self._training, "TensorRT only support eval"
         return super().setup()
+
+    def train(self):
+        """Change status to train"""
+
+        raise Exception("TensorRT only support eval")
 
     def apply_tool(self, tool_type: str, data_loader: Any = None) -> dict:
         """Execute tool and get plan
