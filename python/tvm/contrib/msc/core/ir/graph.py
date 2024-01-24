@@ -669,9 +669,9 @@ class MSCGraph(BaseGraph):
             The generator of weights.
         """
 
-        for n in self.get_nodes():
-            for w in n.get_weights().values():
-                yield w
+        for node in self.get_nodes():
+            for weight in node.get_weights().values():
+                yield weight
 
     def input_at(self, idx: int) -> MSCTensor:
         """Get input at idx.

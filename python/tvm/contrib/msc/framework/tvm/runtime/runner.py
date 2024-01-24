@@ -17,7 +17,6 @@
 # pylint: disable=unused-import
 """tvm.contrib.msc.framework.runtime.tvm.runner"""
 
-import os
 import time
 from typing import Dict, List, Union, Any, Tuple
 import numpy as np
@@ -211,7 +210,7 @@ class TVMRunner(ModelRunner):
         if stage not in config:
             return config
         if stage == MSCStage.PARSE:
-
+            # pylint: disable=unused-argument
             def passby(mod, *args, **kwargs):
                 return mod, None
 

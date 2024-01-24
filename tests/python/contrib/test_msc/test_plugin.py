@@ -17,7 +17,6 @@
 
 """ Test Plugin in MSC. """
 
-import pytest
 import numpy as np
 
 import torch

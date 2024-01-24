@@ -68,9 +68,9 @@ def normalize_weights(
     weights = {t.name: _to_data(t, d) for t, d in t_weights.items() if graph.has_tensor(t.name)}
     # sort the weights by graph weights
     graph_weights = {}
-    for w in graph.get_weights():
-        assert w.name in weights, "Missing weight " + str(w)
-        graph_weights[w.name] = weights[w.name]
+    for weight in graph.get_weights():
+        assert weight.name in weights, "Missing weight " + str(weight)
+        graph_weights[weight.name] = weights[weight.name]
     return graph_weights
 
 

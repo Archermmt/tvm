@@ -187,7 +187,7 @@ def copy_dict(dict_obj: dict) -> dict:
         return {}
     try:
         return copy.deepcopy(dict_obj)
-    except:
+    except:  # pylint: disable=bare-except
         new_dict = {}
         for k, v in dict_obj.items():
             if isinstance(v, (list, tuple)):

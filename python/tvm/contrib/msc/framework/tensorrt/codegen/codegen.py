@@ -18,7 +18,7 @@
 
 import os
 import subprocess
-from typing import Dict, Optional, Tuple, List, Union, Any
+from typing import Dict, Optional, List, Union, Any
 import numpy as np
 
 import tvm

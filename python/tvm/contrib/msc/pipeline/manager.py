@@ -106,10 +106,10 @@ class BaseManager(object):
             The setup info.
         """
 
-        # register plugins
         self._meta_config = config
         self._optimize_type = config.get(MSCStage.OPTIMIZE, {}).get("run_type", self._model_type)
         self._compile_type = config.get(MSCStage.COMPILE, {}).get("run_type", self._model_type)
+        # register plugins
         if self._plugins:
             for t in [self._model_type, self._optimize_type, self._compile_type]:
                 assert t in self._plugins, "Missing plugin for {}".format(t)
@@ -304,7 +304,7 @@ class BaseManager(object):
             )
             msg = "{:.2f} ms @ {}".format(avg_time, self._device)
             self._report["profile"][MSCStage.PREPARE] = {"latency": msg}
-            self._logger.info("Profile(prepare) {} times -> {}".format(benchmark["repeat"], msg))
+            self._logger.info("Profile(prepare) %d times -> %s", benchmark["repeat"], msg)
 
         return self._sample_inputs
 

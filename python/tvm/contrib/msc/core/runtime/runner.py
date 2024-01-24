@@ -731,9 +731,9 @@ class BaseRunner(object):
         """
 
         device = device or self._device
-        for g in self._graphs:
-            for w in g.get_weights():
-                data = self._weights[w.name]
+        for graph in self._graphs:
+            for weight in graph.get_weights():
+                data = self._weights[weight.name]
                 if framework:
                     data = msc_utils.cast_array(data, framework, device)
                 yield data

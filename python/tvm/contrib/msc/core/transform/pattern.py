@@ -112,7 +112,6 @@ def make_relax_conv_bias_pattern(
     annotations = {
         "data": data,
         "weight": weight,
-        "bias": bias,
         "conv": conv,
         "bias": bias,
         "reshape": reshape,
