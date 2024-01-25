@@ -25,6 +25,7 @@
 #define TVM_CONTRIB_MSC_FRAMEWORK_TENSORRT_CODEGEN_UTILS_H_
 
 #include <string>
+#include <vector>
 
 #include "../../core/codegen/base_codegen.h"
 #include "../../core/codegen/codegen_utils.h"

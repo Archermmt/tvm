@@ -127,10 +127,14 @@ class TorchRunner(ModelRunner):
         assert self._runnable, "runnable is needed to get params"
         state_dict = self._runnable.state_dict()
         params = {}
-        for g in self._graphs:
-            for w in g.get_weights():
-                assert w.alias in state_dict, "Missing weight {} in state_dict".format(w.alias)
-                params[w.name] = msc_utils.cast_array(state_dict[w.alias], MSCFramework.TVM, "cpu")
+        for graph in self._graphs:
+            for weight in graph.get_weights():
+                assert weight.alias in state_dict, "Missing weight {} in state_dict".format(
+                    weight.alias
+                )
+                params[weight.name] = msc_utils.cast_array(
+                    state_dict[weight.alias], MSCFramework.TVM, "cpu"
+                )
         return params
 
     def _device_enabled(self, device: str) -> bool:

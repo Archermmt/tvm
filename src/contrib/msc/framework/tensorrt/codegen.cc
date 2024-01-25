@@ -27,6 +27,8 @@
 #include <tvm/ir/module.h>
 #include <tvm/relax/expr.h>
 
+#include <set>
+
 #include "../../core/codegen/codegen_json.h"
 
 namespace tvm {

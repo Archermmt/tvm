@@ -69,6 +69,19 @@ class QuantizeConfiger(object):
         return raw_config
 
     def config_gym(self, raw_config: Union[dict, str]) -> dict:
+        """Config the gym config
+
+        Parameters
+        ----------
+        raw_config: dict
+            The raw config.
+
+        Returns
+        -------
+        config: dict
+            The update config.
+        """
+
         if isinstance(raw_config, dict):
             return raw_config
         if raw_config == "default":
