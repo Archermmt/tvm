@@ -1219,40 +1219,38 @@ class BaseTool(object):
 
         tensor_id = self.to_tensor_id(name, consumer)
         mark = "strategy.{}".format(self._stage)
+
+        def _check_strategy(s_ref):
+            return s_ref in self._strategys and self._strategys[s_ref].support_stage(self._stage)
+
         if mark not in self._tensor_cache.get(tensor_id, {}):
-            if self.is_weight(name):
-                consumer = self.find_node(consumer)
-                name_refs = [
-                    consumer.name + ".weight",
-                    consumer.optype + ".weight",
-                    "default.weight",
-                ]
-            elif consumer == "exit":
-                producer = self.find_producer(name)
-                name_refs = [
-                    producer.name + ".output",
-                    producer.optype + ".output",
-                    "default.output",
-                ]
-            else:
-                consumer = self.find_node(consumer)
-                producer = self.find_producer(name)
-                name_refs = [
-                    producer.name + ".output",
-                    producer.optype + ".output",
-                    "default.output",
-                    consumer.name + ".input",
-                    consumer.optype + ".input",
-                    "default.input",
-                ]
             strategys = []
             tensor_strategy = self._strategys.get(tensor_id)
             if tensor_strategy and tensor_strategy.support_stage(self._stage):
                 strategys.append(tensor_strategy)
-            if not strategys:
-                for n in name_refs:
-                    if n in self._strategys and self._strategys[n].support_stage(self._stage):
-                        strategys.append(self._strategys[n])
+            elif self.is_weight(name):
+                consumer = self.find_node(consumer)
+                for ref in [consumer.name, consumer.optype, "default"]:
+                    if _check_strategy(ref + ".weight"):
+                        strategys.append(self._strategys[ref + ".weight"])
+                        break
+            elif consumer == "exit":
+                producer = self.find_producer(name)
+                for ref in [producer.name, producer.optype, "exit", "default"]:
+                    if _check_strategy(ref + ".output"):
+                        strategys.append(self._strategys[ref + ".output"])
+                        break
+            else:
+                consumer = self.find_node(consumer)
+                for ref in [consumer.name, consumer.optype, "default"]:
+                    if _check_strategy(ref + ".input"):
+                        strategys.append(self._strategys[ref + ".input"])
+                        break
+                producer = self.find_producer(name)
+                for ref in [producer.name, producer.optype, "default"]:
+                    if _check_strategy(ref + ".output"):
+                        strategys.append(self._strategys[ref + ".output"])
+                        break
             self._save_tensor_cache(name, consumer, mark, strategys)
         return self._get_tensor_cache(name, consumer, mark)
 
