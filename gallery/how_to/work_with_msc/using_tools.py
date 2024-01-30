@@ -88,8 +88,9 @@ if __name__ == "__main__":
         gym_configs={ToolType.QUANTIZER: ["default"]} if args.gym else None,
         check_accuracy=False,
     )
-    model.export()
-    raise Exception("stop here!!")
+
+    # export to dump meta model
+    # model.export()
 
     # optimize the model with quantizer(PTQ)
     model.optimize()
@@ -102,6 +103,9 @@ if __name__ == "__main__":
         train_model(model, trainloader, optimizer, max_iter=args.train_iter)
         acc = eval_model(model, testloader, max_iter=args.test_iter)
         print("Train[{}] acc: {}".format(ep, acc))
+
+    # export to dump checkpoint model
+    # model.export()
 
     # compile the model
     model.compile(bind_params=True)

@@ -328,23 +328,22 @@ class BaseManager(object):
             self._logger.info("Load parsed mod from %s", cache_path)
         else:
             parse_config = msc_utils.copy_dict(stage_config.get("parse_config", {}))
-            runner_cls = self._get_runner_cls(self._config[MSCStage.COMPILE]["run_type"])
-            trans_func = (
-                runner_cls.target_transform if hasattr(runner_cls, "target_transform") else None
-            )
-            parse_info = {
-                "parser": stage_config["parser"],
-                "config": parse_config,
-                "trans_func": trans_func,
-            }
+            parse_info = {"parser": stage_config["parser"], "config": parse_config}
             self._logger.info(msc_utils.msg_block("PARSE", parse_info))
             parse_config["as_msc"] = False
             if self._model_type in self._plugins:
                 plugin = self._plugins[self._model_type]
                 parse_config["custom_convert_map"] = plugin.get_convert_map()
             self._relax_mod, _ = stage_config["parser"](self._model, **parse_config)
-            if trans_func:
-                self._relax_mod = trans_func(self._relax_mod)
+            for stage in [MSCStage.OPTIMIZE, MSCStage.COMPILE]:
+                if stage not in self._config:
+                    continue
+                runner_cls = self._get_runner_cls(self._config[stage]["run_type"])
+                if hasattr(runner_cls, "target_transform"):
+                    self._logger.info(
+                        "Transform for stage %s: %s", stage, runner_cls.target_transform
+                    )
+                    self._relax_mod = runner_cls.target_transform(self._relax_mod)
             self._relax_mod = msc_transform.SetExprName()(self._relax_mod)
             if cache_path:
                 with open(cache_path, "w") as f:
@@ -736,6 +735,10 @@ class BaseManager(object):
 
         assert tool_type in stage_config, "Can not find config for tool " + str(tool_type)
         tool_stage, tool_config = self._get_tool_stage(tool_type), stage_config[tool_type]
+        if "run_type" in tool_config:
+            run_type = tool_config.pop("run_type")
+        else:
+            run_type = stage_config["run_type"]
         plan_file = tool_config["plan_file"]
         if "gym_configs" in tool_config:
             gym_configs = tool_config.pop("gym_configs")
@@ -750,10 +753,7 @@ class BaseManager(object):
             self._logger.info("Skip %s with plan %s", tool_type, plan_file)
             return plan_file
         msc_utils.time_stamp(tool_stage)
-        t_stage_config = {
-            "run_type": stage_config["run_type"],
-            "run_config": stage_config["run_config"],
-        }
+        t_stage_config = {"run_type": run_type, "run_config": stage_config["run_config"]}
         runner = self._create_runner(
             tool_stage, t_stage_config, tools_config=tools_config, profile=False, use_cache=False
         )

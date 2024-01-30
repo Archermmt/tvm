@@ -409,7 +409,7 @@ class BaseTool(object):
                 tensor_names = strategy.pop("tensor_names")
                 marks = [(n, "tensor") for n in tensor_names]
             else:
-                marks = [("default", t) for t in ["input", "output", "weight"]]
+                marks = [("default." + str(t), t) for t in tensor_types]
             stages = strategy.pop("stages") if "stages" in strategy else ["default"]
             for mark, t_type in marks:
                 if mark not in strategys:
@@ -1222,18 +1222,28 @@ class BaseTool(object):
         if mark not in self._tensor_cache.get(tensor_id, {}):
             if self.is_weight(name):
                 consumer = self.find_node(consumer)
-                name_refs = [consumer.name + ".weight", consumer.optype + ".weight"]
+                name_refs = [
+                    consumer.name + ".weight",
+                    consumer.optype + ".weight",
+                    "default.weight",
+                ]
             elif consumer == "exit":
                 producer = self.find_producer(name)
-                name_refs = [producer.name + ".output", producer.optype + ".output"]
+                name_refs = [
+                    producer.name + ".output",
+                    producer.optype + ".output",
+                    "default.output",
+                ]
             else:
                 consumer = self.find_node(consumer)
                 producer = self.find_producer(name)
                 name_refs = [
                     producer.name + ".output",
                     producer.optype + ".output",
+                    "default.output",
                     consumer.name + ".input",
                     consumer.optype + ".input",
+                    "default.input",
                 ]
             strategys = []
             tensor_strategy = self._strategys.get(tensor_id)
@@ -1243,9 +1253,6 @@ class BaseTool(object):
                 for n in name_refs:
                     if n in self._strategys and self._strategys[n].support_stage(self._stage):
                         strategys.append(self._strategys[n])
-            d_strategy = self._strategys.get("default")
-            if not strategys and d_strategy and d_strategy.support_stage(self._stage):
-                strategys.append(d_strategy)
             self._save_tensor_cache(name, consumer, mark, strategys)
         return self._get_tensor_cache(name, consumer, mark)
 

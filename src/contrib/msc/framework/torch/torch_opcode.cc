@@ -223,7 +223,13 @@ class TorchConstantCodeGen : public TorchOpCode {
     }
   }
 
-  void CodeGenForward() final { stack_.assign(IdxNode(), module_ref()); }
+  void CodeGenForward() final {
+    if (config()->use_tools) {
+      stack_.assign(IdxNode(), IdxWeight("const", true));
+    } else {
+      stack_.assign(IdxNode(), module_ref());
+    }
+  }
 };
 
 class TorchConvCodeGen : public TorchOpCode {
