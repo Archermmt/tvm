@@ -29,6 +29,8 @@ import torch
 import torch.optim as optim
 
 from tvm.contrib.msc.pipeline import TorchWrapper
+from tvm.contrib.msc.pipeline.config import create_config
+from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core.tools import ToolType
 from _resnet import resnet50
 from utils import *
@@ -60,6 +62,25 @@ parser.add_argument("--train_epoch", type=int, default=5, help="The epoch for tr
 args = parser.parse_args()
 
 
+def get_config():
+    if args.gym:
+        gym_configs = {ToolType.QUANTIZER: ["default"], ToolType.PRUNER: ["default"]}
+    else:
+        gym_configs = None
+    return create_config(
+        inputs=[("input", [args.test_batch, 3, 32, 32], "float32")],
+        outputs=["output"],
+        model_type=MSCFramework.TORCH,
+        compile_type=args.compile_type,
+        dataset={"prepare": {"loader": _get_datas}},
+        prune_config="default" if args.prune else None,
+        quantize_config="default" if args.quantize else None,
+        distill_config="default" if args.distill else None,
+        gym_configs=gym_configs,
+        check_accuracy=False,
+    )
+
+
 if __name__ == "__main__":
     trainloader, testloader = get_dataloaders(args.dataset, args.train_batch, args.test_batch)
 
@@ -76,18 +97,7 @@ if __name__ == "__main__":
     acc = eval_model(model, testloader, max_iter=args.test_iter)
     print("Baseline acc: " + str(acc))
 
-    model = TorchWrapper(
-        model,
-        inputs=[("input", [args.test_batch, 3, 32, 32], "float32")],
-        outputs=["output"],
-        compile_type=args.compile_type,
-        dataset={"prepare": {"loader": _get_datas}},
-        prune_config="default" if args.prune else None,
-        quantize_config="default" if args.quantize else None,
-        distill_config="default" if args.distill else None,
-        gym_configs={ToolType.QUANTIZER: ["default"]} if args.gym else None,
-        check_accuracy=False,
-    )
+    model = TorchWrapper(model, get_config())
 
     # export to dump meta model
     # model.export()
@@ -111,3 +121,6 @@ if __name__ == "__main__":
     model.compile(bind_params=True)
     acc = eval_model(model, testloader, max_iter=args.test_iter)
     print("Compiled acc: " + str(acc))
+
+    # export to dump compiled model
+    # model.export()

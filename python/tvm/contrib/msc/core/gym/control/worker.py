@@ -17,8 +17,8 @@
 """tvm.contrib.msc.core.gym.control.worker"""
 
 from typing import Any
+from tvm.contrib.msc.core.gym.namespace import GYMObject, GYMAction
 from tvm.contrib.msc.core import utils as msc_utils
-from .namespace import GYMObject, GYMAction
 
 
 class BaseWorker(object):
@@ -207,10 +207,10 @@ class WorkerFactory(object):
         obj_type, worker_id = name.split(":")
         if obj_type == GYMObject.ENV:
             env_type = config.pop("env_type") if "env_type" in config else "default"
-            worker_cls = msc_utils.get_registered_gym_env(env_type)
+            worker_cls = msc_utils.get_registered_gym_object(GYMObject.ENV, env_type)
             return EnvWorker(name, workspace, int(worker_id), worker_cls, config)
         if obj_type == GYMObject.AGENT:
             agent_type = config.pop("agent_type") if "agent_type" in config else "default"
-            worker_cls = msc_utils.get_registered_gym_agent(agent_type)
+            worker_cls = msc_utils.get_registered_gym_object(GYMObject.AGENT, agent_type)
             return AgentWorker(name, workspace, int(worker_id), worker_cls, config)
         raise TypeError("Worker for {} is not supported".format(obj_type))

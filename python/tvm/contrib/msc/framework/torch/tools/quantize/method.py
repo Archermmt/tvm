@@ -24,6 +24,7 @@ from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 
 
+@msc_utils.register_tool_method
 class TorchQuantizeMethod(QuantizeMethod):
     """Default quantize method for torch"""
 
@@ -232,6 +233,3 @@ class TorchQuantizeMethod(QuantizeMethod):
     @classmethod
     def framework(cls):
         return MSCFramework.TORCH
-
-
-msc_utils.register_tool_method(TorchQuantizeMethod)

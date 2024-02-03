@@ -25,9 +25,9 @@ from functools import partial, reduce
 import queue
 import numpy as np
 
+from tvm.contrib.msc.core.gym.namespace import GYMObject, GYMAction
 from tvm.contrib.msc.core import utils as msc_utils
 from .worker import BaseWorker, WorkerFactory
-from .namespace import GYMObject, GYMAction
 
 
 def _send_message(msg_queue: queue.Queue, header: str, body: dict, header_type: str = "message"):

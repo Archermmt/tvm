@@ -100,6 +100,7 @@ class PruneConfiger(object):
             raise TypeError("Unexpected gym config " + str(raw_config))
 
 
+@msc_utils.register_tool_configer
 class DefaultPruneConfiger(PruneConfiger):
     """Default configer for prune"""
 
@@ -118,6 +119,3 @@ class DefaultPruneConfiger(PruneConfiger):
     @classmethod
     def tool_style(cls):
         return "default"
-
-
-msc_utils.register_tool_configer(DefaultPruneConfiger)

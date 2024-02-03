@@ -17,23 +17,11 @@
 """tvm.contrib.msc.pipeline.wrapper"""
 
 import shutil
-from typing import List, Any, Union, Dict
+from typing import Any, Union
 
-from tvm.contrib.msc.core.tools import ToolType
-from tvm.contrib.msc.core.utils.message import MSCStage
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 from .manager import MSCManager
-
-
-def config_tool(tool_type, raw_config, **kwargs):
-    if isinstance(raw_config, dict):
-        tool_style = raw_config.get("tool_style", "default")
-    else:
-        tool_style, raw_config = raw_config, None
-    configer_cls = msc_utils.get_registered_tool_configer(tool_type, tool_style)
-    assert configer_cls, "Can not find configer for {}:{}".format(tool_type, tool_style)
-    return configer_cls().config(raw_config, **kwargs)
 
 
 class BaseWrapper(object):
@@ -43,124 +31,32 @@ class BaseWrapper(object):
     ----------
     model: Any
         The raw model in framwork.
-    compile_type: str
-        The compile type.
-    optimize_type: str
-        The optimize type.
-    dataset: dict<str, dict>
-        The datasets for compile pipeline.
-    check_accuracy: bool
-        Whether to check accuracy.
-    inputs: list<dict>
-        The inputs info,
-    outputs: list<str>
-        The output names.
-    prune_config: dict/str
-        The prune config or style.
-    quantize_config: dict/str
-        The quantize config or style.
-    track_config: dict/str
-        The track config or style.
-    distill_config: dict/str
-        The distill config or style.
-    gym_configs: dict<str, dict/str>
-        The gym configs for tools.
-    profile_strategys: dict<str, dict/str>
-        The profile configs for tools.
+    config: dict
+        The config for pipeline
     plugins: dict
         The plugins for pipeline.
-    workspace: str
-        The workspace for wrapper.
-    verbose: str
-        The verbose level for wrapper
     debug: bool
         Whether to use debug mode.
-    extra_config: dict
-        The extra config.
     """
 
     def __init__(
         self,
         model: Any,
-        inputs: List[dict],
-        outputs: List[str],
-        compile_type: str,
-        optimize_type: str = None,
-        dataset: Dict[str, dict] = None,
-        check_accuracy: bool = True,
-        prune_config: Union[dict, str] = None,
-        quantize_config: Union[dict, str] = None,
-        track_config: Union[dict, str] = None,
-        distill_config: Union[dict, str] = None,
-        gym_configs: Dict[str, Union[dict, str]] = None,
-        profile_strategys: Dict[str, Union[dict, str]] = None,
-        plugins: dict = None,
+        config: dict,
         workspace: str = "msc_workspace",
-        verbose: str = "info",
+        plugins: dict = None,
         debug: bool = False,
-        **extra_config,
     ):
         self._meta_model = model
         self._optimized_model, self._compiled_model = None, None
-        self._optimize_type = optimize_type or self.model_type
-        self._compile_type = compile_type
+        self._config = config
         self._plugins = plugins
+        verbose = config.get("verbose", "info")
         self._debug = True if verbose.startswith("debug") else debug
         self._workspace = msc_utils.msc_dir(workspace, keep_history=self._debug)
         log_path = self._workspace.relpath("MSC_LOG", keep_history=False)
-        self._logger = msc_utils.create_file_logger(verbose, log_path)
+        config["logger"] = self._logger = msc_utils.create_file_logger(verbose, log_path)
         self._manager = None
-        self._config = {
-            "model_type": self.model_type,
-            "verbose": verbose,
-            "logger": self._logger,
-            "inputs": inputs,
-            "outputs": outputs,
-            "dataset": dataset,
-            MSCStage.PREPARE: {"profile": {"benchmark": {"repeat": -1}}},
-            MSCStage.BASELINE: {
-                "run_type": self.model_type,
-                "profile": {"check": {"atol": 1e-3, "rtol": 1e-3}, "benchmark": {"repeat": -1}},
-            },
-            MSCStage.OPTIMIZE: {
-                "run_type": self._optimize_type,
-                "profile": {"check": {"atol": 1e-3, "rtol": 1e-3}, "benchmark": {"repeat": -1}},
-            },
-            MSCStage.COMPILE: {
-                "run_type": compile_type,
-                "profile": {"check": {"atol": 1e-3, "rtol": 1e-3}, "benchmark": {"repeat": -1}},
-            },
-        }
-        if not check_accuracy:
-            for stage in [MSCStage.BASELINE, MSCStage.OPTIMIZE, MSCStage.COMPILE]:
-                self._config[stage]["profile"]["check"]["err_rate"] = -1
-
-        # config optimize
-        self._tools_config = {}
-        gym_configs = gym_configs or {}
-        if prune_config:
-            self._tools_config[ToolType.PRUNER] = config_tool(
-                ToolType.PRUNER, prune_config, gym_configs=gym_configs.get(ToolType.PRUNER)
-            )
-        if quantize_config:
-            self._tools_config[ToolType.QUANTIZER] = config_tool(
-                ToolType.QUANTIZER, quantize_config, gym_configs=gym_configs.get(ToolType.QUANTIZER)
-            )
-        if track_config:
-            self._tools_config[ToolType.TRACKER] = config_tool(ToolType.TRACKER, track_config)
-        if distill_config:
-            self._tools_config[ToolType.DISTILLER] = config_tool(ToolType.DISTILLER, distill_config)
-        if self._tools_config:
-            self._config[MSCStage.OPTIMIZE].update(**self._tools_config)
-
-        # update profile
-        if profile_strategys:
-            for stage, config in profile_strategys.items():
-                if stage not in self._config:
-                    continue
-                self._config[stage]["profile"].update(config)
-        if extra_config:
-            self._config = msc_utils.update_dict(self._config, extra_config)
         self.setup()
 
     def __str__(self):

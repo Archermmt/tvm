@@ -102,6 +102,7 @@ class QuantizeConfiger(object):
             raise TypeError("Unexpected gym config " + str(raw_config))
 
 
+@msc_utils.register_tool_configer
 class DefaultQuantizeConfiger(QuantizeConfiger):
     """Default configer for quantize"""
 
@@ -149,6 +150,3 @@ class DefaultQuantizeConfiger(QuantizeConfiger):
     @classmethod
     def tool_style(cls):
         return "default"
-
-
-msc_utils.register_tool_configer(DefaultQuantizeConfiger)

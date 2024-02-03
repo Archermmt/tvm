@@ -20,11 +20,13 @@
 from typing import Any, List
 import numpy as np
 
+from tvm.contrib.msc.core.gym.namespace import GYMObject
 from tvm.contrib.msc.core.runtime import BaseRunner
 from tvm.contrib.msc.core.tools import BaseTool
 from tvm.contrib.msc.core import utils as msc_utils
 
 
+@msc_utils.register_gym_method
 class EnvMethod(object):
     """Default prune method"""
 
@@ -195,8 +197,9 @@ class EnvMethod(object):
         ]
 
     @classmethod
+    def role(cls):
+        return GYMObject.ENV
+
+    @classmethod
     def method_type(cls):
-        return "env.default"
-
-
-msc_utils.register_gym_method(EnvMethod)
+        return "default"

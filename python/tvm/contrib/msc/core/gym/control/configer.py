@@ -48,6 +48,7 @@ class BaseConfiger(object):
         raise NotImplementedError("update is not implemented in BaseConfiger")
 
 
+@msc_utils.register_gym_configer
 class DefaultConfiger(BaseConfiger):
     """Default configer for gym"""
 
@@ -92,6 +93,3 @@ class DefaultConfiger(BaseConfiger):
     @classmethod
     def config_type(cls):
         return "default"
-
-
-msc_utils.register_gym_configer(DefaultConfiger)

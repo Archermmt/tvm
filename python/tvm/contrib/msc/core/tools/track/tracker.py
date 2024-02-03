@@ -188,10 +188,8 @@ class BaseTracker(BaseTool):
         return ToolType.TRACKER
 
 
+@msc_utils.register_tool
 class DefaultTracker(BaseTracker):
     @classmethod
     def tool_style(cls):
         return "default"
-
-
-msc_utils.register_tool_cls(DefaultTracker)

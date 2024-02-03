@@ -19,6 +19,7 @@
 import copy
 import logging
 from typing import Dict, Any, List, Tuple
+from tvm.contrib.msc.core.gym.namespace import GYMObject
 from tvm.contrib.msc.core.runtime import BaseRunner
 from tvm.contrib.msc.core.tools import BaseTool
 from tvm.contrib.msc.core import utils as msc_utils
@@ -71,7 +72,7 @@ class BaseEnv(object):
         self._debug_level = debug_level
         self._logger = logger or msc_utils.get_global_logger()
         self._logger.info(
-            msc_utils.msg_block("ENV.SETUP({})".format(self.env_type()), self.setup())
+            msc_utils.msg_block("ENV.SETUP({})".format(self.role_type()), self.setup())
         )
 
     def _parse_executors(self, executors_dict: dict) -> Dict[str, Tuple[callable, dict]]:
@@ -91,9 +92,12 @@ class BaseEnv(object):
         executors = {}
         for name, raw_config in executors_dict.items():
             method_type = (
-                raw_config.pop("method_type") if "method_type" in raw_config else "env.default"
+                raw_config.pop("method_type") if "method_type" in raw_config else "default"
             )
-            method_cls = msc_utils.get_registered_gym_method(method_type)
+            method_cls = msc_utils.get_registered_gym_method(GYMObject.ENV, method_type)
+            assert method_cls, "Can not find method cls for {}:{}".format(
+                GYMObject.ENV, method_type
+            )
             assert "method" in raw_config, "method should be given to find enviironment method"
             method_name, method = raw_config.pop("method"), None
             if hasattr(method_cls, method_name):
@@ -356,5 +360,9 @@ class BaseEnv(object):
         return method(self, *args, **kwargs)
 
     @classmethod
-    def env_type(cls):
+    def role(cls):
+        return GYMObject.ENV
+
+    @classmethod
+    def role_type(cls):
         return "base"

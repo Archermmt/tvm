@@ -23,6 +23,7 @@ from tvm.contrib.msc.core import utils as msc_utils
 from .base_env import BaseEnv
 
 
+@msc_utils.register_gym_object
 class QuantizeEnv(BaseEnv):
     """Environment for quantize"""
 
@@ -92,8 +93,5 @@ class QuantizeEnv(BaseEnv):
         return {name: plan}
 
     @classmethod
-    def env_type(cls):
+    def role_type(cls):
         return msc_utils.MSCStage.QUANTIZE + ".default"
-
-
-msc_utils.register_gym_env(QuantizeEnv)

@@ -25,6 +25,7 @@ from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 
 
+@msc_utils.register_tool_method
 class TrackMethod(object):
     """Default track method"""
 
@@ -94,5 +95,6 @@ class TrackMethod(object):
     def tool_type(cls):
         return ToolType.TRACKER
 
-
-msc_utils.register_tool_method(TrackMethod)
+    @classmethod
+    def method_style(cls):
+        return "default"

@@ -22,6 +22,7 @@ from tvm.contrib.msc.core import utils as msc_utils
 from .base_env import BaseEnv
 
 
+@msc_utils.register_gym_object
 class PruneEnv(BaseEnv):
     """Environment for prune"""
 
@@ -88,8 +89,5 @@ class PruneEnv(BaseEnv):
         return strategy
 
     @classmethod
-    def env_type(cls):
+    def role_type(cls):
         return msc_utils.MSCStage.PRUNE + ".default"
-
-
-msc_utils.register_gym_env(PruneEnv)
