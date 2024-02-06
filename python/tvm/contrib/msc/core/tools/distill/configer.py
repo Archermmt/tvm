@@ -61,6 +61,10 @@ class DistillConfiger(object):
 
         return raw_config
 
+    @classmethod
+    def tool_type(cls):
+        return ToolType.DISTILLER
+
 
 @msc_utils.register_tool_configer
 class DefaultDistillConfiger(DistillConfiger):
@@ -78,10 +82,6 @@ class DefaultDistillConfiger(DistillConfiger):
                 },
             ],
         }
-
-    @classmethod
-    def tool_type(cls):
-        return ToolType.DISTILLER
 
     @classmethod
     def tool_style(cls):

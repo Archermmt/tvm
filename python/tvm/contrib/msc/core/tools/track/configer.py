@@ -61,6 +61,10 @@ class TrackConfiger(object):
 
         return raw_config
 
+    @classmethod
+    def tool_type(cls):
+        return ToolType.TRACKER
+
 
 @msc_utils.register_tool_configer
 class DefaultTrackConfiger(TrackConfiger):
@@ -83,10 +87,6 @@ class DefaultTrackConfiger(TrackConfiger):
                 }
             ],
         }
-
-    @classmethod
-    def tool_type(cls):
-        return ToolType.TRACKER
 
     @classmethod
     def tool_style(cls):

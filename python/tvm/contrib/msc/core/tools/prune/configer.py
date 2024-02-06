@@ -99,6 +99,10 @@ class PruneConfiger(object):
         else:
             raise TypeError("Unexpected gym config " + str(raw_config))
 
+    @classmethod
+    def tool_type(cls):
+        return ToolType.PRUNER
+
 
 @msc_utils.register_tool_configer
 class DefaultPruneConfiger(PruneConfiger):
@@ -111,10 +115,6 @@ class DefaultPruneConfiger(PruneConfiger):
             "plan_file": "msc_pruner.json",
             "strategys": [{"method": "per_channel", "density": 0.8}],
         }
-
-    @classmethod
-    def tool_type(cls):
-        return ToolType.PRUNER
 
     @classmethod
     def tool_style(cls):
