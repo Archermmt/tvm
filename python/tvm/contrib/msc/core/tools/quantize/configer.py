@@ -117,32 +117,26 @@ class DefaultQuantizeConfiger(QuantizeConfiger):
             "plan_file": "msc_quantizer.json",
             "strategys": [
                 {
-                    "method": "gather_maxmin",
+                    "methods": {
+                        "input": "gather_maxmin",
+                        "output": "gather_maxmin",
+                        "weight": "gather_max_per_channel",
+                    },
                     "op_types": ["nn.conv2d", "msc.linear"],
-                    "tensor_types": ["input", "output"],
                     "stages": [QuantizeStage.GATHER],
                 },
                 {
-                    "method": "gather_max_per_channel",
+                    "methods": {"input": "calibrate_maxmin", "output": "calibrate_maxmin"},
                     "op_types": ["nn.conv2d", "msc.linear"],
-                    "tensor_types": ["weight"],
-                    "stages": [QuantizeStage.GATHER],
-                },
-                {
-                    "method": "calibrate_maxmin",
-                    "op_types": ["nn.conv2d", "msc.linear"],
-                    "tensor_types": ["input", "output"],
                     "stages": [QuantizeStage.CALIBRATE],
                 },
                 {
-                    "method": "quantize_normal",
+                    "methods": {
+                        "input": "quantize_normal",
+                        "weight": "quantize_normal",
+                        "output": "dequantize_normal",
+                    },
                     "op_types": ["nn.conv2d", "msc.linear"],
-                    "tensor_types": ["input", "weight"],
-                },
-                {
-                    "method": "dequantize_normal",
-                    "op_types": ["nn.conv2d", "msc.linear"],
-                    "tensor_types": ["output"],
                 },
             ],
         }

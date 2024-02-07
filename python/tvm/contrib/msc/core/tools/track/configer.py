@@ -17,6 +17,7 @@
 """tvm.contrib.msc.core.tools.track.configer"""
 
 from tvm.contrib.msc.core.tools.tool import ToolType
+from tvm.contrib.msc.core.utils import MSCStage
 from tvm.contrib.msc.core import utils as msc_utils
 
 
@@ -77,13 +78,16 @@ class DefaultTrackConfiger(TrackConfiger):
             "plan_file": "msc_tracker.json",
             "strategys": [
                 {
-                    "method": "save_compared",
-                    "compare_to": {
-                        "optimize": ["baseline"],
-                        "compile": ["optimize", "baseline"],
+                    "methods": {
+                        "output": {
+                            "method_name": "save_compared",
+                            "compare_to": {
+                                MSCStage.OPTIMIZE: [MSCStage.BASELINE],
+                                MSCStage.COMPILE: [MSCStage.OPTIMIZE, MSCStage.BASELINE],
+                            },
+                        }
                     },
                     "op_types": ["nn.relu"],
-                    "tensor_types": ["output"],
                 }
             ],
         }

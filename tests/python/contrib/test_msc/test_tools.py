@@ -77,7 +77,14 @@ def get_tool_config(tool_type, use_distill=False):
     if tool_type == ToolType.PRUNER:
         config = {
             "plan_file": "msc_pruner.json",
-            "strategys": [{"method": "per_channel", "density": 0.8}],
+            "strategys": [
+                {
+                    "methods": {
+                        "weight": {"method_name": "per_channel", "density": 0.8},
+                        "output": {"method_name": "per_channel", "density": 0.8},
+                    }
+                }
+            ],
         }
     elif tool_type == ToolType.QUANTIZER:
         # pylint: disable=import-outside-toplevel
@@ -87,47 +94,47 @@ def get_tool_config(tool_type, use_distill=False):
             "plan_file": "msc_quantizer.json",
             "strategys": [
                 {
-                    "method": "gather_maxmin",
+                    "methods": {
+                        "input": "gather_maxmin",
+                        "output": "gather_maxmin",
+                        "weight": "gather_max_per_channel",
+                    },
                     "op_types": ["nn.conv2d", "msc.linear"],
-                    "tensor_types": ["input", "output"],
                     "stages": [QuantizeStage.GATHER],
                 },
                 {
-                    "method": "gather_max_per_channel",
+                    "methods": {"input": "calibrate_maxmin", "output": "calibrate_maxmin"},
                     "op_types": ["nn.conv2d", "msc.linear"],
-                    "tensor_types": ["weight"],
-                    "stages": [QuantizeStage.GATHER],
-                },
-                {
-                    "method": "calibrate_maxmin",
-                    "op_types": ["nn.conv2d", "msc.linear"],
-                    "tensor_types": ["input", "output"],
                     "stages": [QuantizeStage.CALIBRATE],
                 },
                 {
-                    "method": "quantize_normal",
+                    "methods": {
+                        "input": "quantize_normal",
+                        "weight": "quantize_normal",
+                        "output": "dequantize_normal",
+                    },
                     "op_types": ["nn.conv2d", "msc.linear"],
-                    "tensor_types": ["input", "weight"],
-                },
-                {
-                    "method": "dequantize_normal",
-                    "op_types": ["nn.conv2d", "msc.linear"],
-                    "tensor_types": ["output"],
                 },
             ],
         }
     elif tool_type == ToolType.TRACKER:
+        # pylint: disable=import-outside-toplevel
+        from tvm.contrib.msc.core.utils import MSCStage
+
         config = {
             "plan_file": "msc_tracker.json",
             "strategys": [
                 {
-                    "method": "save_compared",
-                    "compare_to": {
-                        "optimize": ["baseline"],
-                        "compile": ["optimize", "baseline"],
+                    "methods": {
+                        "output": {
+                            "method_name": "save_compared",
+                            "compare_to": {
+                                MSCStage.OPTIMIZE: [MSCStage.BASELINE],
+                                MSCStage.COMPILE: [MSCStage.OPTIMIZE, MSCStage.BASELINE],
+                            },
+                        }
                     },
                     "op_types": ["nn.relu"],
-                    "tensor_types": ["output"],
                 }
             ],
         }
@@ -136,7 +143,7 @@ def get_tool_config(tool_type, use_distill=False):
             "plan_file": "msc_distiller.json",
             "strategys": [
                 {
-                    "method": "loss_lp_norm",
+                    "methods": {"output": "loss_lp_norm"},
                     "op_types": ["loss"],
                 },
             ],

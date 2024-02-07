@@ -77,7 +77,7 @@ class DefaultDistillConfiger(DistillConfiger):
             "plan_file": "msc_distiller.json",
             "strategys": [
                 {
-                    "method": "loss_lp_norm",
+                    "methods": {"output": "loss_lp_norm"},
                     "op_types": ["loss"],
                 },
             ],

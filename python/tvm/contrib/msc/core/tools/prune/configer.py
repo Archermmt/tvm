@@ -113,7 +113,14 @@ class DefaultPruneConfiger(PruneConfiger):
 
         return {
             "plan_file": "msc_pruner.json",
-            "strategys": [{"method": "per_channel", "density": 0.8}],
+            "strategys": [
+                {
+                    "methods": {
+                        "weight": {"method_name": "per_channel", "density": 0.8},
+                        "output": {"method_name": "per_channel", "density": 0.8},
+                    }
+                }
+            ],
         }
 
     @classmethod

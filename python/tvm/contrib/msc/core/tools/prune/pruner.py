@@ -82,7 +82,6 @@ class BasePruner(WeightTool):
         def _update_stages(strategy):
             if "stages" not in strategy:
                 strategy["stages"] = [msc_utils.MSCStage.PRUNE]
-            strategy["tensor_types"] = ["weight", "output"]
             return strategy
 
         return super()._parse_strategys([_update_stages(s) for s in strategy_list])
@@ -197,6 +196,7 @@ class BasePruner(WeightTool):
             return tensor
 
         self._prune_tensor(name, consumer, strategys)
+        print("after prune {}: {}".format(name, self._plan))
         lazy_pruned = set()
         for lazy_name, info in self._unpruned_tensors.items():
             if info["lead_name"] in self._plan:

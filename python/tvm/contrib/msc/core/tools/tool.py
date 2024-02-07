@@ -161,7 +161,7 @@ class ToolStrategy(object):
            The inspect of the strategy.
         """
 
-        return {"{}({})".format(s, self._tensor_type): str(e) for s, e in self._executors.items()}
+        return {s: str(e) for s, e in self._executors.items()}
 
     def __call__(self, *args, **kwargs) -> Any:
         return self.apply(*args, **kwargs)
@@ -375,13 +375,16 @@ class BaseTool(object):
         assert isinstance(strategy_list, list) and all(
             isinstance(s, dict) for s in strategy_list
         ), "ToolStrategy should be given as list of dict"
-        for strategy in strategy_list:
-            meta_strategy = msc_utils.copy_dict(strategy)
-            method_cls_name = strategy.pop("method_cls") if "method_cls" in strategy else "default"
+
+        def _get_method(method_name):
+            if "." in method_name:
+                method_cls_name, method_name = method_name.split(".")
+            else:
+                method_cls_name = "default"
+            # get method
             method_cls = msc_utils.get_registered_tool_method(
                 self.framework(), self.tool_type(), method_cls_name
             )
-            method_name = strategy.pop("method") if "method" in strategy else "default"
             method = None
             if hasattr(method_cls, method_name):
                 method = getattr(method_cls, method_name)
@@ -394,29 +397,38 @@ class BaseTool(object):
             if not method:
                 method = msc_utils.get_registered_func(method_name)
             assert method, "Can not find method with " + str(method_name)
-            tensor_types = (
-                strategy.pop("tensor_types")
-                if "tensor_types" in strategy
-                else ["input", "output", "weight"]
-            )
-            if "op_types" in strategy:
-                op_types = strategy.pop("op_types")
-                marks = [("{}.{}".format(s, t), t) for s, t in product(op_types, tensor_types)]
-            elif "op_names" in strategy:
-                op_names = strategy.pop("op_names")
-                marks = [("{}.{}".format(s, t), t) for s, t in product(op_names, tensor_types)]
-            elif "tensor_names" in strategy:
-                tensor_names = strategy.pop("tensor_names")
-                marks = [(n, "tensor") for n in tensor_names]
-            else:
-                marks = [("default." + str(t), t) for t in tensor_types]
-            stages = strategy.pop("stages") if "stages" in strategy else ["default"]
-            for mark, t_type in marks:
-                if mark not in strategys:
-                    strategys[mark] = ToolStrategy(mark, t_type, self._stage, meta_strategy)
-                for stage in stages:
+            return method
+
+        for strategy in strategy_list:
+            meta_strategy = msc_utils.copy_dict(strategy)
+            for t_type, method_def in meta_strategy["methods"].items():
+                if isinstance(method_def, str):
+                    method_name, method_kwargs = method_def, {}
+                elif isinstance(method_def, dict):
+                    assert "method_name" in method_def, "Can not find method_name"
+                    method_name = method_def.pop("method_name")
+                    method_kwargs = method_def
+                else:
+                    raise TypeError(
+                        "Only support string and dict as method define, get " + str(method_def)
+                    )
+                method = _get_method(method_name)
+                if "op_types" in strategy:
+                    marks = ["{}.{}".format(t, t_type) for t in strategy["op_types"]]
+                elif "op_names" in strategy:
+                    marks = ["{}.{}".format(t, t_type) for t in strategy["op_names"]]
+                elif "tensor_names" in strategy:
+                    assert (
+                        t_type == "tensor"
+                    ), "tensor strategy only support tensor method, get " + str(meta_strategy)
+                    marks = strategy["tensor_names"]
+                else:
+                    marks = ["default." + str(t_type)]
+                for mark, stage in product(marks, strategy.get("stages", ["default"])):
+                    if mark not in strategys:
+                        strategys[mark] = ToolStrategy(mark, t_type, self._stage, meta_strategy)
                     strategys[mark].add_executor(
-                        stage, ToolExecutor(method_name, method, copy.deepcopy(strategy))
+                        stage, ToolExecutor(method_name, method, copy.deepcopy(method_kwargs))
                     )
         return strategys
 
