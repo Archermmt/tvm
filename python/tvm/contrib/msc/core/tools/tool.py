@@ -1170,7 +1170,7 @@ class BaseTool(object):
             return msc_utils.cast_array(self._weights[name])
         raise Exception("Can not find data {} from {} weights".format(name, len(self._weights)))
 
-    def _save_tensor_cache(self, name: str, consumer: str, key: str, value: Any):
+    def _save_tensor_cache(self, name: str, consumer: str, key: str, value: Any)->Any:
         """Save the data to tensor cache
 
         Parameters
@@ -1183,12 +1183,18 @@ class BaseTool(object):
             The data key.
         value: any
             The value to cache.
+        
+        Returns
+        -------
+        value: any
+            The saved value.
         """
 
         tensor_id = self.to_tensor_id(name, consumer)
         if tensor_id not in self._tensor_cache:
             self._tensor_cache[tensor_id] = {}
         self._tensor_cache[tensor_id][key] = value
+        return value
 
     def _get_tensor_cache(self, name: str, consumer: str, key: str) -> Any:
         """Get the cached tensor data
