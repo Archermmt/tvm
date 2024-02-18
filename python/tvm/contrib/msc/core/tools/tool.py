@@ -320,7 +320,7 @@ class BaseTool(object):
             self._plan = msc_utils.load_dict(plan_file)
         else:
             self._plan = {}
-        self._strategys = self._parse_strategys(msc_utils.copy_dict(strategys))
+        self._meta_strategys, self._strategys = msc_utils.copy_dict(strategys), {}
         self._training = training
         self._cache_processed = cache_processed
         self._options = options or {}
@@ -349,13 +349,78 @@ class BaseTool(object):
         self._processed_tensor = {}
         return {
             "style": self.tool_style(),
-            "strategys": {k: v.inspect() for k, v in self._strategys.items()},
             "cache_processed": self._cache_processed,
             "options": self._options,
             "planed_num": len(self._plan),
             "verbose_step": self._verbose_step,
             "debug_level": self._debug_level,
         }
+
+    def reset(
+        self,
+        graphs: List[MSCGraph],
+        weights: Dict[str, tvm.nd.array],
+        cache_dir: msc_utils.MSCDirectory = None,
+    ) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:
+        """Reset the tool with graphs and weights
+
+        Parameters
+        ----------
+        graphs: list<MSCgraph>
+            The msc graphs.
+        weights: dict<str, tvm.nd.array>
+            The weights.
+        cache_dir: MSCDirectory
+            cache path for save/load info.
+
+        Returns
+        -------
+        graphs: list<MSCgraph>
+            The msc graphs.
+        weights: dict<str, tvm.nd.array>
+            The weights.
+        """
+
+        self._forward_cnt = 0
+        self._tensor_cache = {}
+        if cache_dir and os.path.isfile(cache_dir.relpath("cache_info.json")):
+            cache_info = msc_utils.load_dict(cache_dir.relpath("cache_info.json"))
+        else:
+            cache_info = {}
+        if self.tool_type() in cache_info:
+            self.load_cache(cache_dir, cache_info[self.tool_type()])
+        self._graphs, self._weights = self._reset(graphs, weights)
+        self._strategys = self._parse_strategys(self._meta_strategys)
+        title = "{}.RESET({} @ {})".format(self.tool_type().upper(), self._stage, self.framework())
+        reset_info = {
+            "graphs": len(self._graphs),
+            "weights": len(self._weights),
+            "strategys": {k: v.inspect() for k, v in self._strategys.items()},
+        }
+        self._logger.info(msc_utils.msg_block(title, reset_info, width=0))
+        return self._graphs, self._weights
+
+    def _reset(
+        self, graphs: List[MSCGraph], weights: Dict[str, tvm.nd.array]
+    ) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:
+        """Reset the tool
+
+        Parameters
+        ----------
+        graphs: list<MSCgraph>
+            The msc graphs.
+        weights: dict<str, tvm.nd.array>
+            The weights.
+
+        Returns
+        -------
+        graphs: list<MSCgraph>
+            The msc graphs.
+        weights: dict<str, tvm.nd.array>
+            The weights.
+        """
+
+        return graphs, weights
 
     def _parse_strategys(self, strategy_list: List[dict]) -> Dict[str, ToolStrategy]:
         """Parse the strategy to get valid strategy
@@ -371,10 +436,14 @@ class BaseTool(object):
             The parsed strategy.
         """
 
-        strategys = {}
         assert isinstance(strategy_list, list) and all(
             isinstance(s, dict) for s in strategy_list
         ), "ToolStrategy should be given as list of dict"
+        assert self._graphs, "graphs are needed to parse strategys"
+        all_tensor_names = set(t.name for t in self.get_tensors())
+        all_op_types = set(n.optype for n in self.get_nodes())
+        all_op_names = set(n.name for n in self.get_nodes())
+        strategys = {}
 
         def _get_method(method_name):
             if "." in method_name:
@@ -413,15 +482,22 @@ class BaseTool(object):
                         "Only support string and dict as method define, get " + str(method_def)
                     )
                 method = _get_method(method_name)
-                if "op_types" in strategy:
-                    marks = ["{}.{}".format(t, t_type) for t in strategy["op_types"]]
-                elif "op_names" in strategy:
-                    marks = ["{}.{}".format(t, t_type) for t in strategy["op_names"]]
+                if "marks" in strategy:
+                    assert t_type == "mark", "mark strategy only support mark method, get " + str(
+                        meta_strategy
+                    )
+                    marks = strategy["marks"]
                 elif "tensor_names" in strategy:
                     assert (
                         t_type == "tensor"
                     ), "tensor strategy only support tensor method, get " + str(meta_strategy)
-                    marks = strategy["tensor_names"]
+                    marks = [t for t in strategy["tensor_names"] if t in all_tensor_names]
+                elif "op_types" in strategy:
+                    op_types = [t for t in strategy["op_types"] if t in all_op_types]
+                    marks = ["{}.{}".format(t, t_type) for t in op_types]
+                elif "op_names" in strategy:
+                    op_names = [t for t in strategy["op_names"] if t in all_op_names]
+                    marks = ["{}.{}".format(t, t_type) for t in op_names]
                 else:
                     marks = ["default." + str(t_type)]
                 for mark, stage in product(marks, strategy.get("stages", ["default"])):
@@ -431,70 +507,6 @@ class BaseTool(object):
                         stage, ToolExecutor(method_name, method, copy.deepcopy(method_kwargs))
                     )
         return strategys
-
-    def reset(
-        self,
-        graphs: List[MSCGraph],
-        weights: Dict[str, tvm.nd.array],
-        cache_dir: msc_utils.MSCDirectory = None,
-    ) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:
-        """Reset the tool with graphs and weights
-
-        Parameters
-        ----------
-        graphs: list<MSCgraph>
-            The msc graphs.
-        weights: dict<str, tvm.nd.array>
-            The weights.
-        cache_dir: MSCDirectory
-            cache path for save/load info.
-
-        Returns
-        -------
-        graphs: list<MSCgraph>
-            The msc graphs.
-        weights: dict<str, tvm.nd.array>
-            The weights.
-        """
-
-        self._forward_cnt = 0
-        self._tensor_cache = {}
-        if cache_dir and os.path.isfile(cache_dir.relpath("cache_info.json")):
-            cache_info = msc_utils.load_dict(cache_dir.relpath("cache_info.json"))
-        else:
-            cache_info = {}
-        if self.tool_type() in cache_info:
-            self.load_cache(cache_dir, cache_info[self.tool_type()])
-        self._graphs, self._weights = self._reset(graphs, weights)
-        self._logger.debug(
-            "%s reset %d graphs, %d weights",
-            self.tool_type(),
-            len(self._graphs),
-            len(self._weights),
-        )
-        return self._graphs, self._weights
-
-    def _reset(
-        self, graphs: List[MSCGraph], weights: Dict[str, tvm.nd.array]
-    ) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:
-        """Reset the tool
-
-        Parameters
-        ----------
-        graphs: list<MSCgraph>
-            The msc graphs.
-        weights: dict<str, tvm.nd.array>
-            The weights.
-
-        Returns
-        -------
-        graphs: list<MSCgraph>
-            The msc graphs.
-        weights: dict<str, tvm.nd.array>
-            The weights.
-        """
-
-        return graphs, weights
 
     def change_stage(self, stage: str):
         """Change the stage of tool and strategy"""
@@ -1091,6 +1103,19 @@ class BaseTool(object):
                 return g.find_node(name)
         raise Exception("Can not find node {} from {} graphs".format(name, len(self._graphs)))
 
+    def get_tensors(self) -> Iterable[MSCTensor]:
+        """Get all the tensors in the graphs.
+
+        Returns
+        -------
+        tensors: generator<MSCTensor>
+            The generator of nodes.
+        """
+
+        for g in self._graphs:
+            for t in g.get_tensors():
+                yield t
+
     def find_tensor(self, name: str) -> MSCTensor:
         """Find tensor by name.
 
@@ -1170,7 +1195,7 @@ class BaseTool(object):
             return msc_utils.cast_array(self._weights[name])
         raise Exception("Can not find data {} from {} weights".format(name, len(self._weights)))
 
-    def _save_tensor_cache(self, name: str, consumer: str, key: str, value: Any)->Any:
+    def _save_tensor_cache(self, name: str, consumer: str, key: str, value: Any) -> Any:
         """Save the data to tensor cache
 
         Parameters
@@ -1183,7 +1208,7 @@ class BaseTool(object):
             The data key.
         value: any
             The value to cache.
-        
+
         Returns
         -------
         value: any
@@ -1248,9 +1273,13 @@ class BaseTool(object):
                 strategys.append(tensor_strategy)
             elif self.is_weight(name):
                 consumer = self.find_node(consumer)
+                w_type = consumer.weight_type(name)
                 for ref in [consumer.name, consumer.optype, "default"]:
-                    if _check_strategy(ref + ".weight"):
-                        strategys.append(self._strategys[ref + ".weight"])
+                    if _check_strategy(ref + "." + w_type):
+                        strategys.append(self._strategys[ref + "." + w_type])
+                        break
+                    if _check_strategy(ref + ".weights"):
+                        strategys.append(self._strategys[ref + ".weights"])
                         break
             elif consumer == "exit":
                 producer = self.find_producer(name)
@@ -1259,15 +1288,15 @@ class BaseTool(object):
                         strategys.append(self._strategys[ref + ".output"])
                         break
             else:
-                consumer = self.find_node(consumer)
-                for ref in [consumer.name, consumer.optype, "default"]:
-                    if _check_strategy(ref + ".input"):
-                        strategys.append(self._strategys[ref + ".input"])
-                        break
                 producer = self.find_producer(name)
                 for ref in [producer.name, producer.optype, "default"]:
                     if _check_strategy(ref + ".output"):
                         strategys.append(self._strategys[ref + ".output"])
+                        break
+                consumer = self.find_node(consumer)
+                for ref in [consumer.name, consumer.optype, "default"]:
+                    if _check_strategy(ref + ".input"):
+                        strategys.append(self._strategys[ref + ".input"])
                         break
             self._save_tensor_cache(name, consumer, mark, strategys)
         return self._get_tensor_cache(name, consumer, mark)

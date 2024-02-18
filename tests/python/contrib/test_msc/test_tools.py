@@ -80,7 +80,7 @@ def get_tool_config(tool_type, use_distill=False):
             "strategys": [
                 {
                     "methods": {
-                        "weight": {"method_name": "per_channel", "density": 0.8},
+                        "weights": {"method_name": "per_channel", "density": 0.8},
                         "output": {"method_name": "per_channel", "density": 0.8},
                     }
                 }
@@ -90,6 +90,7 @@ def get_tool_config(tool_type, use_distill=False):
         # pylint: disable=import-outside-toplevel
         from tvm.contrib.msc.core.tools.quantize import QuantizeStage
 
+        op_types = ["nn.conv2d", "msc.conv2d_bias", "msc.linear", "msc.linear_bias"]
         config = {
             "plan_file": "msc_quantizer.json",
             "strategys": [
@@ -97,23 +98,23 @@ def get_tool_config(tool_type, use_distill=False):
                     "methods": {
                         "input": "gather_maxmin",
                         "output": "gather_maxmin",
-                        "weight": "gather_max_per_channel",
+                        "weights": "gather_max_per_channel",
                     },
-                    "op_types": ["nn.conv2d", "msc.linear"],
+                    "op_types": op_types,
                     "stages": [QuantizeStage.GATHER],
                 },
                 {
                     "methods": {"input": "calibrate_maxmin", "output": "calibrate_maxmin"},
-                    "op_types": ["nn.conv2d", "msc.linear"],
+                    "op_types": op_types,
                     "stages": [QuantizeStage.CALIBRATE],
                 },
                 {
                     "methods": {
                         "input": "quantize_normal",
-                        "weight": "quantize_normal",
+                        "weights": "quantize_normal",
                         "output": "dequantize_normal",
                     },
-                    "op_types": ["nn.conv2d", "msc.linear"],
+                    "op_types": op_types,
                 },
             ],
         }
@@ -143,8 +144,8 @@ def get_tool_config(tool_type, use_distill=False):
             "plan_file": "msc_distiller.json",
             "strategys": [
                 {
-                    "methods": {"output": "loss_lp_norm"},
-                    "op_types": ["loss"],
+                    "methods": {"mark": "loss_lp_norm"},
+                    "marks": ["loss"],
                 },
             ],
         }

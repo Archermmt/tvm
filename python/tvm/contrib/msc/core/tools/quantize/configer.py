@@ -113,6 +113,20 @@ class DefaultQuantizeConfiger(QuantizeConfiger):
     def get_default(self) -> dict:
         """Get the default config"""
 
+        op_types = [
+            "nn.conv1d",
+            "msc.conv1d_bias",
+            "nn.conv2d",
+            "msc.conv2d_bias",
+            "nn.conv3d",
+            "msc.conv3d_bias",
+            "msc.linear",
+            "msc.linear_bias",
+            "nn.avg_pool1d",
+            "nn.avg_pool2d",
+            "nn.avg_pool3d",
+        ]
+
         return {
             "plan_file": "msc_quantizer.json",
             "strategys": [
@@ -120,23 +134,23 @@ class DefaultQuantizeConfiger(QuantizeConfiger):
                     "methods": {
                         "input": "gather_maxmin",
                         "output": "gather_maxmin",
-                        "weight": "gather_max_per_channel",
+                        "weights": "gather_max_per_channel",
                     },
-                    "op_types": ["nn.conv2d", "msc.linear"],
+                    "op_types": op_types,
                     "stages": [QuantizeStage.GATHER],
                 },
                 {
                     "methods": {"input": "calibrate_maxmin", "output": "calibrate_maxmin"},
-                    "op_types": ["nn.conv2d", "msc.linear"],
+                    "op_types": op_types,
                     "stages": [QuantizeStage.CALIBRATE],
                 },
                 {
                     "methods": {
                         "input": "quantize_normal",
-                        "weight": "quantize_normal",
+                        "weights": "quantize_normal",
                         "output": "dequantize_normal",
                     },
-                    "op_types": ["nn.conv2d", "msc.linear"],
+                    "op_types": op_types,
                 },
             ],
         }

@@ -116,7 +116,7 @@ class DefaultPruneConfiger(PruneConfiger):
             "strategys": [
                 {
                     "methods": {
-                        "weight": {"method_name": "per_channel", "density": 0.8},
+                        "weights": {"method_name": "per_channel", "density": 0.8},
                         "output": {"method_name": "per_channel", "density": 0.8},
                     }
                 }
