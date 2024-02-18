@@ -14,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-# pylint: disable=unused-argument
+# pylint: disable=unused-argument, arguments-differ
 """tvm.contrib.msc.framework.torch.tools.quantize.method"""
 
 from functools import wraps
@@ -28,6 +28,8 @@ from tvm.contrib.msc.core import utils as msc_utils
 
 
 def fake_quantize(func):
+    """Fake quantize without backward"""
+
     @wraps(func)
     def wrapper(
         cls, quantizer: BaseQuantizer, data: torch.Tensor, name: str, consumer: str, *args, **kwargs

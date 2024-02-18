@@ -29,8 +29,6 @@ import torch
 import torch.optim as optim
 
 from tvm.contrib.msc.pipeline import TorchWrapper
-from tvm.contrib.msc.pipeline.config import create_config
-from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core.tools import ToolType
 from _resnet import resnet50
 from utils import *
@@ -67,17 +65,15 @@ def get_config():
         gym_configs = {ToolType.QUANTIZER: ["default"], ToolType.PRUNER: ["default"]}
     else:
         gym_configs = None
-    return create_config(
+    return TorchWrapper.create_config(
         inputs=[("input", [args.test_batch, 3, 32, 32], "float32")],
         outputs=["output"],
-        model_type=MSCFramework.TORCH,
         compile_type=args.compile_type,
         dataset={"prepare": {"loader": _get_datas}},
         prune_config="default" if args.prune else None,
         quantize_config="default" if args.quantize else None,
         distill_config="default" if args.distill else None,
         gym_configs=gym_configs,
-        check_accuracy=False,
     )
 
 

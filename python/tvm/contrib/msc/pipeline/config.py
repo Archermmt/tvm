@@ -37,8 +37,9 @@ def create_config(
     inputs: List[dict],
     outputs: List[str],
     model_type: str,
-    compile_type: str,
+    baseline_type: str = None,
     optimize_type: str = None,
+    compile_type: str = None,
     dataset: Dict[str, dict] = None,
     check_accuracy: bool = True,
     prune_config: Union[dict, str] = None,
@@ -60,6 +61,8 @@ def create_config(
         The output names.
     model_type: str
         The model type.
+    baseline_type: str
+        The baseline type.
     compile_type: str
         The compile type.
     optimize_type: str
@@ -88,7 +91,9 @@ def create_config(
         The extra config.
     """
 
-    optimize_type = optimize_type or model_type
+    baseline_type = baseline_type or model_type
+    optimize_type = optimize_type or baseline_type
+    compile_type = compile_type or optimize_type
     config = {
         "model_type": model_type,
         "verbose": verbose,
@@ -97,15 +102,7 @@ def create_config(
         "dataset": dataset,
         MSCStage.PREPARE: {"profile": {"benchmark": {"repeat": -1}}},
         MSCStage.BASELINE: {
-            "run_type": model_type,
-            "profile": {"check": {"atol": 1e-3, "rtol": 1e-3}, "benchmark": {"repeat": -1}},
-        },
-        MSCStage.OPTIMIZE: {
-            "run_type": optimize_type,
-            "profile": {"check": {"atol": 1e-3, "rtol": 1e-3}, "benchmark": {"repeat": -1}},
-        },
-        MSCStage.COMPILE: {
-            "run_type": compile_type,
+            "run_type": baseline_type,
             "profile": {"check": {"atol": 1e-3, "rtol": 1e-3}, "benchmark": {"repeat": -1}},
         },
     }
@@ -129,7 +126,16 @@ def create_config(
     if distill_config:
         tools_config[ToolType.DISTILLER] = config_tool(ToolType.DISTILLER, distill_config)
     if tools_config:
-        config[MSCStage.OPTIMIZE].update(**tools_config)
+        config[MSCStage.OPTIMIZE] = {
+            "run_type": optimize_type,
+            "profile": {"check": {"atol": 1e-3, "rtol": 1e-3}, "benchmark": {"repeat": -1}},
+        }
+
+    # config compile
+    config[MSCStage.COMPILE] = {
+        "run_type": compile_type,
+        "profile": {"check": {"atol": 1e-3, "rtol": 1e-3}, "benchmark": {"repeat": -1}},
+    }
 
     # update profile
     if profile_strategys:

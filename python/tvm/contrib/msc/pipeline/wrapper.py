@@ -17,11 +17,12 @@
 """tvm.contrib.msc.pipeline.wrapper"""
 
 import shutil
-from typing import Any, Union
+from typing import Any, Union, List
 
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 from .manager import MSCManager
+from .config import create_config
 
 
 class BaseWrapper(object):
@@ -76,7 +77,7 @@ class BaseWrapper(object):
     def setup(self):
         """Setup the wrapper"""
 
-        pass
+        return
 
     def optimize(self, workspace: str = "Optimize"):
         """Optimize the model
@@ -167,7 +168,7 @@ class BaseWrapper(object):
         return self._compiled_model or self._optimized_model or self._meta_model
 
     def _get_framework(self) -> str:
-        return self._manager.runner.framework if self._manager else self.model_type
+        return self._manager.runner.framework if self._manager else self.model_type()
 
     @property
     def optimized(self):
@@ -177,8 +178,40 @@ class BaseWrapper(object):
     def compiled(self):
         return self._compiled_model is not None
 
-    @property
-    def model_type(self):
+    @classmethod
+    def create_config(
+        cls,
+        inputs: List[dict],
+        outputs: List[str],
+        baseline_type: str = None,
+        optimize_type: str = None,
+        compile_type: str = None,
+        **kwargs,
+    ):
+        """Create config for msc pipeline
+
+        Parameters
+        ----------
+        inputs: list<dict>
+            The inputs info,
+        outputs: list<str>
+            The output names.
+        baseline_type: str
+            The baseline type.
+        compile_type: str
+            The compile type.
+        optimize_type: str
+            The optimize type.
+        kwargs: dict
+            The config kwargs.
+        """
+
+        return create_config(
+            inputs, outputs, cls.model_type(), baseline_type, optimize_type, compile_type, **kwargs
+        )
+
+    @classmethod
+    def model_type(cls):
         return MSCFramework.MSC
 
 
@@ -216,6 +249,6 @@ class TorchWrapper(BaseWrapper):
             return self._get_model().eval()
         return self._get_model()
 
-    @property
-    def model_type(self):
+    @classmethod
+    def model_type(cls):
         return MSCFramework.TORCH
