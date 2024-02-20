@@ -120,12 +120,12 @@ def dump_dict(dict_obj: dict, flavor: str = "dmlc") -> str:
                         lines.append("{}{}: {}".format(indent * " ", k, MSCArray(v).abstract()))
                     else:
                         lines.append("{}{}:".format(indent * " ", k))
-                        lines.extend(
-                            [
-                                "{}<{}>{}".format((indent + 2) * " ", idx, ele)
-                                for idx, ele in enumerate(v)
-                            ]
-                        )
+                        for idx, ele in enumerate(v):
+                            if len(str(ele)) > max_size:
+                                lines.append("{}[{}.{}]:".format((indent + 2) * " ", k, idx))
+                                lines.extend(_get_lines(ele, indent + 4))
+                            else:
+                                lines.append("{}<{}>{}".format((indent + 2) * " ", idx, ele))
                 elif isinstance(v, bool):
                     lines.append("{}{}: {}".format(indent * " ", k, "true" if v else "false"))
                 elif isinstance(v, np.ndarray):

@@ -35,10 +35,23 @@ class MSCStage(object):
     PRUNE = "prune"
     QUANTIZE = "quantize"
     DISTILL = "distill"
+    TRACK = "track"
     OPTIMIZE = "optimize"
     COMPILE = "compile"
     SUMMARY = "summary"
-    ALL = [SETUP, PREPARE, PARSE, BASELINE, PRUNE, QUANTIZE, DISTILL, OPTIMIZE, COMPILE, SUMMARY]
+    ALL = [
+        SETUP,
+        PREPARE,
+        PARSE,
+        BASELINE,
+        PRUNE,
+        QUANTIZE,
+        DISTILL,
+        TRACK,
+        OPTIMIZE,
+        COMPILE,
+        SUMMARY,
+    ]
 
     @classmethod
     def all_stages(cls) -> List[str]:

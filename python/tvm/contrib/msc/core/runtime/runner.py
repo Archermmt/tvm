@@ -43,7 +43,7 @@ class BaseRunner(object):
         The IRModule of relax.
     params: dict of <string:tvm.ndarray>
         The parameters of the IRModule.
-    tools_config: dict
+    tools_config: list<dict>
         The config of MSC Tools.
     translate_config: dict
         The config for translate IRModule to MSCGraph.
@@ -70,7 +70,7 @@ class BaseRunner(object):
     def __init__(
         self,
         mod: tvm.IRModule,
-        tools_config: Optional[Dict[str, Any]] = None,
+        tools_config: Optional[List[dict]] = None,
         translate_config: Optional[Dict[str, str]] = None,
         generate_config: Optional[Dict[str, str]] = None,
         build_config: Optional[Dict[str, str]] = None,
@@ -83,7 +83,13 @@ class BaseRunner(object):
         logger: logging.Logger = None,
     ):
         self._mod = mod
-        self._tools_config = msc_utils.copy_dict(tools_config)
+        if tools_config:
+            self._tools_type = [t["tool_type"] for t in tools_config]
+            self._tools_config = {
+                t["tool_type"]: msc_utils.copy_dict(t["tool_config"]) for t in tools_config
+            }
+        else:
+            self._tools_type, self._tools_config = [], {}
         self._translate_config = msc_utils.copy_dict(translate_config)
         self._generate_config = msc_utils.copy_dict(generate_config)
         self._build_config = msc_utils.copy_dict(build_config)
@@ -116,16 +122,16 @@ class BaseRunner(object):
         self._runnable = None
         # Setup tools
         self._tools = {}
-        if self._tools_config:
+        if self._tools_type:
             self._update_codegen({"use_tools": True, "tools_tag": self._name})
-            for t_type, config in self._tools_config.items():
+            for t_type in self._tools_type:
                 self._tools[t_type] = create_tool(
                     self.framework,
                     t_type,
                     self._name,
                     training=self._training,
                     stage=self._stage,
-                    **config,
+                    **self._tools_config[t_type],
                 )
         if self._plugin:
             self._update_codegen({"use_plugin": True})
@@ -583,7 +589,7 @@ class BaseRunner(object):
             if tool:
                 yield tool
 
-    def apply_tool(self, tool_type: str, data_loader: Any = None) -> str:
+    def make_plan(self, tool_type: str, data_loader: Any = None) -> str:
         """Execute tool and get plan
 
         Parameters
@@ -625,6 +631,15 @@ class BaseRunner(object):
                     distiller.learn(loss)
                 distiller.distill()
             plan = distiller.finalize()
+        elif tool_type == ToolType.TRACKER:
+            tracker = self.get_tool(ToolType.TRACKER)
+            if not tracker.tracked:
+                assert data_loader, "data_loader should be given to plan prune"
+                for inputs in data_loader():
+                    self.run(inputs, ret_type="native")
+                    if tracker.tracked:
+                        break
+            plan = tracker.finalize()
         else:
             plan = self.get_tool(tool_type).finalize()
         assert plan, "Failed to create plan for {}".format(tool_type)
@@ -1007,10 +1022,6 @@ class BaseRunner(object):
             run_config["translate_config"]["build"]["output_aliases"] = config["outputs"]
             config[stage]["run_config"] = run_config
         return config
-
-    @classmethod
-    def support_tool(cls, tool_type: str) -> bool:
-        return True
 
 
 class ModelRunner(BaseRunner):

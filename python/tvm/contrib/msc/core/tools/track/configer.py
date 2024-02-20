@@ -17,50 +17,13 @@
 """tvm.contrib.msc.core.tools.track.configer"""
 
 from tvm.contrib.msc.core.tools.tool import ToolType
+from tvm.contrib.msc.core.tools.configer import ToolConfiger
 from tvm.contrib.msc.core.utils import MSCStage
 from tvm.contrib.msc.core import utils as msc_utils
 
 
-class TrackConfiger(object):
+class TrackConfiger(ToolConfiger):
     """Configer for track"""
-
-    def config(self, raw_config: dict = None) -> dict:
-        """Get the config
-
-        Parameters
-        ----------
-        raw_config: dict
-            The raw config.
-
-        Returns
-        -------
-        config: dict
-            The update config.
-        """
-
-        config = self.update(raw_config) if raw_config else self.get_default()
-        return config
-
-    def get_default(self) -> dict:
-        """Get the default config"""
-
-        raise NotImplementedError("get_default is not implemented in TrackConfiger")
-
-    def update(self, raw_config: dict) -> dict:
-        """Config the raw config
-
-        Parameters
-        ----------
-        raw_config: dict
-            The raw config.
-
-        Returns
-        -------
-        config: dict
-            The update config.
-        """
-
-        return raw_config
 
     @classmethod
     def tool_type(cls):
@@ -71,8 +34,14 @@ class TrackConfiger(object):
 class DefaultTrackConfiger(TrackConfiger):
     """Default configer for track"""
 
-    def get_default(self) -> dict:
-        """Get the default config"""
+    def config_tool(self) -> dict:
+        """Get the default config of tool
+
+        Returns
+        -------
+        config: dict
+            The default config.
+        """
 
         return {
             "plan_file": "msc_tracker.json",

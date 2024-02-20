@@ -21,7 +21,8 @@ This example shows how to run PTQ, QAT, PTQ with distill...
 Reference for MSC:
 https://discuss.tvm.apache.org/t/rfc-unity-msc-introduction-to-multi-system-compiler/15251/5
 
-This example use resnet50 from https://github.com/huyvnphan/PyTorch_CIFAR10/tree/master
+This example use resnet50 from https://github.com/huyvnphan/PyTorch_CIFAR10/tree/master,
+please download before run example
 """
 
 import argparse
@@ -33,7 +34,7 @@ from tvm.contrib.msc.core.tools import ToolType
 from _resnet import resnet50
 from utils import *
 
-parser = argparse.ArgumentParser(description="Qauntizer example")
+parser = argparse.ArgumentParser(description="MSC train && eval example")
 parser.add_argument(
     "--dataset",
     type=str,
@@ -52,28 +53,31 @@ parser.add_argument("--quantize", action="store_true", help="Whether to use quan
 parser.add_argument("--distill", action="store_true", help="Whether to use distiller for tool")
 parser.add_argument("--gym", action="store_true", help="Whether to use gym for tool")
 parser.add_argument("--test_batch", type=int, default=1, help="The batch size for test")
-parser.add_argument("--test_iter", type=int, default=100, help="The iter for test")
-parser.add_argument("--calibrate_iter", type=int, default=100, help="The iter for calibration")
+parser.add_argument("--test_iter", type=int, default=50, help="The iter for test")
+parser.add_argument("--calibrate_iter", type=int, default=50, help="The iter for calibration")
 parser.add_argument("--train_batch", type=int, default=32, help="The batch size for train")
-parser.add_argument("--train_iter", type=int, default=100, help="The iter for train")
+parser.add_argument("--train_iter", type=int, default=50, help="The iter for train")
 parser.add_argument("--train_epoch", type=int, default=5, help="The epoch for train")
 args = parser.parse_args()
 
 
-def get_config():
-    if args.gym:
-        gym_configs = {ToolType.QUANTIZER: ["default"], ToolType.PRUNER: ["default"]}
-    else:
-        gym_configs = None
+def get_config(loader):
+    tools = []
+    if args.prune:
+        config = {"gym_configs": ["default"]} if args.gym else "default"
+        tools.append((ToolType.PRUNER, config))
+    if args.quantize:
+        config = {"gym_configs": ["default"]} if args.gym else "default"
+        tools.append((ToolType.QUANTIZER, config))
+    if args.distill:
+        tools.append((ToolType.DISTILLER, "default"))
     return TorchWrapper.create_config(
         inputs=[("input", [args.test_batch, 3, 32, 32], "float32")],
         outputs=["output"],
         compile_type=args.compile_type,
-        dataset={"prepare": {"loader": _get_datas}},
-        prune_config="default" if args.prune else None,
-        quantize_config="default" if args.quantize else None,
-        distill_config="default" if args.distill else None,
-        gym_configs=gym_configs,
+        dataset={"prepare": {"loader": loader}},
+        tools=tools,
+        skip_config={"all": "check"},
     )
 
 
@@ -93,7 +97,7 @@ if __name__ == "__main__":
     acc = eval_model(model, testloader, max_iter=args.test_iter)
     print("Baseline acc: " + str(acc))
 
-    model = TorchWrapper(model, get_config())
+    model = TorchWrapper(model, get_config(_get_datas))
 
     # export to dump meta model
     # model.export()

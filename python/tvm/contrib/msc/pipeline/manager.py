@@ -20,7 +20,7 @@
 import os
 import time
 import json
-from typing import Dict, Any, Union
+from typing import Dict, Any, Union, List
 import traceback
 import numpy as np
 
@@ -34,6 +34,7 @@ from tvm.contrib.msc.core import utils as msc_utils
 from tvm.contrib.msc.core.gym.control import create_controller
 from tvm.contrib.msc.core import _ffi_api
 from tvm.contrib.msc.plugin.utils import export_plugins, load_plugins
+from .config import support_tool
 
 
 class BaseManager(object):
@@ -116,7 +117,7 @@ class BaseManager(object):
             for name, plugin in self._plugins[self._model_type].get_ops_info().items():
                 _ffi_api.RegisterPlugin(name, msc_utils.dump_dict(plugin))
         self._config, self._debug_levels = self.update_config(config)
-        self._tools_config = {}
+        self._tools_config = []
         self._relax_mod, self._runner = None, None
         self._sample_inputs = None
         self._report = {
@@ -128,7 +129,7 @@ class BaseManager(object):
             "duration": {},
             "profile": {},
         }
-        return {"workspace": self._workspace.path, "plugins": self._plugins, "config": config}
+        return {"workspace": self._workspace.path, "plugins": self._plugins, "config": self._config}
 
     def update_config(self, config: dict) -> dict:
         """Update config
@@ -162,15 +163,15 @@ class BaseManager(object):
             config = self._get_runner_cls(config[stage]["run_type"]).update_config(
                 stage, config, self._model
             )
-        if MSCStage.OPTIMIZE in config:
-            config[MSCStage.OPTIMIZE] = self._update_tool_config(config[MSCStage.OPTIMIZE])
+        if config.get("tools"):
+            config["tools"] = self._update_tools_config(config["tools"])
 
-        def _set_debug_level(stage: str, stage_config: dict, default: int = None) -> dict:
-            if "debug_level" in stage_config:
-                debug_levels[stage] = stage_config["debug_level"]
+        def _set_debug_level(stage: str, sub_config: dict, default: int = None) -> dict:
+            if "debug_level" in sub_config:
+                debug_levels[stage] = sub_config["debug_level"]
             elif default is not None:
                 debug_levels[stage] = default
-                stage_config["debug_level"] = default
+                sub_config["debug_level"] = default
             return debug_levels
 
         if self._verbose.startswith("debug:"):
@@ -181,18 +182,15 @@ class BaseManager(object):
             if stage not in config:
                 continue
             debug_levels = _set_debug_level(stage, config[stage]["run_config"], debug_level)
-        if MSCStage.OPTIMIZE in config:
-            for t_type in ToolType.all_types():
-                if t_type not in config[MSCStage.OPTIMIZE]:
-                    continue
-                debug_levels = _set_debug_level(
-                    self._get_tool_stage(t_type), config[MSCStage.OPTIMIZE][t_type], debug_level
-                )
+        for tool in config.get("tools", []):
+            t_stage = stage + "." + self._get_tool_stage(tool["tool_type"])
+            debug_levels = _set_debug_level(t_stage, tool["tool_config"], debug_level)
         ordered_keys = [
             "model_type",
             "inputs",
             "outputs",
             "dataset",
+            "tools",
             MSCStage.PREPARE,
             MSCStage.PARSE,
             MSCStage.BASELINE,
@@ -351,6 +349,29 @@ class BaseManager(object):
                 self._logger.debug("Save parsed mod to %s", cache_path)
         return self._relax_mod
 
+    def _run_stage(self, stage: str) -> BaseRunner:
+        """Run the stage.
+
+        Parameters
+        ----------
+        stage: str
+            The compiel stage.
+
+        Returns
+        -------
+        runner: BaseRunner
+            The runner.
+        """
+
+        msc_utils.time_stamp(stage)
+        self.apply_tools(stage)
+        self._runner = self._create_runner(
+            stage,
+            self._config[stage],
+            use_cache=self._config.get("use_cache", True),
+        )
+        return self._runner
+
     def baseline(self) -> BaseRunner:
         """Run the baseline.
 
@@ -360,13 +381,7 @@ class BaseManager(object):
             The runner.
         """
 
-        msc_utils.time_stamp(MSCStage.BASELINE)
-        self._runner = self._create_runner(
-            MSCStage.BASELINE,
-            self._config[MSCStage.BASELINE],
-            use_cache=self._config.get("use_cache", True),
-        )
-        return self._runner
+        return self._run_stage(MSCStage.BASELINE)
 
     def optimize(self) -> BaseRunner:
         """Run the optimize and return object.
@@ -377,17 +392,9 @@ class BaseManager(object):
             The runner.
         """
 
-        stage_config = self._config[MSCStage.OPTIMIZE]
-        self.apply_tools(stage_config)
-        msc_utils.time_stamp(MSCStage.OPTIMIZE)
-        self._runner = self._create_runner(
-            MSCStage.OPTIMIZE,
-            stage_config,
-            tools_config=self._tools_config,
-            use_cache=self._config.get("use_cache", True),
-        )
+        runner = self._run_stage(MSCStage.OPTIMIZE)
         self._optimized = True
-        return self._runner
+        return runner
 
     def compile(self) -> BaseRunner:
         """Run the compile and return object.
@@ -398,43 +405,25 @@ class BaseManager(object):
             The runner.
         """
 
-        stage_config = self._config[MSCStage.COMPILE]
-        self.apply_tools(stage_config)
-        msc_utils.time_stamp(MSCStage.COMPILE)
-        self._runner = self._create_runner(
-            MSCStage.COMPILE,
-            stage_config,
-            tools_config=self._tools_config,
-            use_cache=self._config.get("use_cache", True),
-        )
+        runner = self._run_stage(MSCStage.COMPILE)
         self._compiled = True
-        return self._runner
+        return runner
 
-    def apply_tools(self, stage_config: dict):
+    def apply_tools(self, stage: str):
         """Apply tools for a stage.
 
         Parameters
         ----------
-        stage_config: dict
-            The config of this stage.
+        stage: str
+            The compile stage.
         """
 
-        runner_cls = self._get_runner_cls(stage_config["run_type"])
-
-        def _tool_enabled(tool_type: str) -> bool:
-            return tool_type in stage_config and runner_cls.support_tool(tool_type)
-
-        # run prune
-        if _tool_enabled(ToolType.PRUNER):
-            self._apply_tool(ToolType.PRUNER, stage_config)
-
-        # run quantize
-        if _tool_enabled(ToolType.QUANTIZER):
-            self._apply_tool(ToolType.QUANTIZER, stage_config)
-
-        # run distill
-        if _tool_enabled(ToolType.DISTILLER):
-            self._apply_tool(ToolType.DISTILLER, stage_config)
+        self._tools_config = []
+        for tool in self._config.get("tools", []):
+            run_type = tool.get("run_type", self._config[stage]["run_type"])
+            if not support_tool(tool, stage, run_type):
+                continue
+            self._apply_tool(tool, stage)
 
     def summary(self, err_msg=None):
         """Summary the pipeline.
@@ -619,9 +608,9 @@ class BaseManager(object):
                 hooks.append({"hook": "update_weights", "weights_path": ckpt_path})
                 if "profile" in config[MSCStage.COMPILE]:
                     config[MSCStage.COMPILE]["profile"].setdefault("check", {})["err_rate"] = -1
-            for t_type, t_config in self._tools_config.items():
-                tool = self.runner.get_tool(t_type)
-                config[MSCStage.COMPILE][t_type] = tool.export_config(t_config, folder)
+            for t_config in config.get("tools", []):
+                tool = self.runner.get_tool(t_config["tool_type"])
+                t_config["tool_config"] = tool.export_config(t_config["tool_config"], folder)
         # remove not serializable items
         if dump:
             remove_keys = {"workspace", "logger"}
@@ -646,7 +635,6 @@ class BaseManager(object):
         self,
         stage: str,
         stage_config: dict,
-        tools_config: dict = None,
         visualize: bool = True,
         profile: bool = True,
         use_cache: bool = True,
@@ -659,8 +647,6 @@ class BaseManager(object):
             The stage name
         stage_config: dict
             The config of this stage.
-        tools_config: dict
-            The config of the tools
         visualize: bool
             Whether to visualize the runner
         profile: bool
@@ -677,7 +663,6 @@ class BaseManager(object):
         if self._runner:
             self._runner.destory()
         cache_dir = msc_utils.get_cache_dir().create_dir(stage) if use_cache else None
-        tools_config = tools_config or {}
         msc_utils.time_stamp(stage + ".build", False)
         runner_cls = self._get_runner_cls(stage_config["run_type"])
         run_config = msc_utils.copy_dict(stage_config.get("run_config"))
@@ -691,13 +676,10 @@ class BaseManager(object):
             run_config["device"] = self._device
         if "training" not in run_config:
             run_config["training"] = self._training
-        opt_config = self._config.get(MSCStage.OPTIMIZE, {})
-        if ToolType.TRACKER in opt_config and runner_cls.support_tool(ToolType.TRACKER):
-            tools_config = {**tools_config, ToolType.TRACKER: opt_config[ToolType.TRACKER]}
         # Build runner
         runner = runner_cls(
             self._relax_mod,
-            tools_config=tools_config,
+            tools_config=self._tools_config,
             plugin=self._plugins.get(stage_config["run_type"]),
             stage=stage,
             logger=self._logger,
@@ -711,21 +693,17 @@ class BaseManager(object):
             self._report["profile"][stage] = self._profile_runner(runner, stage_config)
         if use_cache:
             runner.save_cache(cache_dir)
-        if runner.get_tool(ToolType.TRACKER):
-            runner.apply_tool(ToolType.TRACKER)
         return runner
 
-    def _apply_tool(self, tool_type: str, stage_config: dict, add_tool: bool = True) -> str:
+    def _apply_tool(self, tool: dict, stage: str) -> str:
         """Apply tool with runner
 
         Parameters
         ----------
-        tool_type: str
-            The tool type.
-        stage_config: dict
-            The config of this stage.
-        add_tool: bool
-            Whether to add tool in self._tools.
+        tool: dict
+            The tool config.
+        stage: str
+            The compile stage.
 
         Returns
         -------
@@ -733,34 +711,26 @@ class BaseManager(object):
             The plan_file path.
         """
 
-        assert tool_type in stage_config, "Can not find config for tool " + str(tool_type)
-        tool_stage, tool_config = self._get_tool_stage(tool_type), stage_config[tool_type]
-        if "run_type" in tool_config:
-            run_type = tool_config.pop("run_type")
-        else:
-            run_type = stage_config["run_type"]
+        self._tools_config.append(tool)
+        tool_type, tool_config = tool["tool_type"], tool["tool_config"]
+        tool_stage = self._get_tool_stage(tool_type)
         plan_file = tool_config["plan_file"]
-        if "gym_configs" in tool_config:
-            gym_configs = tool_config.pop("gym_configs")
-        else:
-            gym_configs = None
-        if add_tool:
-            self._tools_config[tool_type] = tool_config
-            tools_config = self._tools_config
-        else:
-            tools_config = {**self._tools_config, tool_type: tool_config}
         if os.path.isfile(plan_file):
             self._logger.info("Skip %s with plan %s", tool_type, plan_file)
             return plan_file
         msc_utils.time_stamp(tool_stage)
-        t_stage_config = {"run_type": run_type, "run_config": stage_config["run_config"]}
-        runner = self._create_runner(
-            tool_stage, t_stage_config, tools_config=tools_config, profile=False, use_cache=False
-        )
-        if gym_configs:
+        t_stage = stage + "." + tool_stage
+        stage_config = {
+            "run_type": tool.get("run_type", self._config[stage]["run_type"]),
+            "run_config": self._config[stage]["run_config"],
+        }
+        runner = self._create_runner(t_stage, stage_config, profile=False, use_cache=False)
+        if "gym_configs" in tool:
             knowledge = None
-            for idx, config in enumerate(gym_configs):
-                self._logger.info("GYM[%d/%d].CREATE(%s)", idx, len(gym_configs), tool_stage)
+            for idx, config in enumerate(tool["gym_configs"]):
+                self._logger.info(
+                    "GYM[%d/%d].CREATE(%s)", idx, len(tool["gym_configs"]), tool_stage
+                )
                 extra_config = {
                     "env": {
                         "runner": runner,
@@ -777,7 +747,7 @@ class BaseManager(object):
                 "Gym save %d knowledge(%s) -> %s", len(knowledge), tool_type, plan_file
             )
             return plan_file
-        return runner.apply_tool(tool_type, self._get_loader(tool_stage))
+        return runner.make_plan(tool_type, self._get_loader(tool_stage))
 
     def _profile_runner(self, runner: BaseRunner, stage_config: str) -> dict:
         """Profile the runner.
@@ -852,30 +822,28 @@ class BaseManager(object):
         self._logger.info(msg)
         return report
 
-    def _update_tool_config(self, opt_config: dict) -> dict:
+    def _update_tools_config(self, tools: List[dict]) -> List[dict]:
         """Update tool in stage config.
 
         Parameters
         ----------
-        opt_config: dict
-            The config of optimize.
+        tools: list<dict>
+            The config of tools.
 
         Returns
         -------
-        config: dict
-            The updated config of optimize.
+        tools: list<dict>
+            The updated config of tools.
         """
 
-        for tool_type in ToolType.all_types():
-            if tool_type not in opt_config:
-                continue
-            tool_config = opt_config[tool_type]
+        for tool in tools:
+            tool_config = tool["tool_config"]
             if "plan_file" not in tool_config:
-                tool_config["plan_file"] = "msc_{}.json".format(tool_type)
+                tool_config["plan_file"] = "msc_{}.json".format(tool["tool_type"])
             tool_config["plan_file"] = msc_utils.to_abs_path(
                 tool_config["plan_file"], msc_utils.get_config_dir()
             )
-        return opt_config
+        return tools
 
     def _get_tool_stage(self, tool_type: str) -> str:
         """Map the stage according to tool_type
@@ -897,6 +865,8 @@ class BaseManager(object):
             return MSCStage.QUANTIZE
         if tool_type == ToolType.DISTILLER:
             return MSCStage.DISTILL
+        if tool_type == ToolType.TRACKER:
+            return MSCStage.TRACK
         return tool_type
 
     def get_runnable(self, ret_type: str = "runner") -> Any:

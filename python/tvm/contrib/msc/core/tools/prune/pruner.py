@@ -30,6 +30,19 @@ from .method import PruneMethod
 class BasePruner(WeightTool):
     """Base pruner for all"""
 
+    def setup(self) -> dict:
+        """Setup the tool
+
+        Returns
+        -------
+        info: dict
+            The setup info.
+        """
+
+        if not self._plan:
+            self.change_stage(msc_utils.MSCStage.PRUNE)
+        return super().setup()
+
     def _get_wtypes(self) -> Tuple[Dict[str, List[str]], Dict[str, str]]:
         """Get the weight types from options
 
@@ -196,7 +209,6 @@ class BasePruner(WeightTool):
             return tensor
 
         self._prune_tensor(name, consumer, strategys)
-        print("after prune {}: {}".format(name, self._plan))
         lazy_pruned = set()
         for lazy_name, info in self._unpruned_tensors.items():
             if info["lead_name"] in self._plan:

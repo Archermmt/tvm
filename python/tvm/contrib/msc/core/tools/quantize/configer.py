@@ -16,75 +16,34 @@
 # under the License.
 """tvm.contrib.msc.core.tools.quantize.configer"""
 
-from typing import List, Union
+from typing import Union
 
 from tvm.contrib.msc.core.tools.tool import ToolType
+from tvm.contrib.msc.core.tools.configer import ToolConfiger
 from tvm.contrib.msc.core import utils as msc_utils
 from .quantizer import QuantizeStage
 
 
-class QuantizeConfiger(object):
+class QuantizeConfiger(ToolConfiger):
     """Configer for quantize"""
 
-    def config(self, raw_config: dict = None, gym_configs: List[Union[dict, str]] = None) -> dict:
-        """Get the config
+    def config_gym(self, gym_config: Union[dict, str]) -> dict:
+        """Config the gym
 
         Parameters
         ----------
-        raw_config: dict
-            The raw config.
-        gym_configs: list<dict>
-            The gym configs
-
-        Returns
-        -------
-        config: dict
-            The update config.
-        """
-
-        config = self.update(raw_config) if raw_config else self.get_default()
-        if gym_configs:
-            config["gym_configs"] = [self.config_gym(g) for g in gym_configs]
-        return config
-
-    def get_default(self) -> dict:
-        """Get the default config"""
-
-        raise NotImplementedError("get_default is not implemented in QuantizeConfiger")
-
-    def update(self, raw_config: dict) -> dict:
-        """Config the raw config
-
-        Parameters
-        ----------
-        raw_config: dict
+        gym_config: dict
             The raw config.
 
         Returns
         -------
-        config: dict
+        gym_config: dict
             The update config.
         """
 
-        return raw_config
-
-    def config_gym(self, raw_config: Union[dict, str]) -> dict:
-        """Config the gym config
-
-        Parameters
-        ----------
-        raw_config: dict
-            The raw config.
-
-        Returns
-        -------
-        config: dict
-            The update config.
-        """
-
-        if isinstance(raw_config, dict):
-            return raw_config
-        if raw_config == "default":
+        if isinstance(gym_config, dict):
+            return gym_config
+        if gym_config == "default":
             return {
                 "env": {
                     "executors": {
@@ -99,7 +58,7 @@ class QuantizeConfiger(object):
                 "agent": {"agent_type": "search.grid", "executors": {}},
             }
         else:
-            raise TypeError("Unexpected gym config " + str(raw_config))
+            raise TypeError("Unexpected gym config " + str(gym_config))
 
     @classmethod
     def tool_type(cls):
@@ -110,8 +69,14 @@ class QuantizeConfiger(object):
 class DefaultQuantizeConfiger(QuantizeConfiger):
     """Default configer for quantize"""
 
-    def get_default(self) -> dict:
-        """Get the default config"""
+    def config_tool(self) -> dict:
+        """Get the default config of tool
+
+        Returns
+        -------
+        config: dict
+            The default config.
+        """
 
         op_types = [
             "nn.conv1d",

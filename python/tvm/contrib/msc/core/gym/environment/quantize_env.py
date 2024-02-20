@@ -30,7 +30,7 @@ class QuantizeEnv(BaseEnv):
     def _init_tool(self) -> BaseTool:
         """Get the main tool"""
 
-        plan_file = self._runner.apply_tool(ToolType.QUANTIZER, self._data_loader)
+        plan_file = self._runner.make_plan(ToolType.QUANTIZER, self._data_loader)
         self._meta_plan = msc_utils.load_dict(plan_file)
         os.remove(plan_file)
         return self._runner.get_tool(ToolType.QUANTIZER)
