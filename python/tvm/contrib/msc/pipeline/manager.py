@@ -912,7 +912,7 @@ class BaseManager(object):
 
         config = self._config["dataset"].get(name, self._config["dataset"][MSCStage.PREPARE])
         source_loader = config.get("loader")
-        max_batch = config.get("max_batch", 5)
+        max_batch = config.get("max_batch", -1)
         assert source_loader, "Dataset loader should be given for msc pipeline"
         if source_loader == "from_random":
             max_batch = max(max_batch, 5)

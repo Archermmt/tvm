@@ -31,6 +31,7 @@ import torch.optim as optim
 
 from tvm.contrib.msc.pipeline import TorchWrapper
 from tvm.contrib.msc.core.tools import ToolType
+from tvm.contrib.msc.core.utils.message import MSCStage
 from _resnet import resnet50
 from utils import *
 
@@ -61,8 +62,8 @@ parser.add_argument("--train_epoch", type=int, default=5, help="The epoch for tr
 args = parser.parse_args()
 
 
-def get_config(loader):
-    tools = []
+def get_config(calib_loader, train_loader):
+    tools, dataset = [], {MSCStage.PREPARE: {"loader": calib_loader}}
     if args.prune:
         config = {"gym_configs": ["default"]} if args.gym else "default"
         tools.append((ToolType.PRUNER, config))
@@ -70,23 +71,34 @@ def get_config(loader):
         config = {"gym_configs": ["default"]} if args.gym else "default"
         tools.append((ToolType.QUANTIZER, config))
     if args.distill:
-        tools.append((ToolType.DISTILLER, "default"))
+        config = {
+            "options": {"optimizer": "adam", "opt_config": {"lr": 0.0000001, "weight_decay": 0.08}}
+        }
+        tools.append((ToolType.DISTILLER, config))
+        dataset[MSCStage.DISTILL] = {"loader": train_loader}
     return TorchWrapper.create_config(
         inputs=[("input", [args.test_batch, 3, 32, 32], "float32")],
         outputs=["output"],
         compile_type=args.compile_type,
-        dataset={"prepare": {"loader": loader}},
+        dataset=dataset,
         tools=tools,
         skip_config={"all": "check"},
+        verbose="debug:1",
     )
 
 
 if __name__ == "__main__":
     trainloader, testloader = get_dataloaders(args.dataset, args.train_batch, args.test_batch)
 
-    def _get_datas():
+    def _get_calib_datas():
         for i, (inputs, _) in enumerate(testloader, 0):
             if i >= args.calibrate_iter > 0:
+                break
+            yield {"input": inputs.detach().cpu().numpy()}
+
+    def _get_train_datas():
+        for i, (inputs, _) in enumerate(trainloader, 0):
+            if i >= args.train_iter > 0:
                 break
             yield {"input": inputs.detach().cpu().numpy()}
 
@@ -97,7 +109,7 @@ if __name__ == "__main__":
     acc = eval_model(model, testloader, max_iter=args.test_iter)
     print("Baseline acc: " + str(acc))
 
-    model = TorchWrapper(model, get_config(_get_datas))
+    model = TorchWrapper(model, get_config(_get_calib_datas, _get_train_datas))
 
     # export to dump meta model
     # model.export()
