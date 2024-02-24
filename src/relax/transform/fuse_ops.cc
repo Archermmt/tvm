@@ -1238,10 +1238,14 @@ class CompositeFunctionAnnotator : public ExprMutator {
 
   Expr VisitExpr_(const FunctionNode* func_node) final {
     Function f_inner = Downcast<Function>(ExprMutator::VisitExpr_(func_node));
-    auto composite_name = func_node->GetAttr<String>(attr::kComposite);
+
+    if (!func_node->GetAttr<String>(attr::kComposite)) {
+      // This lambda function doesn't have `attr::kComposite`, so it
+      // was not produced by FuseOps.
+      return std::move(f_inner);
+    }
 
     f_inner = WithoutAttr(std::move(f_inner), tvm::relax::attr::kPrimitive);
-    ICHECK(composite_name);
 
     Array<Var> param_vars;
     Array<Expr> params;
@@ -1282,7 +1286,14 @@ IRModule FuseOpsByPattern(const tvm::Array<transform::FusionPattern>& patterns, 
                                               pattern->annotation_patterns,
                                               pattern->check.value_or(nullptr), entry.second,
                                               &arena, pattern->attrs_getter.value_or(nullptr));
-      group_map.insert(map.begin(), map.end());
+      for (const auto& [key, value] : map) {
+        CHECK(!group_map.count(key))
+            << "ValueError: "
+            << "IRModule is invalid.  "
+            << "The object " << GetRef<ObjectRef>(key) << " appears in multiple partitions, "
+            << "which can occur when the IRModule was not single-site assignment";
+        group_map.insert({key, value});
+      }
     }
     mod = MakeGroupedFunctions(mod, group_map, /*lift_constants*/ !bind_constants);
   }
