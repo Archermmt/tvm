@@ -39,7 +39,10 @@ class BaseDistiller(BaseTool):
 
         self._max_iter = self._options.get("max_iter", 5)
         self._save_step = self._options.get("save_step", 50)
-        self._weights_folder = msc_utils.get_weights_dir().create_dir("Distill")
+        if "weights_folder" in self._options:
+            self._weights_folder = msc_utils.msc_dir(self._options["weights_folder"])
+        else:
+            self._weights_folder = msc_utils.get_weights_dir().create_dir("Distill")
         self._weights_path = self._weights_folder.relpath("distill_{}.bin".format(self._max_iter))
         self._distilled = os.path.isfile(self._weights_path)
         return super().setup()
@@ -241,6 +244,17 @@ class BaseDistiller(BaseTool):
             plan.update(strategy(self, tensor, name, consumer, scope))
         self._plan[name][scope] = plan
         return tensor
+
+    def export_config(self, config: dict, folder: msc_utils.MSCDirectory):
+        """Export the config for tool"""
+
+        config = super().export_config(config, folder)
+        weights_path = self._weights_folder.relpath("distill_{}.bin".format(self._max_iter))
+        if os.path.isfile(weights_path):
+            weights_folder = folder.create_dir("weights")
+            weights_folder.copy(weights_path)
+            config["options"]["weights_folder"] = weights_folder
+        return config
 
     @property
     def distilled(self):

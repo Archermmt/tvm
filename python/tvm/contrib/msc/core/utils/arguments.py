@@ -19,7 +19,6 @@
 import os
 import json
 import copy
-import numpy as np
 from .info import MSCArray
 
 
@@ -116,7 +115,7 @@ def dump_dict(dict_obj: dict, flavor: str = "dmlc") -> str:
                     lines.append("{}{}:".format(indent * " ", k))
                     lines.extend(_get_lines(v, indent + 2))
                 elif isinstance(v, (tuple, list)) and len(str(k) + str(v)) > max_size:
-                    if all(isinstance(e, (int, float)) for e in v):
+                    if MSCArray.is_array(v):
                         lines.append("{}{}: {}".format(indent * " ", k, MSCArray(v).abstract()))
                     else:
                         lines.append("{}{}:".format(indent * " ", k))
@@ -128,7 +127,7 @@ def dump_dict(dict_obj: dict, flavor: str = "dmlc") -> str:
                                 lines.append("{}<{}>{}".format((indent + 2) * " ", idx, ele))
                 elif isinstance(v, bool):
                     lines.append("{}{}: {}".format(indent * " ", k, "true" if v else "false"))
-                elif isinstance(v, np.ndarray):
+                elif MSCArray.is_array(v):
                     lines.append("{}{}: {}".format(indent * " ", k, MSCArray(v).abstract()))
                 else:
                     lines.append("{}{}: {}".format(indent * " ", k, v))

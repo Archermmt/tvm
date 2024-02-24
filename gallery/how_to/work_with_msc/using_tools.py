@@ -54,11 +54,11 @@ parser.add_argument("--quantize", action="store_true", help="Whether to use quan
 parser.add_argument("--distill", action="store_true", help="Whether to use distiller for tool")
 parser.add_argument("--gym", action="store_true", help="Whether to use gym for tool")
 parser.add_argument("--test_batch", type=int, default=1, help="The batch size for test")
-parser.add_argument("--test_iter", type=int, default=50, help="The iter for test")
-parser.add_argument("--calibrate_iter", type=int, default=50, help="The iter for calibration")
-parser.add_argument("--train_batch", type=int, default=32, help="The batch size for train")
-parser.add_argument("--train_iter", type=int, default=50, help="The iter for train")
-parser.add_argument("--train_epoch", type=int, default=5, help="The epoch for train")
+parser.add_argument("--test_iter", type=int, default=2, help="The iter for test")
+parser.add_argument("--calibrate_iter", type=int, default=2, help="The iter for calibration")
+parser.add_argument("--train_batch", type=int, default=1, help="The batch size for train")
+parser.add_argument("--train_iter", type=int, default=2, help="The iter for train")
+parser.add_argument("--train_epoch", type=int, default=1, help="The epoch for train")
 args = parser.parse_args()
 
 
@@ -72,7 +72,10 @@ def get_config(calib_loader, train_loader):
         tools.append((ToolType.QUANTIZER, config))
     if args.distill:
         config = {
-            "options": {"optimizer": "adam", "opt_config": {"lr": 0.0000001, "weight_decay": 0.08}}
+            "options": {
+                "optimizer": "adam",
+                "opt_config": {"lr": 0.00000001, "weight_decay": 0.08},
+            }
         }
         tools.append((ToolType.DISTILLER, config))
         dataset[MSCStage.DISTILL] = {"loader": train_loader}
@@ -94,13 +97,13 @@ if __name__ == "__main__":
         for i, (inputs, _) in enumerate(testloader, 0):
             if i >= args.calibrate_iter > 0:
                 break
-            yield {"input": inputs.detach().cpu().numpy()}
+            yield {"input": inputs}
 
     def _get_train_datas():
         for i, (inputs, _) in enumerate(trainloader, 0):
             if i >= args.train_iter > 0:
                 break
-            yield {"input": inputs.detach().cpu().numpy()}
+            yield {"input": inputs}
 
     model = resnet50(pretrained=args.checkpoint)
     if torch.cuda.is_available():

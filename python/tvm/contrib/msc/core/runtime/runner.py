@@ -286,8 +286,8 @@ class BaseRunner(object):
             inputs, type(inputs)
         )
         assert all(
-            isinstance(data, np.ndarray) for data in inputs.values()
-        ), "Expected all inputs as np.ndarray"
+            msc_utils.is_array(data) for data in inputs.values()
+        ), "Expected all inputs as array like"
         inputs = {i["name"]: inputs[i["name"]] for i in model_inputs}
         outputs = self._call_runnable(self._runnable, inputs, self._device)
         if ret_type == "native":
@@ -1325,16 +1325,10 @@ class BYOCRunner(BaseRunner):
             The outputs in list.
         """
 
-        model_inputs = self.get_inputs()
-        if device == "cpu":
-            tvm_inputs = [tvm.nd.array(inputs[i["name"]]) for i in model_inputs]
-        elif device.startswith("cuda"):
-            dev_id = int(device.split(":")[1]) if ":" in device else 0
-            tvm_inputs = [
-                tvm.nd.array(inputs[i["name"]], device=tvm.cuda(dev_id)) for i in model_inputs
-            ]
-        else:
-            raise NotImplementedError("Unsupported device " + str(device))
+        input_names = [i["name"] for i in self.get_inputs()]
+        tvm_inputs = [
+            msc_utils.cast_array(inputs[i], MSCFramework.TVM, device) for i in input_names
+        ]
         return runnable["main"](*tvm_inputs)
 
     def _inspect_model(self) -> dict:

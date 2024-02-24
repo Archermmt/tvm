@@ -121,5 +121,5 @@ class DefaultQuantizeConfiger(QuantizeConfiger):
         }
 
     @classmethod
-    def tool_style(cls):
+    def config_style(cls):
         return "default"

@@ -529,7 +529,8 @@ class BaseTool(object):
         """Export the config for tool"""
 
         config = msc_utils.copy_dict(config)
-        config["plan_file"] = folder.create_dir("tools").copy(config["plan_file"])
+        plan_file = msc_utils.to_abs_path(config["plan_file"], msc_utils.get_config_dir())
+        config["plan_file"] = folder.create_dir("tools").copy(plan_file)
         return config
 
     def load_cache(self, cache_dir: msc_utils.MSCDirectory, cache_info: dict):

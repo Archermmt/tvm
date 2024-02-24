@@ -121,16 +121,10 @@ class TVMRunner(ModelRunner):
             The outputs in list.
         """
 
-        model_inputs = self.get_inputs()
-        if device == "cpu":
-            tvm_inputs = [tvm.nd.array(inputs[i["name"]]) for i in model_inputs]
-        elif device.startswith("cuda"):
-            dev_id = int(device.split(":")[1]) if ":" in device else 0
-            tvm_inputs = [
-                tvm.nd.array(inputs[i["name"]], device=tvm.cuda(dev_id)) for i in model_inputs
-            ]
-        else:
-            raise NotImplementedError("Unsupported device " + str(device))
+        input_names = [i["name"] for i in self.get_inputs()]
+        tvm_inputs = [
+            msc_utils.cast_array(inputs[i], MSCFramework.TVM, device) for i in input_names
+        ]
         return runnable(*tvm_inputs)
 
     def _device_enabled(self, device: str) -> bool:

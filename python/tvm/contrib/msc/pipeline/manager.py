@@ -66,7 +66,7 @@ class BaseManager(object):
             plugins = msc_utils.map_dict(plugins, _from_root_mark)
 
         # check stage
-        for stage in ["inputs", "outputs", "dataset", MSCStage.PREPARE, MSCStage.COMPILE]:
+        for stage in ["inputs", "outputs", "dataset", MSCStage.PREPARE]:
             assert stage in config, "{} should be given to run the pipeline".format(stage)
 
         MSCMap.reset()
@@ -199,15 +199,8 @@ class BaseManager(object):
         ]
         return {k: config[k] for k in ordered_keys if k in config}, debug_levels
 
-    def run_pipe(self, run_optimize: bool = True, run_compile: bool = True) -> dict:
+    def run_pipe(self) -> dict:
         """Run the pipeline and return object.
-
-        Parameters
-        ----------
-        run_optimize: bool
-            Whether to run the optimize.
-        run_compile: bool
-            Whether to run the compile.
 
         Returns
         -------
@@ -221,9 +214,9 @@ class BaseManager(object):
             self.parse()
             if MSCStage.BASELINE in self._config:
                 self.baseline()
-            if run_optimize and MSCStage.OPTIMIZE in self._config:
+            if MSCStage.OPTIMIZE in self._config:
                 self.optimize()
-            if run_compile:
+            if MSCStage.COMPILE in self._config:
                 self.compile()
         except Exception as exc:  # pylint: disable=broad-exception-caught
             err_msg = "Pipeline failed:{}\nTrace: {}".format(exc, traceback.format_exc())
@@ -608,9 +601,10 @@ class BaseManager(object):
                 hooks.append({"hook": "update_weights", "weights_path": ckpt_path})
                 if "profile" in config[MSCStage.COMPILE]:
                     config[MSCStage.COMPILE]["profile"].setdefault("check", {})["err_rate"] = -1
-            for t_config in config.get("tools", []):
+            for idx, t_config in enumerate(config.get("tools", [])):
+                opt_config = self._config["tools"][idx]
                 tool = self.runner.get_tool(t_config["tool_type"])
-                t_config["tool_config"] = tool.export_config(t_config["tool_config"], folder)
+                t_config["tool_config"] = tool.export_config(opt_config["tool_config"], folder)
         # remove not serializable items
         if dump:
             remove_keys = {"workspace", "logger"}
@@ -912,7 +906,6 @@ class BaseManager(object):
 
         config = self._config["dataset"].get(name, self._config["dataset"][MSCStage.PREPARE])
         source_loader = config.get("loader")
-        max_batch = config.get("max_batch", -1)
         assert source_loader, "Dataset loader should be given for msc pipeline"
         if source_loader == "from_random":
             max_batch = max(max_batch, 5)
@@ -930,6 +923,7 @@ class BaseManager(object):
 
             loader, source_type = load_datas, "IOData"
         elif callable(source_loader):
+            max_batch = config.get("max_batch", -1)
 
             def get_source():
                 for idx, inputs in enumerate(source_loader()):

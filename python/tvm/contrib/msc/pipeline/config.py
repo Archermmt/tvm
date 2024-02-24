@@ -64,11 +64,14 @@ def config_tool(tool_type: str, raw_config: Union[dict, str]) -> dict:
     """
 
     if isinstance(raw_config, dict):
-        tool_style = raw_config.get("tool_style", "default")
+        if "config_style" in raw_config:
+            config_style = raw_config.pop("config_style")
+        else:
+            config_style = "default"
     else:
-        tool_style, raw_config = raw_config, None
-    configer_cls = msc_utils.get_registered_tool_configer(tool_type, tool_style)
-    assert configer_cls, "Can not find configer for {}:{}".format(tool_type, tool_style)
+        config_style, raw_config = raw_config, None
+    configer_cls = msc_utils.get_registered_tool_configer(tool_type, config_style)
+    assert configer_cls, "Can not find configer for {}:{}".format(tool_type, config_style)
     return {"tool_type": tool_type, **configer_cls().config(raw_config)}
 
 
