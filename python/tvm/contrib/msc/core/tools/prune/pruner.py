@@ -524,6 +524,24 @@ class BasePruner(WeightTool):
         self._plan = {n: c for n, c in self._plan.items() if c["in_indices"] or c["out_indices"]}
         return super().finalize()
 
+    def export_config(self, config: dict, folder: msc_utils.MSCDirectory) -> dict:
+        """Export the config for tool
+
+        Parameters
+        -------
+        config: dict
+            The source config.
+        folder: MSCDirectory
+            The export folder.
+
+        Returns
+        -------
+        config: dict
+            The exported config.
+        """
+
+        return {}
+
     @classmethod
     def tool_type(cls):
         return ToolType.PRUNER

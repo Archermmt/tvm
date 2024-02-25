@@ -19,7 +19,6 @@
 from typing import Dict, Optional, Any
 
 import tvm
-from tvm.relax.transform import BindParams
 from tvm.contrib.msc.core.ir import MSCGraph
 from tvm.contrib.msc.core import codegen as msc_codegen
 from tvm.contrib.msc.core import utils as msc_utils

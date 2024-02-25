@@ -776,9 +776,7 @@ class BaseRunner(object):
             The parameters from runtime.
         """
 
-        if self._trained:
-            return self._get_runtime_params()
-        return self._weights
+        return self._get_runtime_params()
 
     def _get_runtime_params(self) -> Dict[str, tvm.nd.array]:
         """Get the runtime parameters
@@ -1158,7 +1156,10 @@ class ModelRunner(BaseRunner):
         """
 
         build_folder = folder.create_dir("export_build", keep_history=False, cleanup=True)
-        return to_relax(self._graphs[0], self.get_runtime_params(), build_folder=build_folder)
+        module = to_relax(
+            self._graphs[0], self.get_runtime_params(), build_folder=build_folder, use_alias=False
+        )
+        return module
 
 
 class BYOCRunner(BaseRunner):

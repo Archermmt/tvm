@@ -21,8 +21,10 @@ import subprocess
 from typing import Dict, List, Optional, Any, Callable
 
 import tvm
-from tvm.relax.transform import BindParams
-from tvm.contrib.msc.core.ir import MSCGraph
+from tvm import relax
+from tvm.relax import PyExprVisitor
+from tvm.contrib.msc.core import transform as msc_transform
+from tvm.contrib.msc.core.ir import MSCGraph, MSCTensor
 from tvm.contrib.msc.core.frontend import from_relay
 from tvm.contrib.msc.core import utils as msc_utils
 
@@ -133,6 +135,7 @@ def to_relax(
     print_config: Optional[Dict[str, str]] = None,
     build_folder: msc_utils.MSCDirectory = None,
     plugin: Any = None,
+    use_alias: bool = True,
 ) -> tvm.IRModule:
     """Change MSCGraph to IRModule.
 
@@ -150,6 +153,8 @@ def to_relax(
         The folder for saving scripts and datas.
     plugin: PluginManager
         The plugin manager.
+    use_alias: bool
+        Whether to use alias for input.
 
     Returns
     -------
@@ -157,10 +162,27 @@ def to_relax(
         The IRModule of relax.
     """
 
-    inputs = [
-        tvm.relax.Var(i.alias, tvm.relax.TensorStructInfo(i.get_shape(), i.dtype_name))
-        for i in graph.get_inputs()
-    ]
+    @relax.expr_functor.visitor
+    class NamesGetter(PyExprVisitor):
+        """Visitor for get attributes in span"""
+
+        def get_names(self, expr: relax.Expr) -> dict:
+            self._names = {}
+            if isinstance(expr, relax.Expr):
+                self.visit_expr(expr)
+            elif isinstance(expr, relax.BindingBlock):
+                self.visit_binding_block(expr)
+            return self._names
+
+        def visit_var_binding_(self, binding: relax.VarBinding) -> None:
+            super().visit_var_binding_(binding)
+            self._names[binding.var.name_hint] = binding.var.name_hint
+
+    def _to_var(tensor: MSCTensor):
+        v_name = tensor.alias if use_alias else graph.find_producer(tensor).name
+        return tvm.relax.Var(
+            v_name, tvm.relax.TensorStructInfo(tensor.get_shape(), tensor.dtype_name)
+        )
 
     def _save_weights(folder: msc_utils.MSCDirectory):
         if weights:
@@ -169,23 +191,27 @@ def to_relax(
 
     # pylint: disable=unused-argument
     def _post_proc(mod: tvm.IRModule, folder: msc_utils.MSCDirectory) -> tvm.IRModule:
+        passes, var_names = [], NamesGetter().get_names(mod["main"])
         if weights:
-            mod = BindParams("main", weights)(mod)
-        return tvm.ir.transform.Sequential(
+            passes.append(msc_transform.BindNamedParams("main", weights))
+        # The canonicalization of relax variable bindings is not required
+        # for correctness.  It does, however, remove trivial `x = y`
+        # bindings, preventing test cases from depending on their
+        # presence.
+        passes.extend(
             [
-                # The canonicalization of relax variable bindings is not required
-                # for correctness.  It does, however, remove trivial `x = y`
-                # bindings, preventing test cases from depending on their
-                # presence.
+                msc_transform.SetExprName(var_names=var_names),
                 tvm.relax.transform.CanonicalizeBindings(),
                 tvm.relax.transform.ConvertToDataflow(min_size=1),
-            ],
-            name="tvm.contrib.msc.framework.tvm.codegen.to_relax_postproc",
+            ]
+        )
+        return tvm.ir.transform.Sequential(
+            passes, name="tvm.contrib.msc.core.codegen.to_relax_postproc"
         )(mod)
 
     source_getter = tvm.get_global_func("msc.framework.tvm.GetRelaxSources")
     codegen = CodeGen(graph, source_getter, codegen_config, print_config, build_folder)
-    model_args = inputs
+    model_args = [_to_var(i) for i in graph.get_inputs()]
     if plugin:
         model_args = model_args + [plugin]
     return codegen.load(model_args, pre_load=_save_weights, post_load=_post_proc)
@@ -226,31 +252,5 @@ def relay_to_relax(
         build_config=build_config,
         opt_config=opt_config,
     )
-
-    """    
-    source_getter = tvm.get_global_func("msc.framework.tvm.GetRelaxSources")
-    codegen = CodeGen(graph, source_getter, codegen_config={"from_relay": True})
-    inputs = [
-        tvm.relax.Var(i.alias, tvm.relax.TensorStructInfo(i.get_shape(), i.dtype_name))
-        for i in graph.get_inputs()
-    ]
-
-    # pylint: disable=unused-argument
-    def _post_proc(mod: tvm.IRModule, folder: msc_utils.MSCDirectory) -> tvm.IRModule:
-        mod = BindParams("main", weights)(mod)
-        return tvm.ir.transform.Sequential(
-            [
-                # The canonicalization of relax variable bindings is not required
-                # for correctness.  It does, however, remove trivial `x = y`
-                # bindings, preventing test cases from depending on their
-                # presence.
-                tvm.relax.transform.CanonicalizeBindings(),
-                tvm.relax.transform.ConvertToDataflow(min_size=1),
-            ],
-            name="tvm.contrib.msc.core.codegen.relay_to_relax_postproc",
-        )(mod)
-
-    return codegen.load(inputs, post_load=_post_proc)
-    """
 
     return to_relax(graph, weights, codegen_config={"from_relay": True})

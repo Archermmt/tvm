@@ -16,7 +16,6 @@
 # under the License.
 """tvm.contrib.msc.core.tools.track.tracker"""
 
-import os
 from typing import Any, List
 from tvm.contrib.msc.core.tools.tool import ToolType, BaseTool, ToolStrategy
 from tvm.contrib.msc.core import utils as msc_utils
@@ -55,7 +54,7 @@ class BaseTracker(BaseTool):
         """Get the plan"""
 
         self._saver.finalize()
-        return None
+        return {}
 
     def _execute_after_forward(self, output: Any) -> Any:
         """Execute after model forward

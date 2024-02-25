@@ -119,10 +119,7 @@ class BaseQuantizer(BaseTool):
         """
 
         if self._calibrated:
-            tensor_id = self.to_tensor_id(name, consumer)
-            if tensor_id not in self._plan:
-                return False
-            return self._plan.get(tensor_id, {}).get("nbits", 8) != -1
+            return self.to_tensor_id(name, consumer) in self._plan
         strategys = self._get_tensor_strategys(name, consumer)
         if not strategys:
             return False

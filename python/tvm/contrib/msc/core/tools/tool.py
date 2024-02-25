@@ -530,8 +530,21 @@ class BaseTool(object):
 
         self._graphs, self._weights = [], {}
 
-    def export_config(self, config: dict, folder: msc_utils.MSCDirectory):
-        """Export the config for tool"""
+    def export_config(self, config: dict, folder: msc_utils.MSCDirectory) -> dict:
+        """Export the config for tool
+
+        Parameters
+        -------
+        config: dict
+            The source config.
+        folder: MSCDirectory
+            The export folder.
+
+        Returns
+        -------
+        config: dict
+            The exported config.
+        """
 
         config = msc_utils.copy_dict(config)
         plan_file = msc_utils.to_abs_path(config["plan_file"], msc_utils.get_config_dir())
@@ -743,8 +756,6 @@ class BaseTool(object):
         if process is None:
             process = self._check_tensor(name, consumer)
             self._save_tensor_cache(name, consumer, "process", process)
-            if process and self.on_debug(3):
-                self._logger.debug("%sprocess tensor %s-%s", self.msg_mark(), name, consumer)
         if not process:
             return tensor
         new_tensor = self._process_tensor(tensor, name, consumer, scope, strategys)

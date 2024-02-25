@@ -245,10 +245,23 @@ class BaseDistiller(BaseTool):
         self._plan[name][scope] = plan
         return tensor
 
-    def export_config(self, config: dict, folder: msc_utils.MSCDirectory):
-        """Export the config for tool"""
+    def export_config(self, config: dict, folder: msc_utils.MSCDirectory) -> dict:
+        """Export the config for tool
 
-        return None
+        Parameters
+        -------
+        config: dict
+            The source config.
+        folder: MSCDirectory
+            The export folder.
+
+        Returns
+        -------
+        config: dict
+            The exported config.
+        """
+
+        return {}
 
     @property
     def distilled(self):
