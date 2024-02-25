@@ -596,21 +596,18 @@ class BaseManager(object):
                     config.pop(stage)
             if "profile" in config[MSCStage.COMPILE]:
                 config[MSCStage.COMPILE]["profile"].setdefault("check", {})["err_rate"] = -1
-            compile_tools = []
-            compile_type = config[MSCStage.COMPILE].get("run_type", self.model_type)
+            config["tools"] = []
             for tool in self._config.get("tools", []):
-                if not support_tool(tool, MSCStage.COMPILE, compile_type):
+                if not support_tool(tool, MSCStage.COMPILE, self._compile_type):
                     continue
                 run_tool = self.runner.get_tool(tool["tool_type"])
                 tool["tool_config"] = run_tool.export_config(tool["tool_config"], folder)
                 if tool["tool_config"]:
-                    compile_tools.append(tool)
+                    config["tools"].append(tool)
                 else:
                     self._logger.info(
                         "Skip compile with tool %s as no config exported", tool["tool_type"]
                     )
-            if compile_tools:
-                config["tools"] = compile_tools
         # remove not serializable items
         if dump:
             remove_keys = {"workspace", "logger"}
@@ -739,7 +736,7 @@ class BaseManager(object):
                     },
                     "verbose": self._verbose,
                 }
-                controller = create_controller(runner.stage, config, extra_config)
+                controller = create_controller(tool_stage, config, extra_config)
                 knowledge = controller.run()
             with open(plan_file, "w") as f:
                 f.write(json.dumps(knowledge, indent=2))

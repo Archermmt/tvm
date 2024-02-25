@@ -53,7 +53,7 @@ class PruneConfiger(ToolConfiger):
                         }
                     },
                 },
-                "agent": {"agent_type": "search.grid", "executors": {}},
+                "agent": {"role_type": "search.grid", "executors": {}},
             }
         else:
             raise TypeError("Unexpected gym config " + str(raw_config))

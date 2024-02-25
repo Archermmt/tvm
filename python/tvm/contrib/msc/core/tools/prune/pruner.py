@@ -486,8 +486,8 @@ class BasePruner(WeightTool):
             strategy = self._get_tensor_strategy(w_node.name, consumer)
             tasks.append(
                 {
+                    "methods": {"tensor": strategy.meta},
                     "tensor_names": [self.to_tensor_id(w_node.name, consumer)],
-                    **strategy.meta,
                 }
             )
         return tasks

@@ -480,8 +480,8 @@ class BaseTool(object):
                     method_name, method_kwargs = method_def, {}
                 elif isinstance(method_def, dict):
                     assert "method_name" in method_def, "Can not find method_name"
-                    method_name = method_def.pop("method_name")
-                    method_kwargs = method_def
+                    method_name = method_def["method_name"]
+                    method_kwargs = {k: v for k, v in method_def.items() if k != "method_name"}
                 else:
                     raise TypeError(
                         "Only support string and dict as method define, get " + str(method_def)
@@ -507,7 +507,7 @@ class BaseTool(object):
                     marks = ["default." + str(t_type)]
                 for mark, stage in product(marks, strategy.get("stages", ["default"])):
                     if mark not in strategys:
-                        strategys[mark] = ToolStrategy(mark, t_type, self._stage, meta_strategy)
+                        strategys[mark] = ToolStrategy(mark, t_type, self._stage, method_def)
                     strategys[mark].add_executor(
                         stage, ToolExecutor(method_name, method, copy.deepcopy(method_kwargs))
                     )

@@ -120,7 +120,7 @@ def dump_dict(dict_obj: dict, flavor: str = "dmlc") -> str:
                     else:
                         lines.append("{}{}:".format(indent * " ", k))
                         for idx, ele in enumerate(v):
-                            if len(str(ele)) > max_size:
+                            if isinstance(ele, dict) and len(str(ele)) > max_size:
                                 lines.append("{}[{}.{}]:".format((indent + 2) * " ", k, idx))
                                 lines.extend(_get_lines(ele, indent + 4))
                             else:

@@ -68,10 +68,10 @@ class DefaultConfiger(BaseConfiger):
 
         config = msc_utils.copy_dict(raw_config)
         assert "env" in config and "agent" in config, "env and agent should be given to run gym"
-        if "env_type" not in config["env"]:
-            config["env"]["env_type"] = self._stage + ".default"
-        if "agent_type" not in config["agent"]:
-            config["agent"]["agent_type"] = "search.grid"
+        if "role_type" not in config["env"]:
+            config["env"]["role_type"] = self._stage + ".default"
+        if "role_type" not in config["agent"]:
+            config["agent"]["role_type"] = "search.grid"
         if "executors" not in config["env"]:
             config["env"]["executors"] = {}
         # update executors
