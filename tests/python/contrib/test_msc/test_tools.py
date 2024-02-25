@@ -144,7 +144,7 @@ def get_tools(tool_type, use_distill=False, run_type=MSCFramework.MSC):
                 }
             ],
         }
-        tools.append({"tool_type": ToolType.TRACKER, "tool_config": config})
+        tools.append({"tool_type": ToolType.TRACKER, "tool_config": config, "apply_once": True})
     if use_distill:
         config = {
             "plan_file": "msc_distiller.json",

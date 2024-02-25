@@ -63,7 +63,7 @@ class TrackMethod(object):
         config = {"info": msc_utils.inspect_array(data)}
         # save the data
         tracker._saver.save_datas({name: data}, tracker._forward_cnt)
-        tracker.debug_tensor(data, name, consumer, "save")
+        tracker.debug_tensors(name, consumer, "save_compares", {"save": data})
         # compare datas
         if tracker._stage in compare_to:
             diffs = {}

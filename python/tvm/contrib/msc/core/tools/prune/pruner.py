@@ -215,12 +215,7 @@ class BasePruner(WeightTool):
                 strategys = self._get_tensor_strategys(lazy_name, info["consumer"])
                 self._prune_tensor(lazy_name, info["consumer"], strategys)
                 t_mark = ".".join([s.get_executor().name for s in strategys])
-                self.debug_tensor(
-                    self.find_tensor(lazy_name),
-                    lazy_name,
-                    consumer,
-                    "lazy processed({})".format(t_mark),
-                )
+                self.debug_tensors(name, consumer, t_mark, {"lazy": self.find_tensor(lazy_name)})
                 lazy_pruned.add(lazy_name)
         if lazy_pruned:
             self._unpruned_tensors = {

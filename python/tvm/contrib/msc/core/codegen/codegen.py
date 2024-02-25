@@ -126,6 +126,71 @@ class CodeGen(object):
         return obj
 
 
+def to_relax(
+    graph: MSCGraph,
+    weights: Optional[Dict[str, tvm.nd.array]] = None,
+    codegen_config: Optional[Dict[str, str]] = None,
+    print_config: Optional[Dict[str, str]] = None,
+    build_folder: msc_utils.MSCDirectory = None,
+    plugin: Any = None,
+) -> tvm.IRModule:
+    """Change MSCGraph to IRModule.
+
+    Parameters
+    ----------
+    graph: tvm.contrib.msc.core.ir.MSCGraph
+        The translated graph.
+    weights: dict of <string:tvm.ndarray>
+        The parameters of the IRModule.
+    codegen_config: dict
+        The config for codegen.
+    print_config: dict
+        The config for print.
+    build_folder: MSCDirectory
+        The folder for saving scripts and datas.
+    plugin: PluginManager
+        The plugin manager.
+
+    Returns
+    -------
+    mod: IRModule
+        The IRModule of relax.
+    """
+
+    inputs = [
+        tvm.relax.Var(i.alias, tvm.relax.TensorStructInfo(i.get_shape(), i.dtype_name))
+        for i in graph.get_inputs()
+    ]
+
+    def _save_weights(folder: msc_utils.MSCDirectory):
+        if weights:
+            with open(folder.relpath(graph.name + "_params.bin"), "wb") as f_params:
+                f_params.write(tvm.runtime.save_param_dict(weights))
+
+    # pylint: disable=unused-argument
+    def _post_proc(mod: tvm.IRModule, folder: msc_utils.MSCDirectory) -> tvm.IRModule:
+        if weights:
+            mod = BindParams("main", weights)(mod)
+        return tvm.ir.transform.Sequential(
+            [
+                # The canonicalization of relax variable bindings is not required
+                # for correctness.  It does, however, remove trivial `x = y`
+                # bindings, preventing test cases from depending on their
+                # presence.
+                tvm.relax.transform.CanonicalizeBindings(),
+                tvm.relax.transform.ConvertToDataflow(min_size=1),
+            ],
+            name="tvm.contrib.msc.framework.tvm.codegen.to_relax_postproc",
+        )(mod)
+
+    source_getter = tvm.get_global_func("msc.framework.tvm.GetRelaxSources")
+    codegen = CodeGen(graph, source_getter, codegen_config, print_config, build_folder)
+    model_args = inputs
+    if plugin:
+        model_args = model_args + [plugin]
+    return codegen.load(model_args, pre_load=_save_weights, post_load=_post_proc)
+
+
 def relay_to_relax(
     relay_mod: tvm.IRModule,
     params: Optional[Dict[str, tvm.nd.array]] = None,
@@ -133,7 +198,7 @@ def relay_to_relax(
     build_config: Optional[Dict[str, str]] = None,
     opt_config: Optional[Dict[str, str]] = None,
 ) -> tvm.IRModule:
-    """Change IRModule to MSCGraph.
+    """Change relay IRModule to relax MSCGraph.
 
     Parameters
     ----------
@@ -161,6 +226,8 @@ def relay_to_relax(
         build_config=build_config,
         opt_config=opt_config,
     )
+
+    """    
     source_getter = tvm.get_global_func("msc.framework.tvm.GetRelaxSources")
     codegen = CodeGen(graph, source_getter, codegen_config={"from_relay": True})
     inputs = [
@@ -184,3 +251,6 @@ def relay_to_relax(
         )(mod)
 
     return codegen.load(inputs, post_load=_post_proc)
+    """
+
+    return to_relax(graph, weights, codegen_config={"from_relay": True})

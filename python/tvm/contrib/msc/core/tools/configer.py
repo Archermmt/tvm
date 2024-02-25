@@ -47,6 +47,8 @@ class ToolConfiger(object):
             config["tool_config"] = self.config_tool()
         if self.run_type:
             config["run_type"] = self.run_type
+        if self.apply_once:
+            config["apply_once"] = self.apply_once
         return config
 
     def config_tool(self) -> dict:
@@ -96,6 +98,10 @@ class ToolConfiger(object):
     @property
     def run_type(self):
         return ""
+
+    @property
+    def apply_once(self):
+        return False
 
     @classmethod
     def tool_type(cls):

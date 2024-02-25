@@ -189,7 +189,7 @@ class TensorRTQuantizerFactory(object):
                         {name: data.asnumpy() for name, data in step_context["datas"].items()}
                     )
                     for name, data in step_context["datas"].items():
-                        self.debug_tensor(data, name, "any", "ctx_gathered")
+                        self.debug_tensors(name, "any", "ctx_gather", {"gather": data})
                 super()._execute_before_forward(step_context)
 
             def _quantize_tensor(

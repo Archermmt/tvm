@@ -38,11 +38,6 @@ class BaseTracker(BaseTool):
         if self._stage.endswith(suffix):
             self.change_stage(self._stage[: -len(suffix)])
 
-        # filter plan
-        def _filter_info(info: dict) -> dict:
-            return {k: v for k, v in info.items() if k != self._stage}
-
-        self._plan = {k: _filter_info(v) for k, v in self._plan.items()}
         data_folder = msc_utils.get_dataset_dir().create_dir("Track")
         self._loaders = {}
         for folder in data_folder.listdir():
@@ -60,14 +55,7 @@ class BaseTracker(BaseTool):
         """Get the plan"""
 
         self._saver.finalize()
-        return super().finalize()
-
-    def export_config(self, config: dict, folder: msc_utils.MSCDirectory):
-        """Export the config for tool"""
-
-        config = msc_utils.copy_dict(config)
-        config["plan_file"] = os.path.basename(config["plan_file"])
-        return config
+        return None
 
     def _execute_after_forward(self, output: Any) -> Any:
         """Execute after model forward

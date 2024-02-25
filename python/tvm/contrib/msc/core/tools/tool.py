@@ -327,7 +327,12 @@ class BaseTool(object):
         self._debug_level = debug_level
         self._verbose_step = verbose_step
         self._logger = logger or msc_utils.get_global_logger()
-        title = "{}.SETUP({} @ {})".format(self.tool_type().upper(), self._stage, self.framework())
+        title = "{}.{}({} @ {})".format(
+            self.tool_type().upper(),
+            "APPLY_PLAN" if self._plan else "MAKE_PLAN",
+            self._stage,
+            self.framework(),
+        )
         self._logger.info(msc_utils.msg_block(title, self.setup(), width=0))
         if self._debug_level >= 3 and self._plan:
             title = "{}.PLAN".format(self.tool_type().upper())
@@ -530,7 +535,8 @@ class BaseTool(object):
 
         config = msc_utils.copy_dict(config)
         plan_file = msc_utils.to_abs_path(config["plan_file"], msc_utils.get_config_dir())
-        config["plan_file"] = folder.create_dir("tools").copy(plan_file)
+        if os.path.isfile(plan_file):
+            config["plan_file"] = folder.create_dir("tools").copy(plan_file)
         return config
 
     def load_cache(self, cache_dir: msc_utils.MSCDirectory, cache_info: dict):
@@ -731,7 +737,7 @@ class BaseTool(object):
             t_mark += "." + scope
         cached_tensor = self._get_processed(name, consumer, t_mark)
         if cached_tensor is not None:
-            self.debug_tensor(cached_tensor, name, consumer, "cached({})".format(t_mark))
+            self.debug_tensors(name, consumer, t_mark, {"cached": cached_tensor})
             return cached_tensor
         process = self._get_tensor_cache(name, consumer, "process")
         if process is None:
@@ -741,10 +747,12 @@ class BaseTool(object):
                 self._logger.debug("%sprocess tensor %s-%s", self.msg_mark(), name, consumer)
         if not process:
             return tensor
-        tensor = self._process_tensor(tensor, name, consumer, scope, strategys)
-        self._save_processed(name, consumer, tensor, t_mark)
-        self.debug_tensor(tensor, name, consumer, "processed({})".format(t_mark))
-        return tensor
+        new_tensor = self._process_tensor(tensor, name, consumer, scope, strategys)
+        self._save_processed(name, consumer, new_tensor, t_mark)
+        if msc_utils.is_array(tensor) and id(new_tensor) != id(tensor):
+            tensors = {"pre": tensor, "post": new_tensor, "diff": tensor - new_tensor}
+            self.debug_tensors(name, consumer, t_mark, tensors)
+        return new_tensor
 
     def _support_scope(self, scope: str) -> bool:
         """Check if the scope si supported
@@ -1025,34 +1033,31 @@ class BaseTool(object):
         title += "({}) ".format(self._stage)
         return title
 
-    def debug_tensor(
-        self, tensor: Any, name: str, consumer: str, t_mark: str, debug_level: int = 3
+    def debug_tensors(
+        self, name: str, consumer: str, t_mark: str, tensors: Dict[str, Any], debug_level: int = 3
     ) -> str:
         """Get the debug tensor info
 
         Parameters
         -------
-        tensor: array_like
-            The tensor
         name: str
             The name of tensor.
         consumer: str
             The name of consumer.
         t_mark: str
             The mark of tensor.
+        tensors: dict<str,array_like>
+            The tensors.
         debug_level: int
            The given debug_level.
         """
 
         if self.on_debug(debug_level):
-            self._logger.debug(
-                "%s%s %s-%s: %s",
-                self.msg_mark(),
-                t_mark,
-                name,
-                consumer,
-                msc_utils.inspect_array(tensor),
+            title = "{}{}-{}({})".format(self.msg_mark(), name, consumer, t_mark)
+            tensor_des = "\n  ".join(
+                ["{:6s}:{}".format(k, msc_utils.inspect_array(v)) for k, v in tensors.items()]
             )
+            self._logger.debug("%s\n  %s", title, tensor_des)
 
     def _infer_graph_id(self, kwargs: dict) -> int:
         """Infer graph id from kwargs
@@ -1263,41 +1268,37 @@ class BaseTool(object):
 
         tensor_id = self.to_tensor_id(name, consumer)
         mark = "strategy.{}".format(self._stage)
-
-        def _check_strategy(s_ref):
-            return s_ref in self._strategys and self._strategys[s_ref].support_stage(self._stage)
-
         if mark not in self._tensor_cache.get(tensor_id, {}):
             strategys = []
+
+            def _add_strategy(ref):
+                if ref in self._strategys and self._strategys[ref].support_stage(self._stage):
+                    strategys.append(self._strategys[ref])
+                    return True
+                return False
+
             tensor_strategy = self._strategys.get(tensor_id)
             if tensor_strategy and tensor_strategy.support_stage(self._stage):
                 strategys.append(tensor_strategy)
             elif self.is_weight(name):
                 consumer = self.find_node(consumer)
-                w_type = consumer.weight_type(name)
-                for ref in [consumer.name, consumer.optype, "default"]:
-                    if _check_strategy(ref + "." + w_type):
-                        strategys.append(self._strategys[ref + "." + w_type])
-                        break
-                    if _check_strategy(ref + ".weights"):
-                        strategys.append(self._strategys[ref + ".weights"])
-                        break
+                for w_type in [consumer.weight_type(name), "weights"]:
+                    for ref in [consumer.name, consumer.optype, "default"]:
+                        if not strategys and _add_strategy(ref + "." + w_type):
+                            break
             elif consumer == "exit":
                 producer = self.find_producer(name)
                 for ref in [producer.name, producer.optype, "exit", "default"]:
-                    if _check_strategy(ref + ".output"):
-                        strategys.append(self._strategys[ref + ".output"])
+                    if _add_strategy(ref + ".output"):
                         break
             else:
                 producer = self.find_producer(name)
                 for ref in [producer.name, producer.optype, "default"]:
-                    if _check_strategy(ref + ".output"):
-                        strategys.append(self._strategys[ref + ".output"])
+                    if _add_strategy(ref + ".output"):
                         break
                 consumer = self.find_node(consumer)
                 for ref in [consumer.name, consumer.optype, "default"]:
-                    if _check_strategy(ref + ".input"):
-                        strategys.append(self._strategys[ref + ".input"])
+                    if _add_strategy(ref + ".input"):
                         break
             self._save_tensor_cache(name, consumer, mark, strategys)
         return self._get_tensor_cache(name, consumer, mark)

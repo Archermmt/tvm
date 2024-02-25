@@ -50,9 +50,21 @@ class BaseManager(object):
         The plugins for pipeline.
     root: str
         The root path for files.
+    run_optimize: bool
+        Whether to run optimize.
+    run_compile: bool
+        Whether to run compile.
     """
 
-    def __init__(self, model: Any, config: dict, plugins: dict = None, root: str = None):
+    def __init__(
+        self,
+        model: Any,
+        config: dict,
+        plugins: dict = None,
+        root: str = None,
+        run_optimize: bool = True,
+        run_compile: bool = True,
+    ):
         # change path to root path
         if root:
 
@@ -66,7 +78,7 @@ class BaseManager(object):
             plugins = msc_utils.map_dict(plugins, _from_root_mark)
 
         # check stage
-        for stage in ["inputs", "outputs", "dataset", MSCStage.PREPARE]:
+        for stage in ["inputs", "outputs", "dataset", MSCStage.PREPARE, MSCStage.COMPILE]:
             assert stage in config, "{} should be given to run the pipeline".format(stage)
 
         MSCMap.reset()
@@ -91,15 +103,21 @@ class BaseManager(object):
             self._logger = msc_utils.set_global_logger(self._verbose, log_path)
         self._optimized, self._compiled = False, False
         msc_utils.time_stamp(MSCStage.SETUP)
-        self._logger.info(msc_utils.msg_block("SETUP", self.setup(config)))
+        self._logger.info(
+            msc_utils.msg_block("SETUP", self.setup(config, run_optimize, run_compile))
+        )
 
-    def setup(self, config: dict) -> dict:
+    def setup(self, config: dict, run_optimize: bool = True, run_compile: bool = True) -> dict:
         """Setup the manager
 
         Parameters
         ----------
         config: dict
             The config for manager.
+        run_optimize: bool
+            Whether to run optimize.
+        run_compile: bool
+            Whether to run compile.
 
         Returns
         -------
@@ -117,6 +135,10 @@ class BaseManager(object):
             for name, plugin in self._plugins[self._model_type].get_ops_info().items():
                 _ffi_api.RegisterPlugin(name, msc_utils.dump_dict(plugin))
         self._config, self._debug_levels = self.update_config(config)
+        if not run_optimize and MSCStage.OPTIMIZE in self._config:
+            self._config.pop(MSCStage.OPTIMIZE)
+        if not run_compile and MSCStage.COMPILE in self._config:
+            self._config.pop(MSCStage.COMPILE)
         self._tools_config = []
         self._relax_mod, self._runner = None, None
         self._sample_inputs = None
@@ -417,6 +439,9 @@ class BaseManager(object):
             if not support_tool(tool, stage, run_type):
                 continue
             self._apply_tool(tool, stage)
+            if tool.get("apply_once", False):
+                self._logger.debug("Remove apply once tool %s", tool["tool_type"])
+                self._tools_config = self._tools_config[:-1]
 
     def summary(self, err_msg=None):
         """Summary the pipeline.
@@ -440,9 +465,7 @@ class BaseManager(object):
         self._report["duration"] = msc_utils.get_duration()
         return self._report
 
-    def export(
-        self, path: str = None, dump: bool = True, bind_params: bool = False
-    ) -> Union[str, dict]:
+    def export(self, path: str = None, dump: bool = True) -> Union[str, dict]:
         """Export the pipeline
 
         Parameters
@@ -451,8 +474,6 @@ class BaseManager(object):
             The export path.
         dump: bool
             Whether to dump the info.
-        bind_params: bool
-            Whether to bind parameters for optimize.
 
         Returns
         -------
@@ -465,22 +486,23 @@ class BaseManager(object):
             folder, dump = msc_utils.msc_dir(path.replace(".tar.gz", ""), keep_history=False), True
         else:
             folder = msc_utils.msc_dir(path, keep_history=False)
+        if dump:
+            plugins = export_plugins(self._plugins, folder.create_dir("plugin"))
+        else:
+            plugins = self._plugins
 
         def _to_root_mark(val):
-            if isinstance(val, str) and folder.path in val:
+            if isinstance(val, str) and folder.path != val and folder.path in val:
                 return val.replace(folder.path, MSCKey.ROOT_MARK)
             return val
 
         pipeline = {
-            "model": self.export_model(folder.create_dir("model"), dump, bind_params),
-            "config": self.export_config(folder, dump, bind_params),
+            "model": self.export_model(folder.create_dir("model"), dump),
+            "config": self.export_config(folder, dump),
+            "plugins": plugins,
+            "root": folder.path,
         }
-        if dump:
-            pipeline["plugins"] = export_plugins(self._plugins, folder.create_dir("plugin"))
-        else:
-            pipeline["plugins"] = self._plugins
         pipeline = msc_utils.map_dict(pipeline, _to_root_mark)
-        pipeline["root"] = folder.path
         if not dump:
             return pipeline
         with open(folder.relpath("pipeline.json"), "w") as f:
@@ -489,9 +511,7 @@ class BaseManager(object):
             msc_utils.pack_folder(path.replace(".tar.gz", ""), "tar")
         return path
 
-    def export_model(
-        self, folder: msc_utils.MSCDirectory, dump: bool = True, bind_params: bool = False
-    ) -> Any:
+    def export_model(self, folder: msc_utils.MSCDirectory, dump: bool = True) -> Any:
         """Export the model
 
         Parameters
@@ -500,8 +520,6 @@ class BaseManager(object):
             The export folder.
         dump: bool
             Whether to dump info.
-        bind_params: bool
-            Whether to bind parameters for optimize.
 
         Returns
         -------
@@ -512,12 +530,7 @@ class BaseManager(object):
         if self._compiled:
             return self._runner._save_runnable(folder) if dump else self._runner.runnable
         if self._optimized:
-            module, params = self._relax_mod, self._runner.get_runtime_params()
-            if params and bind_params:
-                module = msc_transform.UpdateConsts(params)(module)
-            elif params:
-                with open(folder.relpath("checkpoint.bin"), "wb") as f:
-                    f.write(tvm.runtime.save_param_dict(params))
+            module = self._runner.export_module(folder)
             if not dump:
                 return module
             path = folder.relpath("model.json")
@@ -528,9 +541,7 @@ class BaseManager(object):
             return self._model
         return self._get_runner_cls(self._model_type).dump_nativate(self._model, folder)
 
-    def export_config(
-        self, folder: msc_utils.MSCDirectory, dump: bool = True, bind_params: bool = False
-    ) -> dict:
+    def export_config(self, folder: msc_utils.MSCDirectory, dump: bool = True) -> dict:
         """Export the config
 
         Parameters
@@ -539,8 +550,6 @@ class BaseManager(object):
             The export folder.
         dump: bool
             Whether to dump info.
-        bind_params: bool
-            Whether to bind parameters for optimize.
 
         Returns
         -------
@@ -581,30 +590,22 @@ class BaseManager(object):
             k: _save_dataset(k, v, dump) for k, v in self._config["dataset"].items()
         }
         if self._optimized:
-            config.pop(MSCStage.OPTIMIZE)
             config["model_type"] = MSCFramework.TVM
-            if MSCStage.BASELINE in config:
-                config[MSCStage.BASELINE]["run_type"] = MSCFramework.TVM
-            ckpt_path = folder.create_dir("model").relpath("checkpoint.bin")
-            if bind_params:
-                for stage in [MSCStage.BASELINE, MSCStage.COMPILE]:
-                    if stage not in config or "profile" not in config[stage]:
-                        continue
-                    config[stage]["profile"].setdefault("check", {})["err_rate"] = -1
-            elif os.path.isfile(ckpt_path):
-                hooks = (
-                    config[MSCStage.COMPILE]
-                    .setdefault("run_config", {})
-                    .setdefault("generate_config", {})
-                    .setdefault("pre_hooks", [])
-                )
-                hooks.append({"hook": "update_weights", "weights_path": ckpt_path})
-                if "profile" in config[MSCStage.COMPILE]:
-                    config[MSCStage.COMPILE]["profile"].setdefault("check", {})["err_rate"] = -1
-            for idx, t_config in enumerate(config.get("tools", [])):
-                opt_config = self._config["tools"][idx]
-                tool = self.runner.get_tool(t_config["tool_type"])
-                t_config["tool_config"] = tool.export_config(opt_config["tool_config"], folder)
+            for stage in [MSCStage.BASELINE, MSCStage.OPTIMIZE]:
+                if stage in config:
+                    config.pop(stage)
+            if "profile" in config[MSCStage.COMPILE]:
+                config[MSCStage.COMPILE]["profile"].setdefault("check", {})["err_rate"] = -1
+            compile_tools, compile_type = [], self._config[MSCStage.COMPILE]["run_type"]
+            for tool in self._config.get("tools", []):
+                if not support_tool(tool, MSCStage.COMPILE, compile_type):
+                    continue
+                run_tool = self.runner.get_tool(tool["tool_type"])
+                tool["tool_config"] = run_tool.export_config(tool["tool_config"], folder)
+                if tool["tool_config"]:
+                    compile_tools.append(tool)
+            if compile_tools:
+                config["tools"] = compile_tools
         # remove not serializable items
         if dump:
             remove_keys = {"workspace", "logger"}
@@ -908,7 +909,7 @@ class BaseManager(object):
         source_loader = config.get("loader")
         assert source_loader, "Dataset loader should be given for msc pipeline"
         if source_loader == "from_random":
-            max_batch = max(max_batch, 5)
+            max_batch = config.get("max_batch", 5)
 
             def get_random():
                 for _ in range(max_batch):
@@ -916,6 +917,7 @@ class BaseManager(object):
 
             loader, source_type = get_random, "Random"
         elif msc_utils.is_io_dataset(source_loader):
+            max_batch = config.get("max_batch", -1)
 
             def load_datas():
                 for inputs, _ in msc_utils.IODataLoader(source_loader, end=max_batch):
@@ -924,9 +926,10 @@ class BaseManager(object):
             loader, source_type = load_datas, "IOData"
         elif callable(source_loader):
             max_batch = config.get("max_batch", -1)
+            load_kwargs = config.get("load_kwargs", {})
 
             def get_source():
-                for idx, inputs in enumerate(source_loader()):
+                for idx, inputs in enumerate(source_loader(**load_kwargs)):
                     if idx >= max_batch > 0:
                         break
                     yield inputs

@@ -26,6 +26,7 @@ import numpy as np
 import tvm
 from tvm.contrib.msc.core.ir import MSCGraph
 from tvm.contrib.msc.core.frontend import from_relax
+from tvm.contrib.msc.core.codegen import to_relax
 from tvm.contrib.msc.core.tools import BaseTool, ToolType, ToolScope, create_tool, remove_tools
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core.utils.message import MSCStage
@@ -514,6 +515,17 @@ class BaseRunner(object):
 
         raise NotImplementedError("_build_runnable is not implemented for " + str(self.__class__))
 
+    def export_module(self) -> tvm.IRModule:
+        """Export the module from graphs
+
+        Returns
+        -------
+        module: IRModule
+            The exported module
+        """
+
+        raise NotImplementedError("export_module is not supported in BaseRunner")
+
     def train(self):
         """Change status to train"""
 
@@ -642,11 +654,13 @@ class BaseRunner(object):
             plan = tracker.finalize()
         else:
             plan = self.get_tool(tool_type).finalize()
-        assert plan, "Failed to create plan for {}".format(tool_type)
         plan_file = self._tools_config[tool_type]["plan_file"]
-        with open(plan_file, "w") as f:
-            f.write(json.dumps(plan, indent=2))
-        self._logger.info("Save %d plan(%s) -> %s", len(plan), tool_type, plan_file)
+        if plan:
+            with open(plan_file, "w") as f:
+                f.write(json.dumps(plan, indent=2))
+            self._logger.info("Save %d plan(%s) -> %s", len(plan), tool_type, plan_file)
+        else:
+            self._logger.info("No plan made for %s", tool_type)
         return plan_file
 
     def _apply_hook(self, desc: str, hook_def: dict, *args, **kwargs) -> Any:
@@ -762,9 +776,9 @@ class BaseRunner(object):
             The parameters from runtime.
         """
 
-        if not self._trained:
-            return {}
-        return self._get_runtime_params()
+        if self._trained:
+            return self._get_runtime_params()
+        return self._weights
 
     def _get_runtime_params(self) -> Dict[str, tvm.nd.array]:
         """Get the runtime parameters
@@ -1126,6 +1140,25 @@ class ModelRunner(BaseRunner):
         """
 
         return self._graphs[0].inspect()
+
+    def export_module(self, folder: msc_utils.MSCDirectory) -> tvm.IRModule:
+        """Export the module from graphs
+
+        Parameters
+        ----------
+        folder: MSCDirectory
+            The export folder.
+        params: dict of <string:tvm.ndarray>
+            The parameters of the IRModule.
+
+        Returns
+        -------
+        module: IRModule
+            The exported module
+        """
+
+        build_folder = folder.create_dir("export_build", keep_history=False, cleanup=True)
+        return to_relax(self._graphs[0], self.get_runtime_params(), build_folder=build_folder)
 
 
 class BYOCRunner(BaseRunner):

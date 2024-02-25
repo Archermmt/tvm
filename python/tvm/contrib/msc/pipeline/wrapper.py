@@ -91,17 +91,12 @@ class BaseWrapper(object):
         self._logger.info("[Wrapper] Start optimize model")
         config = msc_utils.copy_dict(self._config)
         config["workspace"] = self._workspace.create_dir(workspace)
-        config.pop("compile")
-        self._manager = MSCManager(self._meta_model, config, self._plugins)
+        self._manager = MSCManager(self._meta_model, config, self._plugins, run_compile=False)
         self._manager.run_pipe()
         self._optimized_model = self._manager.get_runnable("runnable")
 
     def compile(
-        self,
-        workspace: str = "Compile",
-        ckpt_path: str = "Checkpoint",
-        dump: bool = False,
-        bind_params: bool = False,
+        self, workspace: str = "Compile", ckpt_path: str = "Checkpoint", dump: bool = False
     ):
         """Compile the model
 
@@ -113,14 +108,12 @@ class BaseWrapper(object):
             The path to export checkpoint.
         dump: bool
             Whether to dump the info.
-        bind_params: bool
-            Whether to bind parameters for optimize.
         """
 
         if self._optimized_model:
             self._logger.info("[Wrapper] Start compile checkpoint")
             ckpt_path = self._workspace.create_dir(ckpt_path).path
-            pipeline = self.export(ckpt_path, dump=dump, bind_params=bind_params)
+            pipeline = self.export(ckpt_path, dump=dump)
             pipeline["config"]["workspace"] = self._workspace.create_dir(workspace)
             self._manager = MSCManager(**pipeline)
             self._manager.run_pipe()
@@ -135,12 +128,7 @@ class BaseWrapper(object):
             self._manager.run_pipe()
             self._compiled_model = self._manager.get_runnable("runnable")
 
-    def export(
-        self,
-        path: str = "msc_export",
-        dump: bool = True,
-        bind_params: bool = True,
-    ) -> Union[str, dict]:
+    def export(self, path: str = "msc_export", dump: bool = True) -> Union[str, dict]:
         """Export compile pipeline
 
         Parameters
@@ -149,8 +137,6 @@ class BaseWrapper(object):
             The export path.
         dump: bool
             Whether to dump the info.
-        bind_params: bool
-            Whether to bind parameters for optimize.
 
         Returns
         -------
@@ -160,7 +146,7 @@ class BaseWrapper(object):
 
         if not self._manager:
             self._manager = MSCManager(self._meta_model, self._config, self._plugins)
-        exported = self._manager.export(path, dump=dump, bind_params=bind_params)
+        exported = self._manager.export(path, dump=dump)
         if not self._debug:
             self._manager.destory()
         return exported

@@ -133,7 +133,7 @@ if __name__ == "__main__":
     # model.export()
 
     # compile the model
-    model.compile(bind_params=True)
+    model.compile()
     acc = eval_model(model, testloader, max_iter=args.test_iter)
     print("Compiled acc: " + str(acc))
 

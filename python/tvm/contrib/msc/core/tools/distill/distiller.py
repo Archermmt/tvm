@@ -248,13 +248,7 @@ class BaseDistiller(BaseTool):
     def export_config(self, config: dict, folder: msc_utils.MSCDirectory):
         """Export the config for tool"""
 
-        config = super().export_config(config, folder)
-        weights_path = self._weights_folder.relpath("distill_{}.bin".format(self._max_iter))
-        if os.path.isfile(weights_path):
-            weights_folder = folder.create_dir("weights")
-            weights_folder.copy(weights_path)
-            config["options"]["weights_folder"] = weights_folder
-        return config
+        return None
 
     @property
     def distilled(self):
