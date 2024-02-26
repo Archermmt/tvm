@@ -152,18 +152,24 @@ class TVMRunner(ModelRunner):
         return MSCFramework.TVM
 
     @classmethod
-    def load_native(cls, model: Any) -> tvm.IRModule:
+    def load_native(cls, model: Any, config: dict) -> Tuple[tvm.IRModule, str, bool]:
         """Load the native model
 
         Parameters
         -------
         model:
             The native model.
+        config: dict
+            The config for pipeline.
 
         Returns
         -------
         model: tvm.IRModule
             The loaded native model.
+        device: str
+            The device of the model.
+        training: bool
+            Whether the model is for training.
         """
 
         if isinstance(model, dict) and "model" in model:

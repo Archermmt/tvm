@@ -81,13 +81,13 @@ class BaseQuantizer(BaseTool):
         self._forward_cnt = 0
         return new_plan
 
-    def _parse_strategys(self, strategy_list: dict) -> Dict[str, ToolStrategy]:
+    def _parse_strategys(self, strategy_list: List[dict]) -> Dict[str, ToolStrategy]:
         """Parse the strategy to get valid strategy
 
         Parameters
         -------
-        strategy_list: dict
-            The given strategy
+        strategy_list: list<dict>
+            The given strategys
 
         Returns
         -------

@@ -184,13 +184,15 @@ class TensorflowRunner(ModelRunner):
         return MSCFramework.TENSORFLOW
 
     @classmethod
-    def load_native(cls, model: Any) -> Tuple[tf_v1.GraphDef, str, bool]:
+    def load_native(cls, model: Any, config: dict) -> Tuple[tf_v1.GraphDef, str, bool]:
         """Load the native model
 
         Parameters
         -------
         model:
             The native model.
+        config: dict
+            The config for pipeline.
 
         Returns
         -------

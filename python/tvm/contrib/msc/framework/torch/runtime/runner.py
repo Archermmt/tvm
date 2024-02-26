@@ -154,13 +154,15 @@ class TorchRunner(ModelRunner):
         return MSCFramework.TORCH
 
     @classmethod
-    def load_native(cls, model: Any) -> Tuple[torch.nn.Module, str, bool]:
+    def load_native(cls, model: Any, config: dict) -> Tuple[torch.nn.Module, str, bool]:
         """Load the native model
 
         Parameters
         -------
         model:
             The native model.
+        config: dict
+            The config for pipeline.
 
         Returns
         -------

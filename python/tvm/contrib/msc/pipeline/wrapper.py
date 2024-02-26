@@ -19,6 +19,7 @@
 import shutil
 from typing import Any, Union, List
 
+from tvm.contrib.msc.core.tools.tool import BaseTool, ToolType
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 from .manager import MSCManager
@@ -56,7 +57,7 @@ class BaseWrapper(object):
         self._debug = True if verbose.startswith("debug") else debug
         self._workspace = msc_utils.msc_dir(workspace, keep_history=self._debug)
         log_path = self._workspace.relpath("MSC_LOG", keep_history=False)
-        config["logger"] = self._logger = msc_utils.create_file_logger(verbose, log_path)
+        self._config["logger"] = msc_utils.create_file_logger(verbose, log_path)
         self._manager = None
         self.setup()
 
@@ -88,12 +89,13 @@ class BaseWrapper(object):
             The workspace.
         """
 
-        self._logger.info("[Wrapper] Start optimize model")
+        self.logger.info("[Wrapper] Start optimize model")
         config = msc_utils.copy_dict(self._config)
         config["workspace"] = self._workspace.create_dir(workspace)
         self._manager = MSCManager(self._meta_model, config, self._plugins, run_compile=False)
         self._manager.run_pipe()
         self._optimized_model = self._manager.get_runnable("runnable")
+        return self
 
     def compile(
         self, workspace: str = "Compile", ckpt_path: str = "Checkpoint", dump: bool = False
@@ -111,7 +113,7 @@ class BaseWrapper(object):
         """
 
         if self._optimized_model:
-            self._logger.info("[Wrapper] Start compile checkpoint")
+            self.logger.info("[Wrapper] Start compile checkpoint")
             ckpt_path = self._workspace.create_dir(ckpt_path).path
             pipeline = self.export(ckpt_path, dump=dump)
             pipeline["config"]["workspace"] = self._workspace.create_dir(workspace)
@@ -121,12 +123,13 @@ class BaseWrapper(object):
             if not self._debug:
                 shutil.rmtree(ckpt_path)
         else:
-            self._logger.info("[Wrapper] Start compile model")
+            self.logger.info("[Wrapper] Start compile model")
             config = msc_utils.copy_dict(self._config)
             config["workspace"] = self._workspace.create_dir(workspace)
             self._manager = MSCManager(self._meta_model, config, self._plugins)
             self._manager.run_pipe()
             self._compiled_model = self._manager.get_runnable("runnable")
+        return self
 
     def export(self, path: str = "msc_export", dump: bool = True) -> Union[str, dict]:
         """Export compile pipeline
@@ -151,6 +154,54 @@ class BaseWrapper(object):
             self._manager.destory()
         return exported
 
+    def get_tools(self, tool_types: List[str]) -> List[BaseTool]:
+        """Get the tools from manager
+
+        Parameters
+        ----------
+        tool_types: list<str>
+            The tool types.
+
+        Returns
+        -------
+        tools: list<BaseTool>
+            The tools.
+        """
+
+        if not self._manager:
+            return []
+        tool_types = tool_types or ToolType.all_types()
+        tools = []
+        for t in tool_types:
+            tool = self._manager.runner.get_tool(t)
+            if tool:
+                tools.append(tool)
+        return tools
+
+    def disable_tools(self, tool_types: List[str]):
+        """Disable the tools
+
+        Parameters
+        ----------
+        tool_types: list<str>
+            The tool types.
+        """
+
+        for tool in self.get_tools(tool_types):
+            tool.disable()
+
+    def enable_tools(self, tool_types: List[str]):
+        """Enable the tools
+
+        Parameters
+        ----------
+        tool_types: list<str>
+            The tool types.
+        """
+
+        for tool in self.get_tools(tool_types):
+            tool.enable()
+
     def _get_model(self) -> Any:
         return self._compiled_model or self._optimized_model or self._meta_model
 
@@ -165,6 +216,16 @@ class BaseWrapper(object):
     def compiled(self):
         return self._compiled_model is not None
 
+    @property
+    def device(self):
+        if self._manager:
+            return self._manager.runner.device
+        return "cpu"
+
+    @property
+    def logger(self):
+        return self._config["logger"]
+
     @classmethod
     def create_config(
         cls,
@@ -174,7 +235,7 @@ class BaseWrapper(object):
         optimize_type: str = None,
         compile_type: str = None,
         **kwargs,
-    ):
+    ) -> dict:
         """Create config for msc pipeline
 
         Parameters
@@ -208,12 +269,12 @@ class TorchWrapper(BaseWrapper):
     def __call__(self, *inputs):
         framework = self._get_framework()
         if framework != MSCFramework.TORCH:
-            inputs = [msc_utils.cast_array(i, framework) for i in inputs]
+            inputs = [msc_utils.cast_array(i, framework, self.device) for i in inputs]
         outputs = self._get_model()(*inputs)
         if framework == MSCFramework.TORCH:
             return outputs
         if isinstance(outputs, (tuple, list)):
-            return [msc_utils.cast_array(o, MSCFramework.TORCH) for o in outputs]
+            return [msc_utils.cast_array(o, MSCFramework.TORCH, self.device) for o in outputs]
         return msc_utils.cast_array(outputs, MSCFramework.TORCH)
 
     def parameters(self):

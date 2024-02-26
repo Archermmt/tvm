@@ -82,16 +82,15 @@ class BaseManager(object):
             assert stage in config, "{} should be given to run the pipeline".format(stage)
 
         MSCMap.reset()
+        use_cache = config.get("use_cache", True)
+        self._workspace = msc_utils.set_workspace(config.get("workspace"), use_cache)
         self._model_type = config["model_type"]
-        self._model, self._device, self._training = self._get_runner_cls(
-            self._model_type
-        ).load_native(model)
+        runner_cls = self._get_runner_cls(self._model_type)
+        self._model, self._device, self._training = runner_cls.load_native(model, config)
         if plugins:
             self._plugins = load_plugins(plugins)
         else:
             self._plugins = {}
-        use_cache = config.get("use_cache", True)
-        self._workspace = msc_utils.set_workspace(config.get("workspace"), use_cache)
         self._verbose = config.get("verbose", "info")
         if "logger" in config:
             self._logger = config["logger"]
@@ -177,14 +176,17 @@ class BaseManager(object):
         config = self._get_runner_cls(self._model_type).update_config(
             MSCStage.PARSE, config, self._model
         )
+
+        # update runner config
         for stage in [MSCStage.BASELINE, MSCStage.OPTIMIZE, MSCStage.COMPILE]:
             if stage not in config:
                 continue
             if "run_type" not in config[stage]:
                 config[stage]["run_type"] = self._model_type
-            config = self._get_runner_cls(config[stage]["run_type"]).update_config(
-                stage, config, self._model
-            )
+            runner_cls = self._get_runner_cls(config[stage]["run_type"])
+            config = runner_cls.update_config(stage, config, self._model)
+
+        # update tool config
         if config.get("tools"):
             config["tools"] = self._update_tools_config(config["tools"])
 
@@ -204,9 +206,11 @@ class BaseManager(object):
             if stage not in config:
                 continue
             debug_levels = _set_debug_level(stage, config[stage]["run_config"], debug_level)
-        for tool in config.get("tools", []):
-            t_stage = stage + "." + self._get_tool_stage(tool["tool_type"])
-            debug_levels = _set_debug_level(t_stage, tool["tool_config"], debug_level)
+            for t_config in config.get("tools", []):
+                if not support_tool(t_config, stage, config[stage]["run_type"]):
+                    continue
+                t_stage = stage + "." + self._get_tool_stage(t_config["tool_type"])
+                debug_levels = _set_debug_level(t_stage, t_config["tool_config"], debug_level)
         ordered_keys = [
             "model_type",
             "inputs",
@@ -284,7 +288,9 @@ class BaseManager(object):
                     if cnt >= max_golden > 0:
                         break
                     if not self._sample_inputs:
-                        self._sample_inputs = inputs
+                        self._sample_inputs = {
+                            k: msc_utils.cast_array(v) for k, v in inputs.items()
+                        }
                     outputs, _ = run_func(self._model, inputs, input_names, self._config["outputs"])
                     cnt = saver.save_batch(inputs, outputs)
                 report["datas_info"] = saver.info
@@ -348,16 +354,21 @@ class BaseManager(object):
                 plugin = self._plugins[self._model_type]
                 parse_config["custom_convert_map"] = plugin.get_convert_map()
             self._relax_mod, _ = stage_config["parser"](self._model, **parse_config)
+            self._relax_mod = msc_transform.SetExprName()(self._relax_mod)
+            transformed = set()
             for stage in [MSCStage.OPTIMIZE, MSCStage.COMPILE]:
                 if stage not in self._config:
                     continue
-                runner_cls = self._get_runner_cls(self._config[stage]["run_type"])
+                run_type = self._config[stage]["run_type"]
+                if run_type in transformed:
+                    continue
+                transformed.add(run_type)
+                runner_cls = self._get_runner_cls(run_type)
                 if hasattr(runner_cls, "target_transform"):
                     self._logger.info(
                         "Transform for stage %s: %s", stage, runner_cls.target_transform
                     )
                     self._relax_mod = runner_cls.target_transform(self._relax_mod)
-            self._relax_mod = msc_transform.SetExprName()(self._relax_mod)
             if cache_path:
                 with open(cache_path, "w") as f:
                     f.write(tvm.ir.save_json(self._relax_mod))
@@ -370,7 +381,7 @@ class BaseManager(object):
         Parameters
         ----------
         stage: str
-            The compiel stage.
+            The compile stage.
 
         Returns
         -------
@@ -627,6 +638,7 @@ class BaseManager(object):
             self._runner.destory()
         if not keep_workspace:
             self._workspace.destory()
+        msc_utils.remove_loggers()
 
     def _create_runner(
         self,
@@ -880,6 +892,7 @@ class BaseManager(object):
             The runner or model.
         """
 
+        assert self._runner, "Failed to create runner, call run_pipe first"
         if ret_type == "runner":
             return self._runner
         elif ret_type == "runnable":

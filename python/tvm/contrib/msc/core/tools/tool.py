@@ -433,7 +433,7 @@ class BaseTool(object):
         Parameters
         -------
         strategy_list: list<dict>
-            The given strategys
+            The given strategys.
 
         Returns
         -------
@@ -750,7 +750,8 @@ class BaseTool(object):
             t_mark += "." + scope
         cached_tensor = self._get_processed(name, consumer, t_mark)
         if cached_tensor is not None:
-            self.debug_tensors(name, consumer, t_mark, {"cached": cached_tensor})
+            if msc_utils.is_array(cached_tensor):
+                self.debug_tensors(name, consumer, t_mark, {"cached": cached_tensor})
             return cached_tensor
         process = self._get_tensor_cache(name, consumer, "process")
         if process is None:

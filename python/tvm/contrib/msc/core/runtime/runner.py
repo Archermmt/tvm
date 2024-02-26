@@ -294,7 +294,7 @@ class BaseRunner(object):
         if ret_type == "native":
             return outputs
         if ret_type == "dict":
-            if isinstance(outputs, (list, tuple)):
+            if isinstance(outputs, (list, tuple, tvm.ir.container.Array)):
                 assert len(outputs) == len(
                     model_outputs
                 ), "outputs({}) mismatch with model outputs {}".format(len(outputs), model_outputs)
@@ -304,8 +304,8 @@ class BaseRunner(object):
                     model_outputs
                 )
                 outputs = {model_outputs[0]["name"]: outputs}
-            outputs = {name: msc_utils.cast_array(data) for name, data in outputs.items()}
-        elif ret_type == "list":
+            return {name: msc_utils.cast_array(data) for name, data in outputs.items()}
+        if ret_type == "list":
             if isinstance(outputs, dict):
                 assert len(outputs) == len(
                     model_outputs
@@ -313,7 +313,7 @@ class BaseRunner(object):
                 outputs = [outputs[o["name"]] for o in model_outputs]
             if not isinstance(outputs, (list, tuple)):
                 outputs = [outputs]
-            outputs = [msc_utils.cast_array(data) for data in outputs]
+            return [msc_utils.cast_array(data) for data in outputs]
         return outputs
 
     def save_cache(
@@ -515,8 +515,13 @@ class BaseRunner(object):
 
         raise NotImplementedError("_build_runnable is not implemented for " + str(self.__class__))
 
-    def export_module(self) -> tvm.IRModule:
+    def export_module(self, folder: msc_utils.MSCDirectory) -> tvm.IRModule:
         """Export the module from graphs
+
+        Parameters
+        ----------
+        folder: MSCDirectory
+            The export folder.
 
         Returns
         -------
@@ -983,21 +988,27 @@ class BaseRunner(object):
         return MSCFramework.MSC
 
     @classmethod
-    def load_native(cls, model: Any) -> Any:
+    def load_native(cls, model: Any, config: dict) -> Tuple[Any, str, bool]:
         """Load the native model
 
         Parameters
         -------
         model:
             The native model.
+        config: dict
+            The config for pipeline.
 
         Returns
         -------
         model:
             The loaded native model.
+        device: str
+            The device of the model.
+        training:
+            Whether the model is for training.
         """
 
-        return model, "cpu"
+        return model, "cpu", False
 
     @classmethod
     def update_config(cls, stage: str, config: dict, model: Any = None) -> dict:
@@ -1146,8 +1157,6 @@ class ModelRunner(BaseRunner):
         ----------
         folder: MSCDirectory
             The export folder.
-        params: dict of <string:tvm.ndarray>
-            The parameters of the IRModule.
 
         Returns
         -------
@@ -1260,7 +1269,7 @@ class BYOCRunner(BaseRunner):
             The cache info.
         """
 
-        sub_graphs = [g.name + "_graph.info" for g in self._graphs]
+        sub_graphs = [g.name + "_graph.json" for g in self._graphs]
         with cache_dir:
             for graph, g_file in zip(self._graphs, sub_graphs):
                 with open(g_file, "w") as f_graph:
