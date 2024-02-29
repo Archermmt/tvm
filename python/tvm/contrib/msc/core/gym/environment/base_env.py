@@ -21,7 +21,7 @@ import logging
 from typing import Dict, Any, List, Tuple
 from tvm.contrib.msc.core.gym.namespace import GYMObject
 from tvm.contrib.msc.core.runtime import BaseRunner
-from tvm.contrib.msc.core.tools import BaseTool, ToolType
+from tvm.contrib.msc.core.tools import BaseTool
 from tvm.contrib.msc.core import utils as msc_utils
 
 
@@ -71,9 +71,7 @@ class BaseEnv(object):
         self._max_tasks = max_tasks
         self._debug_level = debug_level
         self._logger = logger or msc_utils.get_global_logger()
-        self._logger.info(
-            msc_utils.msg_block("ENV({}) SETUP".format(self.role_type()), self.setup())
-        )
+        self._logger.info(msc_utils.msg_block(self.env_mark("SETUP"), self.setup()))
 
     def _parse_executors(self, executors_dict: dict) -> Dict[str, Tuple[callable, dict]]:
         """Parse the executors
@@ -155,7 +153,7 @@ class BaseEnv(object):
         baseline = self._reward_runner(-1)
         self._tool.enable()
         tasks_info = {"tasks_num": len(self._tasks), "tasks": self._tasks}
-        self._logger.info(msc_utils.msg_block("ENV.TASKS", tasks_info, width=0))
+        self._logger.info(msc_utils.msg_block(self.env_mark("TASKS"), tasks_info))
         return len(self._tasks), baseline
 
     def _init_tool(self) -> BaseTool:
@@ -303,6 +301,7 @@ class BaseEnv(object):
         """
 
         self._tool.change_strategys(strategys)
+        self._runner.build(self._cache_dir, force_build=True)
         return self._runner.make_plan(self._tool.tool_type(), self._data_loader)
 
     def get_task(self, task_id: int) -> dict:
@@ -375,6 +374,22 @@ class BaseEnv(object):
         _, method, config = self._executors[name]
         kwargs.update({k: v for k, v in config.items() if k not in kwargs})
         return method(self, *args, **kwargs)
+
+    def env_mark(self, msg: Any) -> str:
+        """Mark the message with env info
+
+        Parameters
+        -------
+        msg: str
+            The message
+
+        Returns
+        -------
+        msg: str
+            The message with mark.
+        """
+
+        return "ENV({}) {}".format(self.role_type(), msg)
 
     @classmethod
     def role(cls):

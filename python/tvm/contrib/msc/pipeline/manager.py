@@ -761,7 +761,7 @@ class BaseManager(object):
                     knowledge = controller.run()
                     msc_utils.save_dict(knowledge, knowledge_file)
             plan = msc_utils.load_dict(knowledge)
-            self._logger.info("%dFound %d plan", gym_mark, len(plan))
+            self._logger.info("%sFound %d plan", gym_mark, len(plan))
             return msc_utils.save_dict(plan, plan_file)
         msc_utils.time_stamp(t_stage + ".make_plan", False)
         return runner.make_plan(tool_type, self._get_loader(tool_stage))

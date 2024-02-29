@@ -73,13 +73,11 @@ class TrackMethod(object):
                         continue
                     golden = tracker._loaders[stage].load_data(name, tracker._forward_cnt)
                     report = msc_utils.compare_arrays({name: golden}, {name: data})
-                    diff_msg = "{}{} to {} -> {}".format(
-                        tracker.msg_mark(), name, stage, report["info"][name]
-                    )
+                    diff_msg = "{} to {} -> {}".format(name, stage, report["info"][name])
                     if report["passed"] == 0:
-                        tracker._logger.info(diff_msg)
+                        tracker._logger.info(tracker.msg_mark(diff_msg))
                     elif tracker.on_debug():
-                        tracker._logger.debug(diff_msg)
+                        tracker._logger.debug(tracker.msg_mark(diff_msg))
                     diffs[stage] = {
                         "pass": report["passed"] == 1,
                         "info": msc_utils.inspect_array(np.abs(golden - data)),

@@ -228,13 +228,20 @@ class BaseQuantizer(BaseTool):
 
         tasks, recorded = [], set()
         for tensor_id, plan in self._plan.items():
-            name, _ = self.from_tensor_id(tensor_id)
+            name, consumer = self.from_tensor_id(tensor_id)
             if self.is_weight(name) and not kwargs.get("quantize_weights", False):
                 continue
             if name not in recorded:
+                strategy = self._get_tensor_strategy(name, consumer)
                 tasks.append({"name": tensor_id, **plan})
                 if self._cache_processed:
+                    tensor_ids = [
+                        self.to_tensor_id(name, c.name) for c in self.find_consumers(name)
+                    ]
+                    tasks.append({"methods": {"tensor": strategy.meta}, "tensor_ids": tensor_ids})
                     recorded.add(name)
+                else:
+                    tasks.append({"methods": {"tensor": strategy.meta}, "tensor_ids": [tensor_id]})
         return tasks
 
     def change_strategys(self, strategy_list: List[dict]):

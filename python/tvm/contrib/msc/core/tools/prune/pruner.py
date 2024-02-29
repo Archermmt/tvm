@@ -529,6 +529,10 @@ class BasePruner(WeightTool):
 
         return {}
 
+    @property
+    def pruned(self):
+        return len(self._plan) > 0
+
     @classmethod
     def tool_type(cls):
         return ToolType.PRUNER

@@ -328,7 +328,7 @@ class BaseTool(object):
         self._debug_level = debug_level
         self._verbose_step = verbose_step
         self._logger = logger or msc_utils.get_global_logger()
-        title = "{}{}".format(self.tool_mark(), "APPLY_PLAN" if self._plan else "MAKE_PLAN")
+        title = self.tool_mark("APPLY_PLAN" if self._plan else "MAKE_PLAN")
         self._logger.info(msc_utils.msg_block(title, self.setup(), width=0))
 
     def setup(self) -> dict:
@@ -345,7 +345,7 @@ class BaseTool(object):
         self._graphs, self._weights = [], {}
         self._graph_id, self._forward_cnt = 0, 0
         self._processed_tensor = {}
-        plan_info = self._plan if self._plan and self._debug_level >= 3 else self._plan_file
+        plan_info = self._plan if self._plan and self._debug_level >= 2 else self._plan_file
         return {
             "style": self.tool_style(),
             "cache_processed": self._cache_processed,
@@ -390,7 +390,7 @@ class BaseTool(object):
         self._graphs, self._weights = self._reset(graphs, weights)
         self._strategys = self._parse_strategys(self._meta_strategys)
         if self._strategys:
-            title = "{}STRATEGYS({})".format(self.tool_mark(), len(self._strategys))
+            title = self.tool_mark("STRATEGYS({})".format(len(self._strategys)))
             strategys_info = {k: v.inspect() for k, v in self._strategys.items()}
             self._logger.info(msc_utils.msg_block(title, strategys_info, width=0))
         return self._graphs, self._weights
@@ -603,7 +603,7 @@ class BaseTool(object):
             self._graph_id = self._infer_graph_id(kwargs)
             self._processed_tensor = {}
             if self.on_debug(3, in_forward=False):
-                self._logger.debug("%sStart Build", self.msg_mark(in_forward=False))
+                self._logger.debug(self.msg_mark("Start Build", in_forward=False))
             self._execute_before_build(*args, **kwargs)
 
     def _execute_before_build(self, *args, **kwargs):
@@ -636,7 +636,7 @@ class BaseTool(object):
         if self._enabled:
             output = self._execute_after_build(output)
             if self.on_debug(3, in_forward=False):
-                self._logger.debug("%sEnd Build", self.msg_mark(in_forward=False))
+                self._logger.debug(self.msg_mark("End Build", in_forward=False))
         return output
 
     def _execute_after_build(self, output: Any) -> Any:
@@ -670,7 +670,7 @@ class BaseTool(object):
             self._graph_id = self._infer_graph_id(kwargs)
             self._processed_tensor = {}
             if self.on_debug(3):
-                self._logger.debug("%sStart Forward", self.msg_mark())
+                self._logger.debug(self.msg_mark("Start Forward"))
             self._execute_before_forward(*args, **kwargs)
 
     def _execute_before_forward(self, *args, **kwargs):
@@ -703,11 +703,8 @@ class BaseTool(object):
         if self._enabled:
             output = self._execute_after_forward(output)
             if self.on_debug(3):
-                self._logger.debug(
-                    "%sEnd Forward, process %d tensors",
-                    self.msg_mark(),
-                    len(self._processed_tensor),
-                )
+                msg = "End Forward, process {} tensors".format(len(self._processed_tensor))
+                self._logger.debug(self.msg_mark(msg))
             self._forward_cnt += 1
         return output
 
@@ -1032,36 +1029,43 @@ class BaseTool(object):
             return False
         return self._debug_level >= debug_level
 
-    def tool_mark(self) -> dict:
-        """Get the tool mark
-
-        Returns
-        -------
-        tool_mark: str
-            The tool mark.
-        """
-
-        return "{}({} @ {}) ".format(self.tool_type().upper(), self.framework(), self._stage)
-
-    def msg_mark(self, in_forward: bool = True) -> str:
-        """Get the message mark
+    def tool_mark(self, msg: Any) -> dict:
+        """Mark the message with tool info
 
         Parameters
         -------
+        msg: str
+            The message
+
+        Returns
+        -------
+        msg: str
+            The message with mark.
+        """
+
+        return "{}({} @ {}) {}".format(self.tool_type().upper(), self.framework(), self._stage, msg)
+
+    def msg_mark(self, msg: Any, in_forward: bool = True) -> str:
+        """Mark the message with debug info
+
+        Parameters
+        -------
+        msg:
+            The message
         in_forward: bool
             Whether to add forward mark.
 
         Returns
         -------
-        msg_mark: str
-            The message mark.
+        msg: str
+            The message with mark.
         """
 
-        title = "{}.G[{}]".format(self.tool_type().upper(), self._graph_id)
+        mark = "{}.G[{}]".format(self.tool_type().upper(), self._graph_id)
         if in_forward:
-            title += ".F[{}]".format(self._forward_cnt)
-        title += "({}) ".format(self._stage)
-        return title
+            mark += ".F[{}]".format(self._forward_cnt)
+        mark += "({}) ".format(self._stage)
+        return mark + str(msg)
 
     def debug_tensors(
         self, name: str, consumer: str, t_mark: str, tensors: Dict[str, Any], debug_level: int = 3
@@ -1083,11 +1087,11 @@ class BaseTool(object):
         """
 
         if self.on_debug(debug_level):
-            title = "{}{}-{}({})".format(self.msg_mark(), name, consumer, t_mark)
+            msg = "{}-{}({})".format(name, consumer, t_mark)
             tensor_des = "\n  ".join(
                 ["{:6s}:{}".format(k, msc_utils.inspect_array(v)) for k, v in tensors.items()]
             )
-            self._logger.debug("%s\n  %s", title, tensor_des)
+            self._logger.debug("%s\n  %s", self.msg_mark(msg), tensor_des)
 
     def _infer_graph_id(self, kwargs: dict) -> int:
         """Infer graph id from kwargs
@@ -1439,13 +1443,12 @@ class WeightTool(BaseTool):
                 for graph in graphs
             ]
             self._logger.debug(
-                "%s reset %d weight graphs", self.tool_type(), len(self._weight_graphs)
+                "%s build %d weight graphs", self.tool_type(), len(self._weight_graphs)
             )
         if self.on_debug(2, in_forward=False):
-            for idx, graph in enumerate(self._weight_graphs):
-                self._logger.debug(
-                    msc_utils.msg_block("WEIGHT_GRAPH[{}].INFO".format(idx), graph.inspect())
-                )
+            weight_graphs = {g.name: g.inspect() for g in self._weight_graphs}
+            title = self.tool_mark("WEIGHT_GRAPHS({})".format(len(weight_graphs)))
+            self._logger.debug(msc_utils.msg_block(title, weight_graphs))
         return graphs, weights
 
     def _get_wtypes(self) -> Tuple[Dict[str, List[str]], Dict[str, str]]:

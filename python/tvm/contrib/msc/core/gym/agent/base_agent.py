@@ -57,9 +57,7 @@ class BaseAgent(object):
         self._options = options or {}
         self._debug_level = debug_level
         self._logger = logger or msc_utils.get_global_logger()
-        self._logger.info(
-            msc_utils.msg_block("AGENT({}) SETUP".format(self.role_type()), self.setup())
-        )
+        self._logger.info(msc_utils.msg_block(self.agent_mark("SETUP"), self.setup()))
 
     def _parse_executors(self, executors_dict: dict) -> Dict[str, Tuple[callable, dict]]:
         """Parse the executors
@@ -240,7 +238,7 @@ class BaseAgent(object):
             The learned rewards.
         """
 
-        self._logger.debug(msc_utils.msg_block("AGENT.LEARN", self._knowledge))
+        self._logger.debug(msc_utils.msg_block(self.agent_mark("KNOWLEDEG"), self._knowledge))
         return self._learn()
 
     def _learn(self):
@@ -301,6 +299,22 @@ class BaseAgent(object):
         """
 
         return self._execute("evaluate", self._baseline, reward)
+
+    def agent_mark(self, msg: Any) -> str:
+        """Mark the message with agent info
+
+        Parameters
+        -------
+        msg: str
+            The message
+
+        Returns
+        -------
+        msg: str
+            The message with mark.
+        """
+
+        return "AGENT({}) {}".format(self.role_type(), msg)
 
     @classmethod
     def role(cls):

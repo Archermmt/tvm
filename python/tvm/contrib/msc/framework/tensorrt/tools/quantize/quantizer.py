@@ -262,12 +262,8 @@ class TensorRTQuantizerFactory(object):
                         generate_config["codegen"], self._calibrate_savers, self._range_files
                     ):
                         saver.finalize()
-                        self._logger.debug(
-                            "%ssave %d datas to %s",
-                            self.msg_mark(in_forward=False),
-                            self._forward_cnt,
-                            saver.folder,
-                        )
+                        msg = "Save {} batch to {}".format(self._forward_cnt, saver.folder)
+                        self._logger.debug(self.msg_mark(msg, in_forward=False))
                         config.update(
                             {"dataset": saver.folder, "range_file": r_file, "precision": "int8"}
                         )

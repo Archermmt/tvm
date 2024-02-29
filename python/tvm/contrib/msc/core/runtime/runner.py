@@ -101,7 +101,7 @@ class BaseRunner(object):
         self._debug_level = debug_level
         self._training, self._trained = training, training
         self._logger = logger or msc_utils.get_global_logger()
-        self._logger.info(msc_utils.msg_block(self.runner_mark() + "SETUP", self.setup()))
+        self._logger.info(msc_utils.msg_block(self.runner_mark("SETUP"), self.setup()))
         self._tools = self.setup_tools()
 
     def setup(self) -> dict:
@@ -246,7 +246,7 @@ class BaseRunner(object):
         self._model_info = self._inspect_model()
         if self._debug_level >= 2:
             self._logger.debug(
-                msc_utils.msg_block(self.runner_mark() + "MODEL_INFO", self._model_info)
+                msc_utils.msg_block(self.runner_mark("MODEL_INFO"), self._model_info)
             )
 
         # Load runnable from cache
@@ -356,11 +356,8 @@ class BaseRunner(object):
                 cache_info[t_type] = tool.save_cache(cache_dir)
         with open(cache_dir.relpath("cache_info.json"), "w") as f:
             f.write(json.dumps(cache_info, indent=2))
-        self._logger.debug(
-            msc_utils.msg_block(
-                self.runner_mark() + "SAVE_CACHE", {"folder": cache_dir, "info": cache_info}
-            )
-        )
+        title = self.runner_mark("SAVE_CACHE")
+        self._logger.debug(msc_utils.msg_block(title, {"folder": cache_dir, "info": cache_info}))
 
     def translate(self, apply_hooks: bool = True) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:
         """Translate IRModule to MSCgraphs
@@ -633,7 +630,7 @@ class BaseRunner(object):
         assert tool_type in self._tools, "Can not find tool " + str(tool_type)
         if tool_type == ToolType.PRUNER:
             pruner = self.get_tool(ToolType.PRUNER)
-            if not pruner.finalize():
+            if not pruner.pruned:
                 assert data_loader, "data_loader should be given to plan prune"
                 for inputs in data_loader():
                     self.run(inputs, ret_type="native")
@@ -960,16 +957,21 @@ class BaseRunner(object):
 
         return True
 
-    def runner_mark(self) -> str:
-        """Get the runner mark
+    def runner_mark(self, msg: Any) -> str:
+        """Mark the message with runner info
+
+        Parameters
+        -------
+        msg: str
+            The message
 
         Returns
         -------
-        runner_mark: str
-            The runner_mark.
+        msg: str
+            The message with mark.
         """
 
-        return "RUNNER({} @ {}) ".format(self.framework, self._stage)
+        return "RUNNER({} @ {}) {}".format(self.framework, self._stage, msg)
 
     @property
     def stage(self):
@@ -1400,10 +1402,9 @@ class BYOCRunner(BaseRunner):
         """
 
         if self._debug_level >= 2:
-            for idx, graph in enumerate(self._graphs):
-                self._logger.debug(
-                    msc_utils.msg_block("GRAPH[{}].INFO".format(idx), graph.inspect())
-                )
+            sub_graphs = {g.name: g.inspect for g in self._graphs}
+            title = self.runner_mark("SUBGRAPHS({})".format(len(sub_graphs)))
+            self._logger.debug(msc_utils.msg_block(title, sub_graphs))
         return self._byoc_graph.inspect()
 
     def _device_enabled(self, device: str) -> bool:

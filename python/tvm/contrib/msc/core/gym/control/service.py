@@ -188,9 +188,7 @@ class BaseService(object):
         self._max_iter = max_iter
         self._record_step = record_step
         self._debug_level = debug_level
-        self._logger.info(
-            msc_utils.msg_block("SERVICE({}) SETUP".format(self.service_type), self.setup())
-        )
+        self._logger.info(msc_utils.msg_block(self.service_mark("SETUP"), self.setup()))
 
     def setup(self) -> dict:
         """Setup the tool
@@ -514,6 +512,22 @@ class BaseService(object):
         if obj_type == GYMObject.AGENT:
             return self._agent_world_ids
         return []
+
+    def service_mark(self, msg: Any) -> str:
+        """Mark the message with service info
+
+        Parameters
+        -------
+        msg: str
+            The message
+
+        Returns
+        -------
+        msg: str
+            The message with mark.
+        """
+
+        return "SERIVCE({}) {}".format(self.service_type, msg)
 
     @property
     def done(self):

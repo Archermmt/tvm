@@ -277,4 +277,4 @@ def test_tensorrt_gym(tool_type):
 
 if __name__ == "__main__":
     # tvm.testing.main()
-    test_tvm_gym(ToolType.PRUNER)
+    test_tvm_gym(ToolType.QUANTIZER)

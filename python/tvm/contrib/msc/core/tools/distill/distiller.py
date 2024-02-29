@@ -103,8 +103,7 @@ class BaseDistiller(BaseTool):
             The loss after forward
         """
 
-        if self.on_debug(3):
-            self._logger.debug("%sStart Learn", self.msg_mark())
+        self._logger.debug("%s start learn[%d]", self.tool_type(), self._current_iter)
         self._total_loss += float(self._learn(loss))
 
     def _learn(self, loss: Any):
