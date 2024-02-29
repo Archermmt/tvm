@@ -238,8 +238,8 @@ class BaseService(object):
         self._task_id, self._states = 0, []
         self._iter_done = False
         self._logger.info("SERVICE Reset %d/%d th iter", self._iter_id, self._max_iter)
-        self.execute(GYMObject.AGENT, GYMAction.RESET)
         self.execute(GYMObject.ENV, GYMAction.RESET)
+        self.execute(GYMObject.AGENT, GYMAction.RESET)
 
     def learn(self):
         self.execute(GYMObject.AGENT, GYMAction.LEARN)

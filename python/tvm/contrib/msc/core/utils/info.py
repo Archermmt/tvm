@@ -72,6 +72,8 @@ class MSCArray(object):
         """Get abstract describe of the data"""
 
         data = self._to_ndarray()
+        if data.size < 10:
+            return ",".join([str(i) for i in data.flatten()])
         return "[{},{}] Max {:g}, Min {:g}, Avg {:g}".format(
             ";".join([str(s) for s in data.shape]),
             data.dtype.name,

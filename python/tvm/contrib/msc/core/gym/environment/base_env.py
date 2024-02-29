@@ -21,7 +21,7 @@ import logging
 from typing import Dict, Any, List, Tuple
 from tvm.contrib.msc.core.gym.namespace import GYMObject
 from tvm.contrib.msc.core.runtime import BaseRunner
-from tvm.contrib.msc.core.tools import BaseTool
+from tvm.contrib.msc.core.tools import BaseTool, ToolType
 from tvm.contrib.msc.core import utils as msc_utils
 
 
@@ -224,7 +224,7 @@ class BaseEnv(object):
 
         rewards = []
         for idx, action in enumerate(actions):
-            self._update_tool(action, task_id)
+            self._apply_strategys(self._update_tool(action, task_id))
             self._runner.build(self._cache_dir, force_build=True)
             rewards.append(self._reward_runner(task_id))
             self._logger.info(
@@ -287,6 +287,23 @@ class BaseEnv(object):
         """
 
         raise NotImplementedError("_summary is not implemented in BaseEnv")
+
+    def _apply_strategys(self, strategys: List[dict]) -> dict:
+        """Apply the strategys
+
+        Parameters
+        ----------
+        strategys: list<dict>
+            The given strategys
+
+        Returns
+        -------
+        plan: dict
+            The plan after new strategy applied.
+        """
+
+        self._tool.change_strategys(strategys)
+        return self._runner.make_plan(self._tool.tool_type(), self._data_loader)
 
     def get_task(self, task_id: int) -> dict:
         """Get task according to task_id

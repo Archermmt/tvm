@@ -106,6 +106,7 @@ class BaseRunner(object):
                 "RUNNER.SETUP({} @ {})".format(self._stage, self.framework), self.setup()
             )
         )
+        self._tools = self.setup_tools()
 
     def setup(self) -> dict:
         """Setup the runner
@@ -121,23 +122,10 @@ class BaseRunner(object):
         self._graphs, self._weights = [], {}
         self._model, self._model_info = None, {}
         self._runnable = None
-        # Setup tools
-        self._tools = {}
-        if self._tools_type:
-            self._update_codegen({"use_tools": True, "tools_tag": self._name})
-            for t_type in self._tools_type:
-                self._tools[t_type] = create_tool(
-                    self.framework,
-                    t_type,
-                    self._name,
-                    training=self._training,
-                    stage=self._stage,
-                    **self._tools_config[t_type],
-                )
         if self._plugin:
             self._update_codegen({"use_plugin": True})
         return {
-            "tools": {k: v.tool_style() for k, v in self._tools.items()},
+            "tools": {k: v.get("tool_style", "default") for k, v in self._tools_config.items()},
             "plugin": self._plugin,
             "translate_config": self._translate_config,
             "generate_config": self._generate_config,
@@ -146,6 +134,29 @@ class BaseRunner(object):
             "name": self._name,
             "debug_level": self._debug_level,
         }
+
+    def setup_tools(self) -> Dict[str, BaseTool]:
+        """Setup tools
+
+        Returns
+        -------
+        tools: dict
+            The tools.
+        """
+
+        tools = {}
+        if self._tools_type:
+            self._update_codegen({"use_tools": True, "tools_tag": self._name})
+            for t_type in self._tools_type:
+                tools[t_type] = create_tool(
+                    self.framework,
+                    t_type,
+                    self._name,
+                    training=self._training,
+                    stage=self._stage,
+                    **self._tools_config[t_type],
+                )
+        return tools
 
     def change_stage(self, stage: str):
         """Change the stage of runner and tools"""
@@ -186,31 +197,26 @@ class BaseRunner(object):
         else:
             cache_info = {}
 
+        build_msg = ""
         # Load graphs from cache
         if not self._graphs and cache_info.get("graphs"):
             self._graphs = self._load_graphs(cache_dir, cache_info["graphs"])
             assert "weights" in cache_info, "Missing weights in cache_info"
             with open(cache_dir.relpath(cache_info["weights"]), "rb") as f:
                 self._weights = tvm.runtime.load_param_dict(f.read())
-            self._logger.info(
-                "Load %d graphs %d weights from %s",
-                len(self._graphs),
-                len(self._weights),
-                cache_dir,
-            )
+            build_msg += "Load "
 
         # Translate graphs from module
         if not self._graphs:
             self._graphs, self._weights = self.translate()
-            self._logger.info(
-                "Translate %d graphs %d weights from module", len(self._graphs), len(self._weights)
-            )
+            build_msg += "Translate "
+        build_msg += "{} graphs {} weights -> ".format(len(self._graphs), len(self._weights))
 
         # Load model from cache
         if not self._model and cache_info.get("model"):
             self._graphs, self._weights = self.reset_tools(cache_dir=cache_dir)
             self._model = self._load_model(cache_dir, cache_info["model"])
-            self._logger.info("Load model(%s) from %s", self.framework, cache_dir)
+            build_msg += "Load "
 
         # Generate model
         if not self._model:
@@ -232,30 +238,32 @@ class BaseRunner(object):
                 # Generate normal model
                 self._graphs, self._weights = self.reset_tools(cache_dir=cache_dir)
                 self._model = self.generate_model()
+            build_msg += "Generate "
 
-            generate_msg = "Generate model({})".format(self.framework)
-            if self._tools:
-                self._logger.info("%s with tools: %s", generate_msg, ",".join(self._tools.keys()))
-            else:
-                self._logger.info("%s without tools", generate_msg)
+        # Add tool message
+        if self._tools:
+            build_msg += "model with tools " + str(",".join(self._tools.keys())) + " -> "
+        else:
+            build_msg += "model without tools -> "
 
         # Inspect model
         self._model_info = self._inspect_model()
         if self._debug_level >= 2:
             self._logger.debug(msc_utils.msg_block("RUNNER.MODEL_INFO", self._model_info))
 
-        runnable_msg = "runnable({}, {}) @ {}".format(
-            self.framework, "train" if self._training else "eval", self._device
-        )
         # Load runnable from cache
         if not self._runnable and cache_info.get("runnable"):
             self._runnable = self._load_runnable(cache_dir, cache_info["runnable"])
-            self._logger.info("Load %s from %s", runnable_msg, cache_dir)
+            build_msg += "Load "
 
         # Build runnable
         if not self._runnable:
             self._runnable = self.build_runnable()
-            self._logger.info("Build %s", runnable_msg)
+            build_msg += "Build "
+        build_msg += "runnable({}, {}) on {}".format(
+            self.framework, "train" if self._training else "eval", self._device
+        )
+        self._logger.info(build_msg)
         return self._runnable
 
     def run(
@@ -614,7 +622,7 @@ class BaseRunner(object):
         tool_type: str
             The tool type, should be in ToolType
         data_loader:
-            The data loader
+            The data loader.
 
         Returns
         -------
@@ -659,13 +667,10 @@ class BaseRunner(object):
             plan = tracker.finalize()
         else:
             plan = self.get_tool(tool_type).finalize()
+        self._logger.debug("Made %d plan for %s", len(plan), tool_type)
         plan_file = self._tools_config[tool_type]["plan_file"]
-        if plan:
-            with open(plan_file, "w") as f:
-                f.write(json.dumps(plan, indent=2))
-            self._logger.info("Save %d plan(%s) -> %s", len(plan), tool_type, plan_file)
-        else:
-            self._logger.info("No plan made for %s", tool_type)
+        with open(plan_file, "w") as f:
+            f.write(json.dumps(plan, indent=2))
         return plan_file
 
     def _apply_hook(self, desc: str, hook_def: dict, *args, **kwargs) -> Any:

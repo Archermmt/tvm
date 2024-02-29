@@ -248,6 +248,7 @@ class BaseManager(object):
             err_msg = "Pipeline failed:{}\nTrace: {}".format(exc, traceback.format_exc())
         self.summary(err_msg)
         self._logger.info(msc_utils.msg_block("SUMMARY", self._report, 0))
+        self._workspace.finalize()
         return self._report
 
     def prepare(self) -> Dict[str, np.ndarray]:
@@ -695,7 +696,7 @@ class BaseManager(object):
             **run_config,
         )
         runner.build(cache_dir=cache_dir)
-        self._report["info"][stage + "_by"] = "{}({})".format(runner.framework, runner.device)
+        self._report["info"][stage + "_type"] = "{}({})".format(runner.framework, runner.device)
         if visualize:
             runner.visualize(msc_utils.get_visual_dir().create_dir(stage))
         if profile and "profile" in stage_config:
@@ -727,8 +728,8 @@ class BaseManager(object):
         if os.path.isfile(plan_file):
             self._logger.info("Skip %s with plan %s", tool_type, plan_file)
             return plan_file
-        msc_utils.time_stamp(tool_stage)
         t_stage = stage + "." + tool_stage
+        msc_utils.time_stamp(t_stage)
         stage_config = {
             "run_type": tool.get("run_type", self._config[stage]["run_type"]),
             "run_config": self._config[stage]["run_config"],
@@ -737,25 +738,37 @@ class BaseManager(object):
         if "gym_configs" in tool:
             knowledge = None
             for idx, config in enumerate(tool["gym_configs"]):
-                self._logger.info(
-                    "GYM[%d/%d].CREATE(%s)", idx, len(tool["gym_configs"]), tool_stage
+                knowledge_file = msc_utils.get_config_dir().relpath(
+                    "gym_knowledge_{}.json".format(idx)
                 )
-                extra_config = {
-                    "env": {
-                        "runner": runner,
-                        "data_loader": self._get_loader(tool_stage),
-                        "knowledge": knowledge,
-                    },
-                    "verbose": self._verbose,
-                }
-                controller = create_controller(tool_stage, config, extra_config)
-                knowledge = controller.run()
+                gym_mark = "GYM[{}/{}]({} @ {}) ".format(
+                    idx, len(tool["gym_configs"]), t_stage, runner.framework
+                )
+                if os.path.isfile(knowledge_file):
+                    knowledge = msc_utils.load_dict(knowledge_file)
+                    self._logger.info("%sLoad %d knowledge", gym_mark, len(knowledge))
+                else:
+                    msc_utils.time_stamp(t_stage + ".gym_{}".format(idx))
+                    self._logger.info("%sStart", gym_mark)
+                    extra_config = {
+                        "env": {
+                            "runner": runner,
+                            "data_loader": self._get_loader(tool_stage),
+                            "knowledge": knowledge,
+                        },
+                        "verbose": self._verbose,
+                    }
+                    controller = create_controller(tool_stage, config, extra_config)
+                    knowledge = controller.run()
+                    with open(knowledge_file, "w") as f:
+                        f.write(json.dumps(knowledge, indent=2))
             with open(plan_file, "w") as f:
                 f.write(json.dumps(knowledge, indent=2))
             self._logger.info(
                 "Gym save %d knowledge(%s) -> %s", len(knowledge), tool_type, plan_file
             )
             return plan_file
+        msc_utils.time_stamp(t_stage + ".make_plan", False)
         return runner.make_plan(tool_type, self._get_loader(tool_stage))
 
     def _profile_runner(self, runner: BaseRunner, stage_config: str) -> dict:

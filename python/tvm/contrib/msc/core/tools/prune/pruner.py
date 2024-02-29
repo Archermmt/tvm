@@ -92,6 +92,9 @@ class BasePruner(WeightTool):
             The parsed strategy.
         """
 
+        if self._stage != msc_utils.MSCStage.PRUNE:
+            return {}
+
         def _update_stages(strategy):
             if "stages" not in strategy:
                 strategy["stages"] = [msc_utils.MSCStage.PRUNE]
@@ -486,39 +489,21 @@ class BasePruner(WeightTool):
                 continue
             consumer = self.find_producer(w_node.name).name
             strategy = self._get_tensor_strategy(w_node.name, consumer)
-            tasks.append(
-                {
-                    "methods": {"tensor": strategy.meta},
-                    "tensor_names": [self.to_tensor_id(w_node.name, consumer)],
-                }
-            )
+            tasks.append({"methods": {"tensor": strategy.meta}, "tensor_names": [w_node.name]})
         return tasks
 
-    def plan_by_strategys(self, strategys: List[dict]) -> dict:
-        """Plan the pruning with startegys and get plan
+    def change_strategys(self, strategy_list: List[dict]):
+        """Change the strategys
 
         Parameters
         -------
-        strategys: list<dict>
-            The given strategys
-
-        Returns
-        -------
-        plan: dict
-            The plan after new strategy applied.
+        strategy_list: list<dict>
+            The given strategys.
         """
 
-        self._tensor_cache, self._processed_tensor = {}, {}
         self._plan = {}
-        self._strategys = self._parse_strategys(msc_utils.copy_dict(strategys))
-        info = {k: v.inspect() for k, v in self._strategys.items()}
-        title = "{}.PRUNE_STRATEGYS".format(self.tool_type().upper())
-        self._logger.debug(msc_utils.msg_block(title, info, width=0))
-        for w_node in self.get_w_nodes():
-            consumer = self.find_consumers(w_node.name)[0]
-            self.process_tensor(w_node.weight, w_node.name, consumer.name, "")
-        self._plan = {n: c for n, c in self._plan.items() if c["in_indices"] or c["out_indices"]}
-        return self._plan
+        self.change_stage(msc_utils.MSCStage.PRUNE)
+        super().change_strategys(strategy_list)
 
     def finalize(self) -> dict:
         """Get the plan"""

@@ -237,6 +237,22 @@ class BaseQuantizer(BaseTool):
                     recorded.add(name)
         return tasks
 
+    def change_strategys(self, strategy_list: List[dict]):
+        """Change the strategys
+
+        Parameters
+        -------
+        strategy_list: list<dict>
+            The given strategys.
+        """
+
+        super().change_strategys(strategy_list)
+        if self._plan:
+            strategys = self._parse_strategys(self._meta_strategys)
+            for t_id, info in self._plan.items():
+                if t_id in strategys and strategys[t_id].support_stage(self._stage):
+                    info.update(strategys[t_id].meta)
+
     @property
     def calibrated(self):
         return self._calibrated

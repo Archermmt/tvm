@@ -755,11 +755,13 @@ class MSCGraph(BaseGraph):
             The Tensors.
         """
 
-        for t_input in self.get_inputs():
-            yield t_input
         for node in self.get_nodes():
-            for t_output in node.get_outputs():
-                yield t_output
+            for t_input in node.get_inputs():
+                yield t_input
+            for weight in node.get_weights().values():
+                yield weight
+        for t_output in self.get_outputs():
+            yield t_output
 
     def to_json(self) -> str:
         """Dump the graph to json.

@@ -316,6 +316,7 @@ class BaseTool(object):
         logger: logging.Logger = None,
     ):
         self._stage = stage
+        self._plan_file = plan_file
         if os.path.isfile(plan_file):
             self._plan = msc_utils.load_dict(plan_file)
         else:
@@ -327,16 +328,8 @@ class BaseTool(object):
         self._debug_level = debug_level
         self._verbose_step = verbose_step
         self._logger = logger or msc_utils.get_global_logger()
-        title = "{}.{}({} @ {})".format(
-            self.tool_type().upper(),
-            "APPLY_PLAN" if self._plan else "MAKE_PLAN",
-            self._stage,
-            self.framework(),
-        )
+        title = "{}{}".format(self.tool_mark(), "APPLY_PLAN" if self._plan else "MAKE_PLAN")
         self._logger.info(msc_utils.msg_block(title, self.setup(), width=0))
-        if self._debug_level >= 3 and self._plan:
-            title = "{}.PLAN".format(self.tool_type().upper())
-            self._logger.debug(msc_utils.msg_block(title, self._plan))
 
     def setup(self) -> dict:
         """Setup the tool
@@ -352,13 +345,13 @@ class BaseTool(object):
         self._graphs, self._weights = [], {}
         self._graph_id, self._forward_cnt = 0, 0
         self._processed_tensor = {}
+        plan_info = self._plan if self._plan and self._debug_level >= 3 else self._plan_file
         return {
             "style": self.tool_style(),
             "cache_processed": self._cache_processed,
             "options": self._options,
-            "planed_num": len(self._plan),
-            "verbose_step": self._verbose_step,
-            "debug_level": self._debug_level,
+            "debug_step({})".format(self._debug_level): self._verbose_step,
+            "plan({})".format(len(self._plan)): plan_info,
         }
 
     def reset(
@@ -396,13 +389,10 @@ class BaseTool(object):
             self.load_cache(cache_dir, cache_info[self.tool_type()])
         self._graphs, self._weights = self._reset(graphs, weights)
         self._strategys = self._parse_strategys(self._meta_strategys)
-        title = "{}.RESET({} @ {})".format(self.tool_type().upper(), self._stage, self.framework())
-        reset_info = {
-            "graphs": len(self._graphs),
-            "weights": len(self._weights),
-            "strategys": {k: v.inspect() for k, v in self._strategys.items()},
-        }
-        self._logger.info(msc_utils.msg_block(title, reset_info, width=0))
+        if self._strategys:
+            title = "{}STRATEGYS({})".format(self.tool_mark(), len(self._strategys))
+            strategys_info = {k: v.inspect() for k, v in self._strategys.items()}
+            self._logger.info(msc_utils.msg_block(title, strategys_info, width=0))
         return self._graphs, self._weights
 
     def _reset(
@@ -446,6 +436,7 @@ class BaseTool(object):
         ), "ToolStrategy should be given as list of dict"
         assert self._graphs, "graphs are needed to parse strategys"
         all_tensor_names = set(t.name for t in self.get_tensors())
+        all_tensor_ids = set(self.get_tensor_ids())
         all_op_types = set(n.optype for n in self.get_nodes())
         all_op_names = set(n.name for n in self.get_nodes())
         strategys = {}
@@ -497,6 +488,11 @@ class BaseTool(object):
                         t_type == "tensor"
                     ), "tensor strategy only support tensor method, get " + str(meta_strategy)
                     marks = [t for t in strategy["tensor_names"] if t in all_tensor_names]
+                elif "tensor_ids" in strategy:
+                    assert (
+                        t_type == "tensor"
+                    ), "tensor strategy only support tensor method, get " + str(meta_strategy)
+                    marks = [t for t in strategy["tensor_ids"] if t in all_tensor_ids]
                 elif "op_types" in strategy:
                     op_types = [t for t in strategy["op_types"] if t in all_op_types]
                     marks = ["{}.{}".format(t, t_type) for t in op_types]
@@ -512,6 +508,17 @@ class BaseTool(object):
                         stage, ToolExecutor(method_name, method, copy.deepcopy(method_kwargs))
                     )
         return strategys
+
+    def change_strategys(self, strategy_list: List[dict]):
+        """Change the strategys
+
+        Parameters
+        -------
+        strategy_list: list<dict>
+            The given strategys.
+        """
+
+        self._meta_strategys = strategy_list
 
     def change_stage(self, stage: str):
         """Change the stage of tool and strategy"""
@@ -1025,8 +1032,19 @@ class BaseTool(object):
             return False
         return self._debug_level >= debug_level
 
+    def tool_mark(self) -> dict:
+        """Get the tool mark
+
+        Returns
+        -------
+        tool_mark: str
+            The tool mark.
+        """
+
+        return "{}({} @ {}) ".format(self.tool_type().upper(), self._stage, self.framework())
+
     def msg_mark(self, in_forward: bool = True) -> str:
-        """Get the debug title
+        """Get the message mark
 
         Parameters
         -------
@@ -1036,7 +1054,7 @@ class BaseTool(object):
         Returns
         -------
         msg_mark: str
-            Get the debug title.
+            The message mark.
         """
 
         title = "{}.G[{}]".format(self.tool_type().upper(), self._graph_id)
@@ -1130,9 +1148,25 @@ class BaseTool(object):
             The generator of nodes.
         """
 
-        for g in self._graphs:
-            for t in g.get_tensors():
-                yield t
+        for graph in self._graphs:
+            for tensor in graph.get_tensors():
+                yield tensor
+
+    def get_tensor_ids(self) -> Iterable[MSCTensor]:
+        """Get all the tensor ids in the graphs.
+
+        Returns
+        -------
+        tensors: generator<MSCTensor>
+            The generator of nodes.
+        """
+
+        for graph in self._graphs:
+            for node in graph.get_nodes():
+                for tensor in node.get_inputs():
+                    yield self.to_tensor_id(tensor.name, node.name)
+                for weight in node.get_weights().values():
+                    yield self.to_tensor_id(weight.name, node.name)
 
     def find_tensor(self, name: str) -> MSCTensor:
         """Find tensor by name.
@@ -1289,7 +1323,7 @@ class BaseTool(object):
                     return True
                 return False
 
-            tensor_strategy = self._strategys.get(tensor_id)
+            tensor_strategy = self._strategys.get(tensor_id) or self._strategys.get(name)
             if tensor_strategy and tensor_strategy.support_stage(self._stage):
                 strategys.append(tensor_strategy)
             elif self.is_weight(name):

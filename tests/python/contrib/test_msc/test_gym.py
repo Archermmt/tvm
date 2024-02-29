@@ -36,7 +36,7 @@ requires_tensorrt = pytest.mark.skipif(
 def _get_config(
     model_type,
     compile_type,
-    tools_config,
+    tools,
     inputs,
     outputs,
     atol=1e-2,
@@ -45,14 +45,15 @@ def _get_config(
 ):
     """Get msc config"""
 
-    path = "_".join(["test_gym", model_type, compile_type] + list(tools_config.keys()))
+    path = "_".join(["test_gym", model_type, compile_type] + [t["tool_type"] for t in tools])
     return {
         "workspace": msc_utils.msc_dir(path),
-        "verbose": "critical",
+        "verbose": "info",
         "model_type": model_type,
         "inputs": inputs,
         "outputs": outputs,
         "dataset": {"prepare": {"loader": "from_random", "max_iter": 5}},
+        "tools": tools,
         "prepare": {"profile": {"benchmark": {"repeat": 10}}},
         "baseline": {
             "run_type": model_type,
@@ -61,7 +62,6 @@ def _get_config(
         "optimize": {
             "run_type": optimize_type or model_type,
             "profile": {"check": {"atol": atol, "rtol": rtol}, "benchmark": {"repeat": 10}},
-            **tools_config,
         },
         "compile": {
             "run_type": compile_type,
@@ -70,33 +70,41 @@ def _get_config(
     }
 
 
-def get_tool_config(tool_type):
+def get_tools(tool_type):
     """Get config for the tool"""
 
-    config = {}
+    tools = []
     if tool_type == ToolType.PRUNER:
         config = {
             "plan_file": "msc_pruner.json",
             "strategys": [
-                {"methods": {"weight": "per_channel", "output": "per_channel"}, "density": 0.8}
-            ],
-            "gym_configs": [
                 {
-                    "env": {
-                        "executors": {
-                            "action_space": {
-                                "method": "action_prune_density",
-                                "start": 0.4,
-                                "end": 0.8,
-                                "step": 0.4,
-                            }
-                        },
-                        "max_tasks": 3,
-                    },
-                    "agent": {"agent_type": "search.grid", "executors": {}},
+                    "methods": {
+                        "weights": {"method_name": "per_channel", "density": 0.8},
+                        "output": {"method_name": "per_channel", "density": 0.8},
+                    }
                 }
             ],
         }
+        gym_configs = [
+            {
+                "env": {
+                    "executors": {
+                        "action_space": {
+                            "method": "action_prune_density",
+                            "start": 0.4,
+                            "end": 0.8,
+                            "step": 0.4,
+                        }
+                    },
+                    "max_tasks": 3,
+                },
+                "agent": {"role_type": "search.grid", "executors": {}},
+            }
+        ]
+        tools.append(
+            {"tool_type": ToolType.PRUNER, "tool_config": config, "gym_configs": gym_configs}
+        )
     elif tool_type == ToolType.QUANTIZER:
         # pylint: disable=import-outside-toplevel
         from tvm.contrib.msc.core.tools.quantize import QuantizeStage
@@ -127,7 +135,9 @@ def get_tool_config(tool_type):
                     "op_types": ["nn.conv2d", "msc.linear"],
                 },
             ],
-            "gym_configs": [
+        }
+        gym_configs = (
+            [
                 {
                     "env": {
                         "executors": {
@@ -140,11 +150,14 @@ def get_tool_config(tool_type):
                         },
                         "max_tasks": 3,
                     },
-                    "agent": {"agent_type": "search.grid", "executors": {}},
+                    "agent": {"role_type": "search.grid", "executors": {}},
                 }
             ],
-        }
-    return {tool_type: config}
+        )
+        tools.append(
+            {"tool_type": ToolType.QUANTIZER, "tool_config": config, "gym_configs": gym_configs}
+        )
+    return tools
 
 
 def _get_torch_model(name, training=False):
@@ -183,7 +196,7 @@ def _check_manager(manager, expected_info):
 
 def _test_from_torch(
     compile_type,
-    tools_config,
+    tools,
     expected_info,
     training=False,
     atol=1e-1,
@@ -197,7 +210,7 @@ def _test_from_torch(
         config = _get_config(
             MSCFramework.TORCH,
             compile_type,
-            tools_config,
+            tools,
             inputs=[["input_0", [1, 3, 224, 224], "float32"]],
             outputs=["output"],
             atol=atol,
@@ -247,8 +260,8 @@ def get_model_info(compile_type):
 def test_tvm_gym(tool_type):
     """Test tools for tvm with gym"""
 
-    tool_config = get_tool_config(tool_type)
-    _test_from_torch(MSCFramework.TVM, tool_config, get_model_info(MSCFramework.TVM), training=True)
+    tools = get_tools(tool_type)
+    _test_from_torch(MSCFramework.TVM, tools, get_model_info(MSCFramework.TVM), training=True)
 
 
 @requires_tensorrt
@@ -256,11 +269,12 @@ def test_tvm_gym(tool_type):
 def test_tensorrt_gym(tool_type):
     """Test tools for tensorrt with gym"""
 
-    tool_config = get_tool_config(tool_type)
+    tools = get_tools(tool_type)
     _test_from_torch(
-        MSCFramework.TENSORRT, tool_config, get_model_info(MSCFramework.TENSORRT), training=False
+        MSCFramework.TENSORRT, tools, get_model_info(MSCFramework.TENSORRT), training=False
     )
 
 
 if __name__ == "__main__":
-    tvm.testing.main()
+    # tvm.testing.main()
+    test_tvm_gym(ToolType.PRUNER)

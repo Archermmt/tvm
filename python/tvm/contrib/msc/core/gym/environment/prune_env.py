@@ -30,12 +30,11 @@ class PruneEnv(BaseEnv):
         """Get the main tool"""
 
         config = self._runner.get_tool_config(ToolType.PRUNER)
-        self._meta_strategys = config["strategys"]
-        for s in self._meta_strategys:
-            s.update({"density": 1})
+        self._meta_strategys = msc_utils.copy_dict(config["strategys"])
+        self._meta_strategys = [self._update_strategy(s, density=1) for s in self._meta_strategys]
         return self._runner.get_tool(ToolType.PRUNER)
 
-    def _update_tool(self, action: dict, task_id: int):
+    def _update_tool(self, action: dict, task_id: int) -> List[dict]:
         """Update the tool
 
         Parameters
@@ -44,12 +43,17 @@ class PruneEnv(BaseEnv):
             The current action.
         task_id: int
             The current task id.
+
+        Returns
+        -------
+        strategys: list<dict>
+            The strategys for current task.
         """
 
         task_strategy = self._get_strategy(action, task_id)
-        self._tool.plan_by_strategys(self._meta_strategys + [task_strategy])
+        return self._meta_strategys + [task_strategy]
 
-    def _summary(self, actions: List[dict], rewards: List[dict]) -> dict:
+    def _summary(self, actions: List[dict], rewards: List[dict]) -> List[dict]:
         """Summary the final plan
 
         Parameters
@@ -61,12 +65,15 @@ class PruneEnv(BaseEnv):
 
         Returns
         -------
-        plan: dict
-            The final plan.
+        strategys: list<dict>
+            The final strategys.
         """
 
-        strategys = [self._get_strategy(act, idx) for idx, act in enumerate(actions)]
-        return self._tool.plan_by_strategys(self._meta_strategys + strategys)
+        strategys = self._meta_strategys + [
+            self._get_strategy(act, idx) for idx, act in enumerate(actions)
+        ]
+        plan_file = self._apply_strategys(strategys)
+        return msc_utils.load_dict(plan_file)
 
     def _get_strategy(self, action: dict, task_id: int) -> dict:
         """Get strategy from task_id
@@ -85,7 +92,29 @@ class PruneEnv(BaseEnv):
         """
 
         strategy = msc_utils.copy_dict(self.get_task(task_id))
-        strategy.update(**action)
+        return self._update_strategy(strategy, **action)
+
+    def _update_strategy(self, strategy: dict, **kwargs) -> dict:
+        """Update startegy
+
+        Parameters
+        ----------
+        startegy: dict
+            The strategy.
+        kwargs: dict
+            The kwargs.
+
+        Returns
+        -------
+        strategy: dict
+            The updated strategy.
+        """
+
+        for t_type, method_def in strategy["methods"].items():
+            if isinstance(method_def, str):
+                strategy["methods"][t_type] = {"method_name": method_def, **kwargs}
+            elif isinstance(method_def, dict):
+                method_def.update(kwargs)
         return strategy
 
     @classmethod

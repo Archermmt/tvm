@@ -129,6 +129,8 @@ def dump_dict(dict_obj: dict, flavor: str = "dmlc") -> str:
                     lines.append("{}{}: {}".format(indent * " ", k, "true" if v else "false"))
                 elif MSCArray.is_array(v):
                     lines.append("{}{}: {}".format(indent * " ", k, MSCArray(v).abstract()))
+                elif hasattr(v, "__name__"):
+                    lines.append("{}{}: {}({})".format(indent * " ", k, v.__name__, type(v)))
                 else:
                     lines.append("{}{}: {}".format(indent * " ", k, v))
             return lines
@@ -219,9 +221,11 @@ def map_dict(dict_obj: dict, mapper: callable) -> dict:
     new_dict = {}
     for k, v in dict_obj.items():
         if isinstance(v, (tuple, list)):
-            new_dict[k] = [map_dict(e, mapper) if isinstance(e, dict) else e for e in v]
+            new_dict[k] = [
+                map_dict(mapper(e), mapper) if isinstance(e, dict) else mapper(e) for e in v
+            ]
         elif isinstance(v, dict):
-            new_dict[k] = map_dict(v, mapper)
+            new_dict[k] = map_dict(mapper(v), mapper)
         else:
             new_dict[k] = mapper(v)
     return new_dict

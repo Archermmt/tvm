@@ -110,6 +110,20 @@ class MSCDirectory(object):
     def __del__(self):
         self.clean_up()
 
+    def finalize(self):
+        """Finalize the directory"""
+
+        if not os.path.isdir(self._path):
+            return
+        empty_folders = []
+        for path in os.listdir(self._path):
+            if not os.path.isdir(path):
+                continue
+            if len(os.listdir(self.relpath(path))) == 0:
+                empty_folders.append(self.relpath(path))
+        for folder in empty_folders:
+            shutil.rmtree(folder)
+
     def clean_up(self):
         """Clean up the dir"""
 
@@ -417,6 +431,7 @@ get_build_dir = partial(get_workspace_subdir, name="Build")
 get_cache_dir = partial(get_workspace_subdir, name="Cache")
 get_config_dir = partial(get_workspace_subdir, name="Config")
 get_dataset_dir = partial(get_workspace_subdir, name="Dataset")
+get_debug_dir = partial(get_workspace_subdir, name="Debug")
 get_gym_dir = partial(get_workspace_subdir, name="Gym")
 get_output_dir = partial(get_workspace_subdir, name="Output")
 get_visual_dir = partial(get_workspace_subdir, name="Visual")
