@@ -32,7 +32,9 @@ class PruneEnv(BaseEnv):
         config = self._runner.get_tool_config(ToolType.PRUNER)
         self._meta_strategys = msc_utils.copy_dict(config["strategys"])
         self._meta_strategys = [self._update_strategy(s, density=1) for s in self._meta_strategys]
-        return self._runner.get_tool(ToolType.PRUNER)
+        tool = self._runner.get_tool(ToolType.PRUNER)
+        tool.change_strategys(self._meta_strategys)
+        return tool
 
     def _update_tool(self, action: dict, task_id: int) -> List[dict]:
         """Update the tool
@@ -72,8 +74,7 @@ class PruneEnv(BaseEnv):
         strategys = self._meta_strategys + [
             self._get_strategy(act, idx) for idx, act in enumerate(actions)
         ]
-        plan_file = self._apply_strategys(strategys)
-        return msc_utils.load_dict(plan_file)
+        return self._apply_strategys(strategys)
 
     def _get_strategy(self, action: dict, task_id: int) -> dict:
         """Get strategy from task_id

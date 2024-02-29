@@ -65,14 +65,14 @@ class BaseEnv(object):
         self._runner = runner
         self._data_loader = data_loader
         self._workspace = workspace
-        self._knowledge = knowledge
+        self._knowledge = msc_utils.load_dict(knowledge)
         self._executors = self._parse_executors(msc_utils.copy_dict(executors))
         self._options = options or {}
         self._max_tasks = max_tasks
         self._debug_level = debug_level
         self._logger = logger or msc_utils.get_global_logger()
         self._logger.info(
-            msc_utils.msg_block("ENV.SETUP({})".format(self.role_type()), self.setup())
+            msc_utils.msg_block("ENV({}) SETUP".format(self.role_type()), self.setup())
         )
 
     def _parse_executors(self, executors_dict: dict) -> Dict[str, Tuple[callable, dict]]:

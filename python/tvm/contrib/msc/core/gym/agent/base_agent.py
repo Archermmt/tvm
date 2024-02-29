@@ -58,7 +58,7 @@ class BaseAgent(object):
         self._debug_level = debug_level
         self._logger = logger or msc_utils.get_global_logger()
         self._logger.info(
-            msc_utils.msg_block("AGENT.SETUP({})".format(self.role_type()), self.setup())
+            msc_utils.msg_block("AGENT({}) SETUP".format(self.role_type()), self.setup())
         )
 
     def _parse_executors(self, executors_dict: dict) -> Dict[str, Tuple[callable, dict]]:

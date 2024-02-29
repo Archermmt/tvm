@@ -1041,7 +1041,7 @@ class BaseTool(object):
             The tool mark.
         """
 
-        return "{}({} @ {}) ".format(self.tool_type().upper(), self._stage, self.framework())
+        return "{}({} @ {}) ".format(self.tool_type().upper(), self.framework(), self._stage)
 
     def msg_mark(self, in_forward: bool = True) -> str:
         """Get the message mark

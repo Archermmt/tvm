@@ -86,7 +86,8 @@ def time_stamp(stage: str, log_stage: bool = True, logger: logging.Logger = None
             logger.info("\n{0} {1} {0}".format("#" * 20, start_msg.center(40)))
         MSCMap.set(MSCKey.MSC_STAGE, stage.upper())
     elif log_stage:
-        logger.debug("Start {}".format(stage))
+        start_msg = "Start {}".format(stage)
+        logger.debug("\n{0} {1} {0}".format("+" * 20, start_msg.center(40)))
 
 
 def get_duration() -> dict:

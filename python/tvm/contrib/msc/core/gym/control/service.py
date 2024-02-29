@@ -189,7 +189,7 @@ class BaseService(object):
         self._record_step = record_step
         self._debug_level = debug_level
         self._logger.info(
-            msc_utils.msg_block("SERVICE.SETUP({})".format(self.service_type), self.setup())
+            msc_utils.msg_block("SERVICE({}) SETUP".format(self.service_type), self.setup())
         )
 
     def setup(self) -> dict:

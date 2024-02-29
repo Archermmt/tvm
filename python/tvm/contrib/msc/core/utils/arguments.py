@@ -19,6 +19,7 @@
 import os
 import json
 import copy
+from typing import Any
 from .info import MSCArray
 
 
@@ -38,6 +39,8 @@ def load_dict(str_dict: str, flavor: str = "json") -> dict:
         The loaded dict.
     """
 
+    if not str_dict:
+        return {}
     if isinstance(str_dict, str) and os.path.isfile(str_dict):
         with open(str_dict, "r") as f:
             dict_obj = json.load(f)
@@ -49,6 +52,29 @@ def load_dict(str_dict: str, flavor: str = "json") -> dict:
         raise Exception("Unexpected str_dict {}({})".format(str_dict, type(str_dict)))
     assert flavor == "json", "Unexpected flavor for load_dict: " + str(flavor)
     return dict_obj
+
+
+def save_dict(dict_obj: Any, path: str, indent: int = 2) -> str:
+    """Save dict object
+
+    Parameters
+    ----------
+    dict_obj:
+        The object that can be load as dict.
+    path: str
+        The output path.
+    indent: int
+        The indent
+
+    Returns
+    -------
+    path: str
+        The output path.
+    """
+
+    with open(path, "w") as f:
+        f.write(json.dumps(load_dict(dict_obj), indent=indent))
+    return path
 
 
 def update_dict(src_dict: dict, new_dict: dict, soft_update: bool = True) -> dict:

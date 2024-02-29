@@ -101,11 +101,7 @@ class BaseRunner(object):
         self._debug_level = debug_level
         self._training, self._trained = training, training
         self._logger = logger or msc_utils.get_global_logger()
-        self._logger.info(
-            msc_utils.msg_block(
-                "RUNNER.SETUP({} @ {})".format(self._stage, self.framework), self.setup()
-            )
-        )
+        self._logger.info(msc_utils.msg_block(self.runner_mark() + "SETUP", self.setup()))
         self._tools = self.setup_tools()
 
     def setup(self) -> dict:
@@ -249,7 +245,9 @@ class BaseRunner(object):
         # Inspect model
         self._model_info = self._inspect_model()
         if self._debug_level >= 2:
-            self._logger.debug(msc_utils.msg_block("RUNNER.MODEL_INFO", self._model_info))
+            self._logger.debug(
+                msc_utils.msg_block(self.runner_mark() + "MODEL_INFO", self._model_info)
+            )
 
         # Load runnable from cache
         if not self._runnable and cache_info.get("runnable"):
@@ -359,7 +357,9 @@ class BaseRunner(object):
         with open(cache_dir.relpath("cache_info.json"), "w") as f:
             f.write(json.dumps(cache_info, indent=2))
         self._logger.debug(
-            msc_utils.msg_block("RUNNER.SAVE_CACHE", {"folder": cache_dir, "info": cache_info})
+            msc_utils.msg_block(
+                self.runner_mark() + "SAVE_CACHE", {"folder": cache_dir, "info": cache_info}
+            )
         )
 
     def translate(self, apply_hooks: bool = True) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:
@@ -959,6 +959,17 @@ class BaseRunner(object):
         """
 
         return True
+
+    def runner_mark(self) -> str:
+        """Get the runner mark
+
+        Returns
+        -------
+        runner_mark: str
+            The runner_mark.
+        """
+
+        return "RUNNER({} @ {}) ".format(self.framework, self._stage)
 
     @property
     def stage(self):

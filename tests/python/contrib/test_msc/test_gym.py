@@ -48,7 +48,7 @@ def _get_config(
     path = "_".join(["test_gym", model_type, compile_type] + [t["tool_type"] for t in tools])
     return {
         "workspace": msc_utils.msc_dir(path),
-        "verbose": "info",
+        "verbose": "debug:1",
         "model_type": model_type,
         "inputs": inputs,
         "outputs": outputs,

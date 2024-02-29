@@ -20,6 +20,7 @@
 import os
 import time
 import json
+import shutil
 from typing import Dict, Any, Union, List
 import traceback
 import numpy as np
@@ -318,7 +319,7 @@ class BaseManager(object):
         if "profile" in stage_config and run_func:
             benchmark = stage_config["profile"].get("benchmark", {})
             benchmark["repeat"] = self._get_repeat(benchmark)
-            self._logger.debug("Prepare profile with %s(%s)", run_func, benchmark)
+            self._logger.debug("Prepare profile with %s(%s)", run_func.__name__, benchmark)
             _, avg_time = run_func(
                 self._model, self._sample_inputs, input_names, self._config["outputs"], **benchmark
             )
@@ -366,9 +367,7 @@ class BaseManager(object):
                 transformed.add(run_type)
                 runner_cls = self._get_runner_cls(run_type)
                 if hasattr(runner_cls, "target_transform"):
-                    self._logger.info(
-                        "Transform for stage %s: %s", stage, runner_cls.target_transform
-                    )
+                    self._logger.info("Transform for %s(%s)", run_type, stage)
                     self._relax_mod = runner_cls.target_transform(self._relax_mod)
             if cache_path:
                 with open(cache_path, "w") as f:
@@ -742,14 +741,14 @@ class BaseManager(object):
                     "gym_knowledge_{}.json".format(idx)
                 )
                 gym_mark = "GYM[{}/{}]({} @ {}) ".format(
-                    idx, len(tool["gym_configs"]), t_stage, runner.framework
+                    idx, len(tool["gym_configs"]), runner.framework, t_stage
                 )
                 if os.path.isfile(knowledge_file):
-                    knowledge = msc_utils.load_dict(knowledge_file)
-                    self._logger.info("%sLoad %d knowledge", gym_mark, len(knowledge))
+                    knowledge = knowledge_file
+                    self._logger.info("%sLoad from %d", gym_mark, knowledge)
                 else:
                     msc_utils.time_stamp(t_stage + ".gym_{}".format(idx))
-                    self._logger.info("%sStart", gym_mark)
+                    self._logger.info("%sStart search", gym_mark)
                     extra_config = {
                         "env": {
                             "runner": runner,
@@ -760,14 +759,10 @@ class BaseManager(object):
                     }
                     controller = create_controller(tool_stage, config, extra_config)
                     knowledge = controller.run()
-                    with open(knowledge_file, "w") as f:
-                        f.write(json.dumps(knowledge, indent=2))
-            with open(plan_file, "w") as f:
-                f.write(json.dumps(knowledge, indent=2))
-            self._logger.info(
-                "Gym save %d knowledge(%s) -> %s", len(knowledge), tool_type, plan_file
-            )
-            return plan_file
+                    msc_utils.save_dict(knowledge, knowledge_file)
+            plan = msc_utils.load_dict(knowledge)
+            self._logger.info("%dFound %d plan", gym_mark, len(plan))
+            return msc_utils.save_dict(plan, plan_file)
         msc_utils.time_stamp(t_stage + ".make_plan", False)
         return runner.make_plan(tool_type, self._get_loader(tool_stage))
 
@@ -967,7 +962,7 @@ class BaseManager(object):
             raise TypeError(
                 "Unexpected source loader {}({})".format(source_loader, type(source_loader))
             )
-        self._logger.debug("Create data loader(%s) %s(%s)", name, loader, source_type)
+        self._logger.debug("Create data loader(%s) %s(%s)", name, loader.__name__, source_type)
         return loader
 
     def _get_repeat(self, benchmark: dict, device: str = None) -> int:
