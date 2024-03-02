@@ -136,24 +136,22 @@ def get_tools(tool_type):
                 },
             ],
         }
-        gym_configs = (
-            [
-                {
-                    "env": {
-                        "executors": {
-                            "action_space": {
-                                "method": "action_quantize_scale",
-                                "start": 0.8,
-                                "end": 1.2,
-                                "step": 0.2,
-                            }
-                        },
-                        "max_tasks": 3,
+        gym_configs = [
+            {
+                "env": {
+                    "executors": {
+                        "action_space": {
+                            "method": "action_quantize_scale",
+                            "start": 0.8,
+                            "end": 1.2,
+                            "step": 0.2,
+                        }
                     },
-                    "agent": {"role_type": "search.grid", "executors": {}},
-                }
-            ],
-        )
+                    "max_tasks": 3,
+                },
+                "agent": {"role_type": "search.grid", "executors": {}},
+            }
+        ]
         tools.append(
             {"tool_type": ToolType.QUANTIZER, "tool_config": config, "gym_configs": gym_configs}
         )

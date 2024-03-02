@@ -168,7 +168,12 @@ class BaseRunner(object):
         for tool in self._tools.values():
             tool.change_logger(logger)
 
-    def build(self, cache_dir: msc_utils.MSCDirectory = None, force_build: bool = False) -> Any:
+    def build(
+        self,
+        cache_dir: msc_utils.MSCDirectory = None,
+        force_build: bool = False,
+        disable_tools: List[str] = None,
+    ) -> Any:
         """Build the runnable object
 
         Parameters
@@ -177,6 +182,8 @@ class BaseRunner(object):
             cache path for save/load info
         force_build: bool
             Whether to force build the runner.
+        disable_tools: list<str>
+            The tool types to be disabled.
 
         Returns
         -------
@@ -192,6 +199,12 @@ class BaseRunner(object):
             cache_info = msc_utils.load_dict(cache_dir.relpath("cache_info.json"))
         else:
             cache_info = {}
+
+        # set tools to reset
+        if disable_tools:
+            tools = [t for t in self.get_tools() if t.tool_type not in disable_tools]
+        else:
+            tools = None
 
         build_msg = ""
         # Load graphs from cache
@@ -210,7 +223,7 @@ class BaseRunner(object):
 
         # Load model from cache
         if not self._model and cache_info.get("model"):
-            self._graphs, self._weights = self.reset_tools(cache_dir=cache_dir)
+            self._graphs, self._weights = self.reset_tools(tools=tools, cache_dir=cache_dir)
             self._model = self._load_model(cache_dir, cache_info["model"])
             build_msg += "Load "
 
@@ -227,12 +240,12 @@ class BaseRunner(object):
 
                 # Generate distill model
                 teacher_model = _build_scope_model(ToolScope.TEACHER, False)
-                self._graphs, self._weights = self.reset_tools(cache_dir=cache_dir)
+                self._graphs, self._weights = self.reset_tools(tools=tools, cache_dir=cache_dir)
                 student_model = _build_scope_model(ToolScope.STUDENT, True)
                 self._model = distiller.build_model(teacher_model, student_model)
             else:
                 # Generate normal model
-                self._graphs, self._weights = self.reset_tools(cache_dir=cache_dir)
+                self._graphs, self._weights = self.reset_tools(tools=tools, cache_dir=cache_dir)
                 self._model = self.generate_model()
             build_msg += "Generate "
 
@@ -433,7 +446,8 @@ class BaseRunner(object):
 
         graphs = graphs or self._graphs
         weights = weights or self._weights
-        tools = tools or self._tools.values()
+        if tools is None:
+            tools = list(self.get_tools())
         for tool in tools:
             graphs, weights = tool.reset(graphs, weights, cache_dir)
         return graphs, weights

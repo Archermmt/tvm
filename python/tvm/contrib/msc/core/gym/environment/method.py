@@ -191,8 +191,9 @@ class EnvMethod(object):
         """
 
         task = env.get_task(task_id)
+        plan = env.tool.plan[task["tensor_ids"][0]]
         return [
-            {"scale": task["scale"] * a}
+            {"scale": plan["scale"] * a}
             for a in cls.action_linear_space(env, task_id, start, end, step)
         ]
 

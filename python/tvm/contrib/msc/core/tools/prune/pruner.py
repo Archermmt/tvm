@@ -22,6 +22,7 @@ import numpy as np
 import tvm
 from tvm.contrib.msc.core.ir import MSCGraph, WeightJoint, MSCTensor
 from tvm.contrib.msc.core.tools.tool import ToolType, WeightTool, ToolStrategy
+from tvm.contrib.msc.core.utils.message import MSCStage
 from tvm.contrib.msc.core import _ffi_api
 from tvm.contrib.msc.core import utils as msc_utils
 from .method import PruneMethod
@@ -40,7 +41,7 @@ class BasePruner(WeightTool):
         """
 
         if not self._plan:
-            self.change_stage(msc_utils.MSCStage.PRUNE)
+            self.change_stage(MSCStage.PRUNE)
         return super().setup()
 
     def _get_wtypes(self) -> Tuple[Dict[str, List[str]], Dict[str, str]]:
@@ -92,12 +93,12 @@ class BasePruner(WeightTool):
             The parsed strategy.
         """
 
-        if self._stage != msc_utils.MSCStage.PRUNE:
+        if self._stage != MSCStage.PRUNE:
             return {}
 
         def _update_stages(strategy):
             if "stages" not in strategy:
-                strategy["stages"] = [msc_utils.MSCStage.PRUNE]
+                strategy["stages"] = [MSCStage.PRUNE]
             return strategy
 
         return super()._parse_strategys([_update_stages(s) for s in strategy_list])
@@ -488,8 +489,8 @@ class BasePruner(WeightTool):
             if w_node.get_attr("weight_strategy") != "main":
                 continue
             consumer = self.find_producer(w_node.name).name
-            strategy = self._get_tensor_strategy(w_node.name, consumer)
-            tasks.append({"methods": {"tensor": strategy.meta}, "tensor_names": [w_node.name]})
+            exec = self._get_tensor_strategy(w_node.name, consumer).get_executor(MSCStage.PRUNE)
+            tasks.append({"methods": {"tensor": exec.method_def}, "tensor_names": [w_node.name]})
         return tasks
 
     def change_strategys(self, strategy_list: List[dict]):
@@ -502,7 +503,7 @@ class BasePruner(WeightTool):
         """
 
         self._plan = {}
-        self.change_stage(msc_utils.MSCStage.PRUNE)
+        self.change_stage(MSCStage.PRUNE)
         super().change_strategys(strategy_list)
 
     def finalize(self) -> dict:

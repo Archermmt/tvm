@@ -381,9 +381,9 @@ class BaseService(object):
         workers = {w.worker_id: w for w in self._get_workers(obj_type)}
         requests = self._wait_request(msg_key)
         if act_type in (GYMAction.INIT, GYMAction.RESET):
-            mark = "I[{}/{}] {}.{}".format(self._iter_id, self._max_iter, obj_type, act_type)
+            mark = "Iter[{}/{}] {}.{}".format(self._iter_id, self._max_iter, obj_type, act_type)
         else:
-            mark = "I[{}/{}].T[{}/{}] {}.{}".format(
+            mark = "Iter[{}/{}] Task[{}/{}] {}.{}".format(
                 self._iter_id, self._max_iter, self._task_id, self._max_task, obj_type, act_type
             )
         requests = {int(k): v for k, v in requests.items()}
@@ -394,7 +394,7 @@ class BaseService(object):
             "requests": {workers[w].name: r for w, r in requests.items()},
             "responses": {workers[w].name: r for w, r in responses.items()},
         }
-        self._logger.info(msc_utils.msg_table(mark, info))
+        self._logger.info(msc_utils.msg_block(mark, info, symbol="="))
         return responses
 
     def _process_response(self, msg_key: str, response: dict):

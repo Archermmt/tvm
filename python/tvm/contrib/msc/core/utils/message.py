@@ -139,30 +139,7 @@ def get_duration() -> dict:
     return map_dict(duration, _to_str)
 
 
-def msg_table(title: str, msg: str, width: int = 100):
-    """Log message in table format
-
-    Parameters
-    ----------
-    title: str
-        The title of the block
-    msg: str
-        The message to log.
-    width: int
-        The max width of block message
-
-    Returns
-    -------
-    msg: str
-        The block message.
-    """
-
-    if isinstance(msg, dict):
-        msg = dump_dict(msg, "table:" + str(width))
-    return "\n{0} {1} {0}\n{2}\n".format("-" * 20, title.center(40), msg)
-
-
-def msg_block(title: str, msg: str, width: int = 100):
+def msg_block(title: str, msg: str, width: int = 100, symbol: str = "-"):
     """Log message in block format
 
     Parameters
@@ -173,6 +150,8 @@ def msg_block(title: str, msg: str, width: int = 100):
         The message to log.
     width: int
         The max width of block message
+    symbol: str
+        The split symbol.
 
     Returns
     -------
@@ -182,7 +161,7 @@ def msg_block(title: str, msg: str, width: int = 100):
 
     if isinstance(msg, dict):
         msg = dump_dict(msg, "table:" + str(width))
-    return "\n{0} {1} {0}\n{2}".format(">" * 20, title.center(40), msg)
+    return "\n{0} {1} {0}\n{2}".format(symbol * 20, title.center(40), msg)
 
 
 def current_stage():

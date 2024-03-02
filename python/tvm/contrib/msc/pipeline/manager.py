@@ -20,13 +20,11 @@
 import os
 import time
 import json
-import shutil
 from typing import Dict, Any, Union, List
 import traceback
 import numpy as np
 
 import tvm
-from tvm.contrib.msc.core import transform as msc_transform
 from tvm.contrib.msc.core.runtime import BaseRunner
 from tvm.contrib.msc.core.tools import ToolType
 from tvm.contrib.msc.core.utils.namespace import MSCFramework, MSCMap, MSCKey
@@ -80,7 +78,7 @@ class BaseManager(object):
 
         # check stage
         for stage in ["inputs", "outputs", "dataset", MSCStage.PREPARE, MSCStage.COMPILE]:
-            assert stage in config, "{} should be given to run the pipeline".format(stage)
+            config.setdefault(stage, {})
 
         MSCMap.reset()
         use_cache = config.get("use_cache", True)
@@ -88,10 +86,7 @@ class BaseManager(object):
         self._model_type = config["model_type"]
         runner_cls = self._get_runner_cls(self._model_type)
         self._model, self._device, self._training = runner_cls.load_native(model, config)
-        if plugins:
-            self._plugins = load_plugins(plugins)
-        else:
-            self._plugins = {}
+        self._plugins = load_plugins(plugins) if plugins else {}
         self._verbose = config.get("verbose", "info")
         if "logger" in config:
             self._logger = config["logger"]
@@ -356,7 +351,6 @@ class BaseManager(object):
                 plugin = self._plugins[self._model_type]
                 parse_config["custom_convert_map"] = plugin.get_convert_map()
             self._relax_mod, _ = stage_config["parser"](self._model, **parse_config)
-            self._relax_mod = msc_transform.SetExprName()(self._relax_mod)
             transformed = set()
             for stage in [MSCStage.OPTIMIZE, MSCStage.COMPILE]:
                 if stage not in self._config:

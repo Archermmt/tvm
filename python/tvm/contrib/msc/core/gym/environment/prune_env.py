@@ -16,7 +16,7 @@
 # under the License.
 """tvm.contrib.msc.core.gym.prune_env"""
 
-from typing import List
+from typing import List, Union
 from tvm.contrib.msc.core.tools import BaseTool, ToolType
 from tvm.contrib.msc.core import utils as msc_utils
 from .base_env import BaseEnv
@@ -36,7 +36,7 @@ class PruneEnv(BaseEnv):
         tool.change_strategys(self._meta_strategys)
         return tool
 
-    def _update_tool(self, action: dict, task_id: int) -> List[dict]:
+    def _update_tool(self, action: dict, task_id: int):
         """Update the tool
 
         Parameters
@@ -45,17 +45,12 @@ class PruneEnv(BaseEnv):
             The current action.
         task_id: int
             The current task id.
-
-        Returns
-        -------
-        strategys: list<dict>
-            The strategys for current task.
         """
 
         task_strategy = self._get_strategy(action, task_id)
-        return self._meta_strategys + [task_strategy]
+        self._apply_strategys(self._meta_strategys + [task_strategy])
 
-    def _summary(self, actions: List[dict], rewards: List[dict]) -> List[dict]:
+    def _summary(self, actions: List[dict], rewards: List[dict]) -> Union[dict, str]:
         """Summary the final plan
 
         Parameters
@@ -67,8 +62,8 @@ class PruneEnv(BaseEnv):
 
         Returns
         -------
-        strategys: list<dict>
-            The final strategys.
+        knowledge: dict| str
+            The learned knowledge or file.
         """
 
         strategys = self._meta_strategys + [
@@ -76,47 +71,23 @@ class PruneEnv(BaseEnv):
         ]
         return self._apply_strategys(strategys)
 
-    def _get_strategy(self, action: dict, task_id: int) -> dict:
-        """Get strategy from task_id
+    def _apply_strategys(self, strategys: List[dict]) -> str:
+        """Apply the strategys
 
         Parameters
         ----------
-        action: float
-            The current action.
-        task_id: int
-            The current task id.
+        strategys: list<dict>
+            The given strategys
 
         Returns
         -------
-        strategy: dict
-            The strategy.
+        plan_file: str
+            The plan after strategys applied.
         """
 
-        strategy = msc_utils.copy_dict(self.get_task(task_id))
-        return self._update_strategy(strategy, **action)
-
-    def _update_strategy(self, strategy: dict, **kwargs) -> dict:
-        """Update startegy
-
-        Parameters
-        ----------
-        startegy: dict
-            The strategy.
-        kwargs: dict
-            The kwargs.
-
-        Returns
-        -------
-        strategy: dict
-            The updated strategy.
-        """
-
-        for t_type, method_def in strategy["methods"].items():
-            if isinstance(method_def, str):
-                strategy["methods"][t_type] = {"method_name": method_def, **kwargs}
-            elif isinstance(method_def, dict):
-                method_def.update(kwargs)
-        return strategy
+        self._tool.change_strategys(strategys)
+        self._runner.build(self._cache_dir, force_build=True)
+        return self._runner.make_plan(self._tool.tool_type(), self._data_loader)
 
     @classmethod
     def role_type(cls):

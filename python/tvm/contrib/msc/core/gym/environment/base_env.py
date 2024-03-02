@@ -18,7 +18,7 @@
 
 import copy
 import logging
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Tuple, Union
 from tvm.contrib.msc.core.gym.namespace import GYMObject
 from tvm.contrib.msc.core.runtime import BaseRunner
 from tvm.contrib.msc.core.tools import BaseTool
@@ -116,6 +116,7 @@ class BaseEnv(object):
         """
 
         self._cache_dir = self._workspace.create_dir("Cache")
+        self._tool = None
         self._tasks = []
         return {
             "name": self._name,
@@ -149,7 +150,7 @@ class BaseEnv(object):
             self._tasks = self._tasks[: self._max_tasks]
         # get baseline
         self._tool.disable()
-        self._runner.build(self._cache_dir, force_build=True)
+        self._runner.build(self._cache_dir, force_build=True, disable_tools=[self._tool.tool_type])
         baseline = self._reward_runner(-1)
         self._tool.enable()
         tasks_info = {"tasks_num": len(self._tasks), "tasks": self._tasks}
@@ -222,7 +223,7 @@ class BaseEnv(object):
 
         rewards = []
         for idx, action in enumerate(actions):
-            self._apply_strategys(self._update_tool(action, task_id))
+            self._update_tool(action, task_id)
             self._runner.build(self._cache_dir, force_build=True)
             rewards.append(self._reward_runner(task_id))
             self._logger.info(
@@ -268,7 +269,7 @@ class BaseEnv(object):
         self._logger.info("Env Summary with %d actions, %d rewards", len(actions), len(rewards))
         return self._summary(actions, rewards)
 
-    def _summary(self, actions: List[dict], rewards: List[dict]) -> dict:
+    def _summary(self, actions: List[dict], rewards: List[dict]) -> Union[dict, str]:
         """Summary the final plan
 
         Parameters
@@ -280,29 +281,53 @@ class BaseEnv(object):
 
         Returns
         -------
-        plan: dict
-            The final plan.
+        knowledge: dict| str
+            The learned knowledge or file.
         """
 
         raise NotImplementedError("_summary is not implemented in BaseEnv")
 
-    def _apply_strategys(self, strategys: List[dict]) -> dict:
-        """Apply the strategys
+    def _update_strategy(self, strategy: dict, **kwargs) -> dict:
+        """Update startegy
 
         Parameters
         ----------
-        strategys: list<dict>
-            The given strategys
+        startegy: dict
+            The strategy.
+        kwargs: dict
+            The kwargs.
 
         Returns
         -------
-        plan: dict
-            The plan after new strategy applied.
+        strategy: dict
+            The updated strategy.
         """
 
-        self._tool.change_strategys(strategys)
-        self._runner.build(self._cache_dir, force_build=True)
-        return self._runner.make_plan(self._tool.tool_type(), self._data_loader)
+        for t_type, method_def in strategy["methods"].items():
+            if isinstance(method_def, str):
+                strategy["methods"][t_type] = {"method_name": method_def, **kwargs}
+            elif isinstance(method_def, dict):
+                method_def.update(kwargs)
+        return strategy
+
+    def _get_strategy(self, action: dict, task_id: int) -> dict:
+        """Get strategy from task_id
+
+        Parameters
+        ----------
+        action: float
+            The current action.
+        task_id: int
+            The current task id.
+
+        Returns
+        -------
+        strategy: dict
+            The strategy.
+        """
+
+        strategy = msc_utils.copy_dict(self.get_task(task_id))
+        return self._update_strategy(strategy, **action)
 
     def get_task(self, task_id: int) -> dict:
         """Get task according to task_id
@@ -390,6 +415,10 @@ class BaseEnv(object):
         """
 
         return "ENV({}) {}".format(self.role_type(), msg)
+
+    @property
+    def tool(self):
+        return self._tool
 
     @classmethod
     def role(cls):
