@@ -22,7 +22,7 @@ Reference for MSC:
 https://discuss.tvm.apache.org/t/rfc-unity-msc-introduction-to-multi-system-compiler/15251/5
 
 This example use resnet50 from https://github.com/huyvnphan/PyTorch_CIFAR10/tree/master,
-please download before run example
+please download pt file and copy to args.checkpoint before run example
 """
 
 import argparse

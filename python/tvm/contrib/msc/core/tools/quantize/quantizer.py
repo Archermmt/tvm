@@ -228,13 +228,13 @@ class BaseQuantizer(BaseTool):
         """
 
         tasks, recorded = [], set()
-        for tensor_id, plan in self._plan.items():
+        for tensor_id in self._plan:
             name, consumer = self.from_tensor_id(tensor_id)
             if self.is_weight(name) and not kwargs.get("quantize_weights", False):
                 continue
             if name not in recorded:
-                exec = self._get_tensor_strategy(name, consumer).get_executor(MSCStage.QUANTIZE)
-                task = {"methods": {"tensor": exec.method_def}}
+                executor = self._get_tensor_strategy(name, consumer).get_executor(MSCStage.QUANTIZE)
+                task = {"methods": {"tensor": executor.method_def}}
                 if self._cache_processed:
                     task["tensor_ids"] = [
                         self.to_tensor_id(name, c.name) for c in self.find_consumers(name)

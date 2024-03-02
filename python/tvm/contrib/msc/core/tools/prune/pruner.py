@@ -489,8 +489,10 @@ class BasePruner(WeightTool):
             if w_node.get_attr("weight_strategy") != "main":
                 continue
             consumer = self.find_producer(w_node.name).name
-            exec = self._get_tensor_strategy(w_node.name, consumer).get_executor(MSCStage.PRUNE)
-            tasks.append({"methods": {"tensor": exec.method_def}, "tensor_names": [w_node.name]})
+            executor = self._get_tensor_strategy(w_node.name, consumer).get_executor(MSCStage.PRUNE)
+            tasks.append(
+                {"methods": {"tensor": executor.method_def}, "tensor_names": [w_node.name]}
+            )
         return tasks
 
     def change_strategys(self, strategy_list: List[dict]):
