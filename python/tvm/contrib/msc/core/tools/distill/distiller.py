@@ -67,8 +67,7 @@ class BaseDistiller(BaseTool):
             The weights.
         """
 
-        self._current_iter = 0
-        self._total_loss = 0
+        self._current_iter, self._total_loss = 0, 0
         if self._distilled:
             with open(self._weights_path, "rb") as f:
                 distilled_weights = tvm.runtime.load_param_dict(f.read())
@@ -103,7 +102,8 @@ class BaseDistiller(BaseTool):
             The loss after forward
         """
 
-        self._logger.debug("%s start learn[%d]", self.tool_type(), self._current_iter)
+        if self.on_debug(3, in_forward=False):
+            self._logger.debug("%s start learn[%d]", self.tool_type(), self._current_iter)
         self._total_loss += float(self._learn(loss))
 
     def _learn(self, loss: Any):

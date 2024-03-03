@@ -171,19 +171,3 @@ def BindNamedParams(
     """
 
     return relax_api.BindNamedParams(func_name, params)  # type: ignore
-
-
-def UpdateConsts(datas: Dict[str, tvm.nd.array]) -> tvm.ir.transform.Pass:
-    """update constant datas
-
-    Parameters
-    ----------
-    datas: dict<str, tvm.nd.array>
-        The datas to be updated
-
-    Returns
-    -------
-    ret: tvm.ir.transform.Pass
-    """
-
-    return relax_api.UpdateConsts(datas)  # type: ignore

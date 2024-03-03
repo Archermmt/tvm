@@ -114,28 +114,19 @@ if __name__ == "__main__":
 
     model = TorchWrapper(model, get_config(_get_calib_datas, _get_train_datas))
 
-    # export to dump meta model
-    # model.export()
-
-    # optimize the model with quantizer(PTQ)
+    # optimize the model with tool
     model.optimize()
     acc = eval_model(model, testloader, max_iter=args.test_iter)
     print("Optimized acc: " + str(acc))
 
-    # train the model with quantizer(QAT)
+    # train the model with tool
     optimizer = optim.Adam(model.parameters(), lr=0.0000001, weight_decay=0.08)
     for ep in range(args.train_epoch):
         train_model(model, trainloader, optimizer, max_iter=args.train_iter)
         acc = eval_model(model, testloader, max_iter=args.test_iter)
         print("Train[{}] acc: {}".format(ep, acc))
 
-    # export to dump checkpoint model
-    # model.export()
-
     # compile the model
     model.compile()
     acc = eval_model(model, testloader, max_iter=args.test_iter)
     print("Compiled acc: " + str(acc))
-
-    # export to dump compiled model
-    # model.export()
