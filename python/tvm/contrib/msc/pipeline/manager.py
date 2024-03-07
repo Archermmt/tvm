@@ -491,27 +491,51 @@ class BaseManager(object):
             folder, dump = msc_utils.msc_dir(path.replace(".tar.gz", ""), keep_history=False), True
         else:
             folder = msc_utils.msc_dir(path, keep_history=False)
-        if dump:
-            plugins = export_plugins(self._plugins, folder.create_dir("plugin"))
+
+        # export compiled
+        if self._compiled:
+            if not dump:
+                return self.get_runnable("runnable")
+            runner = self.get_runnable()
+            model = runner.export_runnable(folder)
+            if self._plugins:
+                plugin = self._plugins[self.compile_type]
+                model["plugins"] = plugin.copy_libs(folder.create_dir("plugin"))
+            model["model_info"] = runner.model_info
+
+            def _to_relative(val):
+                if isinstance(val, str) and folder.path != val and folder.path in val:
+                    return val.replace(folder.path + "/", "")
+                return val
+
+            model = msc_utils.map_dict(model, _to_relative)
+            with open(folder.relpath("model.json"), "w") as f:
+                f.write(json.dumps(model, indent=2))
         else:
-            plugins = self._plugins
+            if dump:
+                plugins = export_plugins(self._plugins, folder.create_dir("plugin"))
+            else:
+                plugins = self._plugins
 
-        def _to_root_mark(val):
-            if isinstance(val, str) and folder.path != val and folder.path in val:
-                return val.replace(folder.path, MSCKey.ROOT_MARK)
-            return val
+            def _to_root_mark(val):
+                if isinstance(val, str) and folder.path != val and folder.path in val:
+                    return val.replace(folder.path, MSCKey.ROOT_MARK)
+                return val
 
-        pipeline = {
-            "model": self.export_model(folder.create_dir("model"), dump),
-            "config": self.export_config(folder, dump),
-            "plugins": plugins,
-            "root": folder.path,
-        }
-        pipeline = msc_utils.map_dict(pipeline, _to_root_mark)
-        if not dump:
-            return pipeline
-        with open(folder.relpath("pipeline.json"), "w") as f:
-            f.write(json.dumps(pipeline, indent=2))
+            pipeline = {
+                "model": self.export_model(folder.create_dir("model"), dump),
+                "config": self.export_config(folder, dump),
+                "plugins": plugins,
+                "root": folder.path,
+            }
+            pipeline = msc_utils.map_dict(pipeline, _to_root_mark)
+            if not dump:
+                return pipeline
+            with open(folder.relpath("pipeline.json"), "w") as f:
+                f.write(json.dumps(pipeline, indent=2))
+        with open(folder.relpath("report.json"), "w") as f:
+            f.write(json.dumps(self._report, indent=2))
+        folder.finalize()
         if path.endswith(".tar.gz"):
             msc_utils.pack_folder(path.replace(".tar.gz", ""), "tar")
         return path
@@ -532,8 +556,6 @@ class BaseManager(object):
             The exported model.
         """
 
-        if self._compiled:
-            return self._runner._save_runnable(folder) if dump else self._runner.runnable
         if self._optimized:
             module = self._runner.export_module(folder)
             if not dump:
@@ -561,9 +583,6 @@ class BaseManager(object):
         config: dict
             The updated config.
         """
-
-        if self._compiled:
-            return {"model_info": self.runner.model_info}
 
         # dump the dataloader
         def _save_dataset(name, info, dump: bool):

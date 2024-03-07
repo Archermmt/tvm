@@ -115,14 +115,21 @@ class MSCDirectory(object):
 
         if not os.path.isdir(self._path):
             return
-        empty_folders = []
-        for path in os.listdir(self._path):
-            if not os.path.isdir(path):
-                continue
-            if len(os.listdir(self.relpath(path))) == 0:
-                empty_folders.append(self.relpath(path))
-        for folder in empty_folders:
-            shutil.rmtree(folder)
+
+        def _remove_empty(path: str):
+            sub_paths = [os.path.join(path, f) for f in os.listdir(path)]
+            for s_path in sub_paths:
+                if not os.path.isdir(s_path):
+                    continue
+                if len(os.listdir(s_path)) == 0:
+                    shutil.rmtree(s_path)
+                else:
+                    _remove_empty(s_path)
+            if len(os.listdir(path)) == 0:
+                shutil.rmtree(path)
+            return path
+
+        return _remove_empty(self._path)
 
     def clean_up(self):
         """Clean up the dir"""
