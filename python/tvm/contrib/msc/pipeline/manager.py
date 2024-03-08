@@ -77,7 +77,15 @@ class BaseManager(object):
             plugins = msc_utils.map_dict(plugins, _from_root_mark)
 
         # check stage
-        for stage in ["inputs", "outputs", "dataset", MSCStage.PREPARE, MSCStage.PARSE, MSCStage.COMPILE]:
+        for stage in [
+            "inputs",
+            "outputs",
+            "dataset",
+            MSCStage.PREPARE,
+            MSCStage.PARSE,
+            MSCStage.COMPILE,
+            MSCStage.EXPORT,
+        ]:
             config.setdefault(stage, {})
 
         MSCMap.reset()
