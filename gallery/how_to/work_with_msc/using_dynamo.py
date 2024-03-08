@@ -17,7 +17,7 @@
 
 """
 Wrap pytorch model with quantizer.
-This example shows how to run PTQ, QAT, PTQ with distill...
+This example shows how to use dynamo wrapper
 Reference for MSC:
 https://discuss.tvm.apache.org/t/rfc-unity-msc-introduction-to-multi-system-compiler/15251/5
 
@@ -29,7 +29,7 @@ import argparse
 import torch
 import torch.optim as optim
 
-from tvm.contrib.msc.pipeline import TorchWrapper
+from tvm.contrib.msc.pipeline import DynamoWrapper
 from tvm.contrib.msc.core.tools import ToolType
 from tvm.contrib.msc.core.utils.message import MSCStage
 from _resnet import resnet50
@@ -49,10 +49,8 @@ parser.add_argument(
     help="The folder saving training and testing datas",
 )
 parser.add_argument("--compile_type", type=str, default="tvm", help="The compile type of model")
-parser.add_argument("--prune", action="store_true", help="Whether to use pruner")
 parser.add_argument("--quantize", action="store_true", help="Whether to use quantizer")
 parser.add_argument("--distill", action="store_true", help="Whether to use distiller for tool")
-parser.add_argument("--gym", action="store_true", help="Whether to use gym for tool")
 parser.add_argument("--test_batch", type=int, default=1, help="The batch size for test")
 parser.add_argument("--test_iter", type=int, default=100, help="The iter for test")
 parser.add_argument("--calibrate_iter", type=int, default=100, help="The iter for calibration")
@@ -62,14 +60,10 @@ parser.add_argument("--train_epoch", type=int, default=5, help="The epoch for tr
 args = parser.parse_args()
 
 
-def get_config(calib_loader, train_loader):
-    tools, dataset = [], {MSCStage.PREPARE: {"loader": calib_loader}}
-    if args.prune:
-        config = {"gym_configs": ["default"]} if args.gym else "default"
-        tools.append((ToolType.PRUNER, config))
+def get_config():
+    tools = []
     if args.quantize:
-        config = {"gym_configs": ["default"]} if args.gym else "default"
-        tools.append((ToolType.QUANTIZER, config))
+        tools.append((ToolType.QUANTIZER, "default"))
     if args.distill:
         config = {
             "options": {
@@ -78,12 +72,8 @@ def get_config(calib_loader, train_loader):
             }
         }
         tools.append((ToolType.DISTILLER, config))
-        dataset[MSCStage.DISTILL] = {"loader": train_loader}
-    return TorchWrapper.create_config(
-        inputs=[("input", [args.test_batch, 3, 32, 32], "float32")],
-        outputs=["output"],
+    return DynamoWrapper.create_config(
         compile_type=args.compile_type,
-        dataset=dataset,
         tools=tools,
         skip_config={"all": "check"},
         verbose="info",
@@ -97,25 +87,30 @@ if __name__ == "__main__":
         for i, (inputs, _) in enumerate(testloader, 0):
             if i >= args.calibrate_iter > 0:
                 break
-            yield {"input": inputs}
+            yield inputs
 
     def _get_train_datas():
         for i, (inputs, _) in enumerate(trainloader, 0):
             if i >= args.train_iter > 0:
                 break
-            yield {"input": inputs}
+            yield inputs
+
+    dataset = {
+        MSCStage.PREPARE: {"loader": _get_calib_datas},
+        MSCStage.DISTILL: {"loader": _get_train_datas},
+    }
 
     model = resnet50(pretrained=args.checkpoint)
     if torch.cuda.is_available():
         model = model.to(torch.device("cuda:0"))
 
-    acc = eval_model(model, testloader, max_iter=args.test_iter)
-    print("Baseline acc: " + str(acc))
+    # acc = eval_model(model, testloader, max_iter=args.test_iter)
+    # print("Baseline acc: " + str(acc))
 
-    model = TorchWrapper(model, get_config(_get_calib_datas, _get_train_datas))
+    model = DynamoWrapper(model, get_config())
 
     # optimize the model with tool
-    model.optimize()
+    model.optimize(dataset=dataset)
     acc = eval_model(model, testloader, max_iter=args.test_iter)
     print("Optimized acc: " + str(acc))
 

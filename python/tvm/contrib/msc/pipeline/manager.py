@@ -68,7 +68,7 @@ class BaseManager(object):
         if root:
 
             def _from_root_mark(val):
-                if root and isinstance(val, str) and MSCKey.ROOT_MARK in val:
+                if isinstance(val, str) and MSCKey.ROOT_MARK in val:
                     return val.replace(MSCKey.ROOT_MARK, root)
                 return val
 
@@ -77,7 +77,7 @@ class BaseManager(object):
             plugins = msc_utils.map_dict(plugins, _from_root_mark)
 
         # check stage
-        for stage in ["inputs", "outputs", "dataset", MSCStage.PREPARE, MSCStage.COMPILE]:
+        for stage in ["inputs", "outputs", "dataset", MSCStage.PREPARE, MSCStage.PARSE, MSCStage.COMPILE]:
             config.setdefault(stage, {})
 
         MSCMap.reset()
@@ -162,13 +162,9 @@ class BaseManager(object):
             The updated config.
         """
 
-        # update prepare and parse
         assert "inputs" in config, "inputs should be given to run manager"
         assert "outputs" in config, "outputs should be given to run manager"
         config, debug_levels = msc_utils.copy_dict(config), {}
-        for stage in [MSCStage.PREPARE, MSCStage.PARSE]:
-            if stage not in config:
-                config[stage] = {}
         config = self._get_runner_cls(self._model_type).update_config(
             MSCStage.PARSE, config, self._model
         )
