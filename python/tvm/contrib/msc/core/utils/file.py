@@ -405,7 +405,7 @@ def to_abs_path(path: str, root_dir: MSCDirectory = None, keep_history: bool = T
     return root_dir.relpath(path, keep_history)
 
 
-def pack_folder(path: str, style="tar"):
+def pack_folder(path: str, style="tar.gz"):
     """Pack the folder
 
     Parameters
@@ -422,7 +422,7 @@ def pack_folder(path: str, style="tar"):
     """
 
     root = os.path.dirname(path)
-    if style == "tar":
+    if style == "tar.gz":
         cmd = "tar --exculde={0}.tar.gz -zcvf {0}.tar.gz {0} && rm -rf {0}".format(path)
     else:
         raise NotImplementedError("Pack style {} is not supported".format(style))
@@ -432,6 +432,7 @@ def pack_folder(path: str, style="tar"):
     else:
         retcode = subprocess.call(cmd, shell=True)
     assert retcode == 0, "Failed to pack the folder {}({}): {}".format(path, style, retcode)
+    return path + "." + style
 
 
 get_build_dir = partial(get_workspace_subdir, name="Build")

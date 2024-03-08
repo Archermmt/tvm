@@ -246,7 +246,7 @@ class BaseManager(object):
             if MSCStage.COMPILE in self._config:
                 self.compile()
         except Exception as exc:  # pylint: disable=broad-exception-caught
-            err_msg = "Pipeline failed:{}\nTrace: " + str(exc)
+            err_msg = "Pipeline failed: " + str(exc)
             err_info = traceback.format_exc()
         self.summary(err_msg, err_info)
         self._logger.info(msc_utils.msg_block("SUMMARY", self._report, 0))
@@ -341,9 +341,12 @@ class BaseManager(object):
 
         msc_utils.time_stamp(MSCStage.PARSE)
         stage_config = self._config[MSCStage.PARSE]
-        use_cache = self._config.get("use_cache", True)
-
-        cache_path = msc_utils.get_cache_dir().relpath("parsed_relax.json") if use_cache else None
+        if self._config.get("use_cache", True):
+            cache_path = (
+                msc_utils.get_cache_dir().create_dir(MSCStage.PARSE).relpath("parsed_relax.json")
+            )
+        else:
+            cache_path = None
         if cache_path and os.path.isfile(cache_path):
             with open(cache_path, "r") as f:
                 self._relax_mod = tvm.ir.load_json(f.read())
@@ -516,7 +519,7 @@ class BaseManager(object):
             model.update(
                 {
                     "device": self._runner.device,
-                    "model_type": self._runner.compile_type,
+                    "model_type": self.compile_type,
                     "abstract": self._runner.model_info,
                 }
             )
@@ -564,7 +567,7 @@ class BaseManager(object):
                 f.write(json.dumps(self._report, indent=2))
         folder.finalize()
         if path.endswith(".tar.gz"):
-            msc_utils.pack_folder(path.replace(".tar.gz", ""), "tar")
+            msc_utils.pack_folder(path.replace(".tar.gz", ""), "tar.gz")
         return path
 
     def export_model(self, folder: msc_utils.MSCDirectory, dump: bool = True) -> Any:
@@ -713,10 +716,7 @@ class BaseManager(object):
 
         if self._runner:
             self._runner.destory()
-        if use_cache:
-            cache_dir = msc_utils.get_cache_dir().create_dir(MSCStage.PARSE).create_dir(stage)
-        else:
-            cache_dir = None
+        cache_dir = msc_utils.get_cache_dir().create_dir(stage) if use_cache else None
         msc_utils.time_stamp(stage + ".build", False)
         runner_cls = self._get_runner_cls(stage_config["run_type"])
         run_config = msc_utils.copy_dict(stage_config.get("run_config"))
