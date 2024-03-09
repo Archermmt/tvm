@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 # pylint: disable=import-outside-toplevel
-"""tvm.contrib.msc.pipeline.manager"""
+"""tvm.contrib.msc.pipeline.worker"""
 
 import os
 import time
@@ -37,8 +37,8 @@ from tvm.contrib.msc.plugin.utils import export_plugins, load_plugins
 from .config import support_tool
 
 
-class BaseManager(object):
-    """Base Manager of MSC
+class PipeBaseWorker(object):
+    """Base Worker of MSC pipeline
 
     Parameters
     ----------
@@ -48,48 +48,19 @@ class BaseManager(object):
         The config for pipeline.
     plugins: dict
         The plugins for pipeline.
-    root: str
-        The root path for files.
-    run_optimize: bool
-        Whether to run optimize.
-    run_compile: bool
-        Whether to run compile.
+    logger: logging.Logger
+        The logger.
     """
 
     def __init__(
-        self,
-        model: Any,
-        config: dict,
-        plugins: dict = None,
-        root: str = None,
-        run_optimize: bool = True,
-        run_compile: bool = True,
+        self, model: Any, config: dict, plugins: dict = None, logger: logging.Logger = None
     ):
-        # change path to root path
-        if root:
-
-            def _from_root_mark(val):
-                if isinstance(val, str) and MSCKey.ROOT_MARK in val:
-                    return val.replace(MSCKey.ROOT_MARK, root)
-                return val
-
-            model = _from_root_mark(model)
-            config = msc_utils.map_dict(config, _from_root_mark)
-            plugins = msc_utils.map_dict(plugins, _from_root_mark)
-
-        # check stage
-        for stage in [
-            "inputs",
-            "outputs",
-            "dataset",
-            MSCStage.PREPARE,
-            MSCStage.PARSE,
-            MSCStage.COMPILE,
-            MSCStage.EXPORT,
-        ]:
+        # check/set default stage
+        for key in ["inputs", "outputs", "dataset"]:
+            assert stage in config, "Missing {} in config".format(key)
+        for stage in [MSCStage.PREPARE, MSCStage.PARSE, MSCStage.COMPILE, MSCStage.EXPORT]:
             config.setdefault(stage, {})
 
-        MSCMap.reset()
         use_cache = config.get("use_cache", True)
         self._workspace = msc_utils.set_workspace(config.get("workspace"), use_cache)
         self._model_type = config["model_type"]
@@ -97,31 +68,16 @@ class BaseManager(object):
         self._model, self._device, self._training = runner_cls.load_native(model, config)
         self._plugins = load_plugins(plugins) if plugins else {}
         self._verbose = config.get("verbose", "info")
-        if "logger" in config:
-            self._logger = config["logger"]
-            MSCMap.set(MSCKey.GLOBALE_LOGGER, self._logger)
-        else:
-            log_path = config.get("log_path") or self._workspace.relpath(
-                "MSC_LOG", keep_history=False
-            )
-            self._logger = msc_utils.set_global_logger(self._verbose, log_path)
+        self._logger = logger or msc_utils.get_global_logger()
         self._optimized, self._compiled = False, False
-        msc_utils.time_stamp(MSCStage.SETUP)
-        self._logger.info(
-            msc_utils.msg_block("SETUP", self.setup(config, run_optimize, run_compile))
-        )
 
-    def setup(self, config: dict, run_optimize: bool = True, run_compile: bool = True) -> dict:
+    def setup(self, config: dict) -> dict:
         """Setup the manager
 
         Parameters
         ----------
         config: dict
             The config for manager.
-        run_optimize: bool
-            Whether to run optimize.
-        run_compile: bool
-            Whether to run compile.
 
         Returns
         -------
@@ -132,17 +88,15 @@ class BaseManager(object):
         self._meta_config = config
         self._optimize_type = config.get(MSCStage.OPTIMIZE, {}).get("run_type", self._model_type)
         self._compile_type = config.get(MSCStage.COMPILE, {}).get("run_type", self._model_type)
+        """
         # register plugins
         if self._plugins:
             for t in [self._model_type, self._optimize_type, self._compile_type]:
                 assert t in self._plugins, "Missing plugin for {}".format(t)
             for name, plugin in self._plugins[self._model_type].get_ops_info().items():
                 _ffi_api.RegisterPlugin(name, msc_utils.dump_dict(plugin))
+        """
         self._config, self._debug_levels = self.update_config(config)
-        if not run_optimize and MSCStage.OPTIMIZE in self._config:
-            self._config.pop(MSCStage.OPTIMIZE)
-        if not run_compile and MSCStage.COMPILE in self._config:
-            self._config.pop(MSCStage.COMPILE)
         self._tools_config = []
         self._relax_mod, self._runner = None, None
         self._sample_inputs = None
@@ -1061,7 +1015,7 @@ class BaseManager(object):
         return self._compile_type
 
 
-class MSCManager(BaseManager):
+class PipeMSCWorker(PipeBaseWorker):
     """Normal manager in MSC"""
 
     def _get_runner_cls(self, run_type: str) -> BaseRunner:

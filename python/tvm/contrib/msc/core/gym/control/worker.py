@@ -21,7 +21,7 @@ from tvm.contrib.msc.core.gym.namespace import GYMObject, GYMAction
 from tvm.contrib.msc.core import utils as msc_utils
 
 
-class BaseWorker(object):
+class GymBaseWorker(object):
     """Basic worker for gym
 
     Parameters
@@ -78,7 +78,7 @@ class BaseWorker(object):
             The execute result.
         """
 
-        raise NotImplementedError("execute is not implemented in BaseWorker")
+        raise NotImplementedError("execute is not implemented in " + str(self.__class__))
 
     @property
     def obj_type(self):
@@ -93,7 +93,7 @@ class BaseWorker(object):
         return self._worker_id
 
 
-class EnvWorker(BaseWorker):
+class GymEnvWorker(GymBaseWorker):
     """Env worker for gym"""
 
     def execute(self, act_type: str, **kwargs) -> Any:
@@ -136,7 +136,7 @@ class EnvWorker(BaseWorker):
         return GYMObject.ENV
 
 
-class AgentWorker(BaseWorker):
+class GymAgentWorker(GymBaseWorker):
     """Env worker for gym"""
 
     def execute(self, act_type: str, **kwargs) -> Any:
@@ -182,7 +182,7 @@ class WorkerFactory(object):
     """The Factory for workers"""
 
     @classmethod
-    def create(cls, name: str, workspace: msc_utils.MSCDirectory, config: dict) -> BaseWorker:
+    def create(cls, name: str, workspace: msc_utils.MSCDirectory, config: dict) -> GymBaseWorker:
         """Create worker
 
         Parameters
@@ -200,7 +200,7 @@ class WorkerFactory(object):
 
         Returns
         -------
-        worker: BaseWorker
+        worker: GymBaseWorker
             The create worker.
         """
 
@@ -213,8 +213,8 @@ class WorkerFactory(object):
         obj_type, worker_id = name.split(":")
         if obj_type == GYMObject.ENV:
             worker_cls = _get_worker_cls(obj_type)
-            return EnvWorker(name, workspace, int(worker_id), worker_cls, config)
+            return GymEnvWorker(name, workspace, int(worker_id), worker_cls, config)
         if obj_type == GYMObject.AGENT:
             worker_cls = _get_worker_cls(obj_type)
-            return AgentWorker(name, workspace, int(worker_id), worker_cls, config)
+            return GymAgentWorker(name, workspace, int(worker_id), worker_cls, config)
         raise TypeError("Worker for {} is not supported".format(obj_type))
