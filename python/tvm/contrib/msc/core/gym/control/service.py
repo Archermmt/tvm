@@ -27,7 +27,7 @@ import numpy as np
 
 from tvm.contrib.msc.core.gym.namespace import GYMObject, GYMAction
 from tvm.contrib.msc.core import utils as msc_utils
-from .worker import GymBaseWorker, WorkerFactory
+from .worker import BaseGymWorker, WorkerFactory
 
 
 def _send_message(msg_queue: queue.Queue, header: str, body: dict, header_type: str = "message"):
@@ -172,7 +172,7 @@ class BaseService(object):
         debug_level = int(verbose.split(":")[1]) if verbose.startswith("debug:") else 0
         self._logger = msc_utils.create_file_logger(verbose, self._workspace.relpath("SERVICE_LOG"))
 
-        def _create_workers(config: dict, obj_type: str) -> List[GymBaseWorker]:
+        def _create_workers(config: dict, obj_type: str) -> List[BaseGymWorker]:
             if "debug_level" not in config:
                 config["debug_level"] = debug_level
             if "logger" not in config:
@@ -458,7 +458,7 @@ class BaseService(object):
 
         return msg_key.split("-s-")
 
-    def _get_workers(self, obj_type: str) -> List[GymBaseWorker]:
+    def _get_workers(self, obj_type: str) -> List[BaseGymWorker]:
         """Get workers according to obj_type
 
         Parameters

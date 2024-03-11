@@ -57,7 +57,7 @@ parser.add_argument("--test_batch", type=int, default=1, help="The batch size fo
 parser.add_argument("--test_iter", type=int, default=100, help="The iter for test")
 parser.add_argument("--calibrate_iter", type=int, default=100, help="The iter for calibration")
 parser.add_argument("--train_batch", type=int, default=32, help="The batch size for train")
-parser.add_argument("--train_iter", type=int, default=100, help="The iter for train")
+parser.add_argument("--train_iter", type=int, default=200, help="The iter for train")
 parser.add_argument("--train_epoch", type=int, default=5, help="The epoch for train")
 args = parser.parse_args()
 
