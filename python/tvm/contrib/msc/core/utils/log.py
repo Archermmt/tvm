@@ -137,6 +137,26 @@ def get_global_logger() -> logging.Logger:
     return MSCMap.get(MSCKey.GLOBALE_LOGGER)
 
 
+def get_log_file(logger: logging.Logger) -> str:
+    """Get the log file from logger
+
+    Parameters
+    ----------
+    logger: logging.Logger
+        The logger.
+
+    Returns
+    -------
+    log_file: str
+        The log file.
+    """
+
+    for log_h in logger.handlers:
+        if isinstance(log_h, logging.FileHandler):
+            return log_h.baseFilename
+    return None
+
+
 def remove_loggers():
     """Remove the logger handlers"""
 

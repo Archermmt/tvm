@@ -1016,7 +1016,7 @@ class BaseTool(object):
             return False
         return self._debug_level >= debug_level
 
-    def tool_mark(self, msg: Any) -> dict:
+    def tool_mark(self, msg: Any) -> str:
         """Mark the message with tool info
 
         Parameters

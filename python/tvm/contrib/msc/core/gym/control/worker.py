@@ -21,7 +21,7 @@ from tvm.contrib.msc.core.gym.namespace import GYMObject, GYMAction
 from tvm.contrib.msc.core import utils as msc_utils
 
 
-class GymBaseWorker(object):
+class BaseGymWorker(object):
     """Basic worker for gym
 
     Parameters
@@ -93,7 +93,7 @@ class GymBaseWorker(object):
         return self._worker_id
 
 
-class GymEnvWorker(GymBaseWorker):
+class EnvGymWorker(BaseGymWorker):
     """Env worker for gym"""
 
     def execute(self, act_type: str, **kwargs) -> Any:
@@ -136,7 +136,7 @@ class GymEnvWorker(GymBaseWorker):
         return GYMObject.ENV
 
 
-class GymAgentWorker(GymBaseWorker):
+class AgentGymWorker(BaseGymWorker):
     """Env worker for gym"""
 
     def execute(self, act_type: str, **kwargs) -> Any:
@@ -182,7 +182,7 @@ class WorkerFactory(object):
     """The Factory for workers"""
 
     @classmethod
-    def create(cls, name: str, workspace: msc_utils.MSCDirectory, config: dict) -> GymBaseWorker:
+    def create(cls, name: str, workspace: msc_utils.MSCDirectory, config: dict) -> BaseGymWorker:
         """Create worker
 
         Parameters
@@ -200,7 +200,7 @@ class WorkerFactory(object):
 
         Returns
         -------
-        worker: GymBaseWorker
+        worker: BaseGymWorker
             The create worker.
         """
 
@@ -213,8 +213,8 @@ class WorkerFactory(object):
         obj_type, worker_id = name.split(":")
         if obj_type == GYMObject.ENV:
             worker_cls = _get_worker_cls(obj_type)
-            return GymEnvWorker(name, workspace, int(worker_id), worker_cls, config)
+            return EnvGymWorker(name, workspace, int(worker_id), worker_cls, config)
         if obj_type == GYMObject.AGENT:
             worker_cls = _get_worker_cls(obj_type)
-            return GymAgentWorker(name, workspace, int(worker_id), worker_cls, config)
+            return AgentGymWorker(name, workspace, int(worker_id), worker_cls, config)
         raise TypeError("Worker for {} is not supported".format(obj_type))

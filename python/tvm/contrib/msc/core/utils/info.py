@@ -303,6 +303,7 @@ def compare_arrays(
     datas: Dict[str, np.ndarray],
     atol: float = 1e-2,
     rtol: float = 1e-2,
+    report_detail: bool = False,
 ) -> dict:
     """Compare elements in array
 
@@ -316,6 +317,8 @@ def compare_arrays(
         The atol for compare.
     rtol: float
         The rtol for compare.
+    report_detail: bool
+        Whether to report detail
 
     Returns
     -------
@@ -327,26 +330,44 @@ def compare_arrays(
         golden.keys(), datas.keys()
     )
     report = {"total": 0, "passed": 0, "info": {}}
+
+    def _add_report(name: str, gol: Any, data: Any, passed: bool):
+        mark = name + "({})".format("pass" if passed else "fail")
+        diff = MSCArray(gol - data)
+        if passed:
+            if report_detail:
+                report["info"][mark] = {"data": MSCArray(data).abstract(), "diff": diff.abstract()}
+            else:
+                report["info"][mark] = "diff {}".format(diff.abstract())
+            report["passed"] += 1
+        else:
+            if report_detail:
+                report["info"][mark] = {
+                    "gol": MSCArray(gol).abstract(),
+                    "data": MSCArray(data).abstract(),
+                    "diff": diff.abstract(),
+                }
+            else:
+                report["info"][mark] = "diff {}".format(diff.abstract())
+
     for name, gol in golden.items():
         report["total"] += 1
         data = datas[name]
         if list(gol.shape) != list(data.shape):
-            report["info"][name] = "<Fail> shape mismatch [G]{} vs [D]{}".format(
+            report["info"][name + "(fail)"] = "shape mismatch [G]{} vs [D]{}".format(
                 gol.shape, data.shape
             )
             continue
         if gol.dtype != data.dtype:
-            report["info"][name] = "<Fail> dtype mismatch [G]{} vs [D]{}".format(
+            report["info"][name + "(fail)"] = "dtype mismatch [G]{} vs [D]{}".format(
                 gol.dtype, data.dtype
             )
             continue
-        diff = MSCArray(gol - data)
         try:
             np.testing.assert_allclose(gol, data, rtol=rtol, atol=atol, verbose=False)
-            report["info"][name] = "<Pass> diff {}".format(diff.abstract())
-            report["passed"] += 1
+            _add_report(name, gol, data, True)
         except:  # pylint: disable=bare-except
-            report["info"][name] = "<Fail> diff {}".format(diff.abstract())
+            _add_report(name, gol, data, False)
     return report
 
 
