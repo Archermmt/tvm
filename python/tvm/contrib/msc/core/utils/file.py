@@ -114,7 +114,7 @@ class MSCDirectory(object):
         """Finalize the directory"""
 
         if not os.path.isdir(self._path):
-            return
+            return self._path
 
         def _remove_empty(path: str):
             sub_paths = [os.path.join(path, f) for f in os.listdir(path)]

@@ -18,24 +18,24 @@
  */
 
 /*!
- * \file simplify.h
- * \brief Helper functions to construct and compose IR nodes.
+ * \file src/runtime/regex.cc
+ * \brief Exposes calls to python's `re` library.
  */
-#ifndef TVM_TIR_TRANSFORMS_SIMPLIFY_H_
-#define TVM_TIR_TRANSFORMS_SIMPLIFY_H_
 
-#include <tvm/arith/analyzer.h>
-#include <tvm/tir/function.h>
+#include "./regex.h"
+
+#include <tvm/runtime/registry.h>
 
 namespace tvm {
-namespace tir {
+namespace runtime {
 
-/* \brief Simplifies the prim func
- *
- * Applies the same behavior as the tir.transform.Simplify pass.
- */
-PrimFunc Simplify(PrimFunc stmt, arith::Analyzer* analyzer);
+bool regex_match(const std::string& match_against, const std::string& regex_pattern) {
+  const auto* regex_match_func = tvm::runtime::Registry::Get("tvm.runtime.regex_match");
+  CHECK(regex_match_func) << "RuntimeError: "
+                          << "The PackedFunc 'tvm.runtime.regex_match' has not been registered.  "
+                          << "This can occur if the TVM Python library has not yet been imported.";
+  return (*regex_match_func)(regex_pattern, match_against);
+}
 
-}  // namespace tir
+}  // namespace runtime
 }  // namespace tvm
-#endif  // TVM_TIR_TRANSFORMS_SIMPLIFY_H_

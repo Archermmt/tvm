@@ -137,7 +137,7 @@ class EnvGymWorker(BaseGymWorker):
 
 
 class AgentGymWorker(BaseGymWorker):
-    """Env worker for gym"""
+    """Agent worker for gym"""
 
     def execute(self, act_type: str, **kwargs) -> Any:
         """Execute the worker
