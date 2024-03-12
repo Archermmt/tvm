@@ -21,20 +21,15 @@ import os
 import time
 import json
 import logging
-from typing import Dict, Any, Union, List, Tuple
-import traceback
-import numpy as np
+from typing import Any, List, Tuple
 
 import tvm
 from tvm.contrib.msc.core.runtime import BaseRunner
 from tvm.contrib.msc.core.tools import ToolType
-from tvm.contrib.msc.core.utils.namespace import MSCFramework, MSCMap, MSCKey
+from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core.utils.message import MSCStage
 from tvm.contrib.msc.core import utils as msc_utils
-from tvm.contrib.msc.core.gym.control import create_controller
-from tvm.contrib.msc.core import _ffi_api
-from tvm.contrib.msc.plugin.utils import export_plugins, load_plugins
-from .config import support_tool, get_tool_stage
+from .utils import support_tool, get_tool_stage
 
 
 class BasePipeWorker(object):
@@ -71,7 +66,7 @@ class BasePipeWorker(object):
     ):
         # check/set default stage
         for key in ["inputs", "outputs", "dataset"]:
-            assert stage in config, "Missing {} in config".format(key)
+            assert key in config, "Missing {} in config".format(key)
         for stage in [MSCStage.PREPARE, MSCStage.PARSE, MSCStage.COMPILE, MSCStage.EXPORT]:
             config.setdefault(stage, {})
 
@@ -195,8 +190,13 @@ class BasePipeWorker(object):
             )
         return tools
 
-    def prepare(self) -> Tuple[dict, dict]:
+    def prepare(self, data_loader: Any) -> Tuple[dict, dict]:
         """Prepare datas for the pipeline.
+
+        Parameters
+        ----------
+        data_loader:
+            The data loader.
 
         Returns
         -------
@@ -224,7 +224,7 @@ class BasePipeWorker(object):
             msg = "Load {} golden from {}".format(len(loader), golden_folder)
             self._logger.debug(self.worker_mark(msg))
         elif run_func:
-            loader, source_type = self._get_loader(MSCStage.PREPARE), "Native"
+            loader, source_type = data_loader, "Native"
             saver_options = {"input_names": input_names, "output_names": self._config["outputs"]}
             cnt, max_golden = 0, self._config["dataset"][MSCStage.PREPARE].get("max_golden", 5)
             with msc_utils.IODataSaver(golden_folder, saver_options) as saver:
@@ -271,7 +271,7 @@ class BasePipeWorker(object):
                 self._model, self._sample_inputs, input_names, self._config["outputs"], **benchmark
             )
             report = {"latency": "{:.2f} ms @ {}".format(avg_time, self._device)}
-            msg = "profile(prepare) {} times -> {}".format(benchmark["repeat"], info["latency"])
+            msg = "Profile(prepare) {} times -> {}".format(benchmark["repeat"], report["latency"])
             self._logger.info(self.worker_mark(msg))
 
         return info, report
@@ -342,12 +342,42 @@ class BasePipeWorker(object):
         """
 
         assert tool_type in self._tools_config, "Can not find tool_type " + str(tool_type)
+        return os.path.isfile(self._tools_config[tool_type]["plan_file"])
+
+    def apply_tool(
+        self, tool_type: str, knowledge: dict = None, data_loader: Any = None
+    ) -> Tuple[dict, dict]:
+        """Apply tool with runner
+
+        Parameters
+        ----------
+        tool_type: str
+            The tool type to apply.
+        knowledge: dict
+            The pre knowledge.
+        data_loader:
+            The data loader.
+
+        Returns
+        -------
+        info: dict
+            The info of apply tool.
+        report: dict
+            The report of apply tool.
+        """
+
+        assert tool_type in self._tools_config, "Can not find tool_type " + str(tool_type)
         plan_file = self._tools_config[tool_type]["plan_file"]
-        if os.path.isfile(plan_file):
-            msg = "Skip {} with plan {}".format(tool_type, plan_file)
-            self._logger.info(self.worker_mark(msg))
-            return True
-        return False
+        if knowledge:
+            with open(plan_file, "w") as f:
+                f.write(json.dumps(knowledge, indent=2))
+        else:
+            self._runner.make_plan(tool_type, data_loader)
+        if self._tools_config[tool_type].get("visualize", False):
+            self._runner.visualize(
+                msc_utils.get_visual_dir().create_dir(self._runner.stage.split(".")[0])
+            )
+        return {}, {}
 
     def create_runner(
         self,
@@ -385,9 +415,12 @@ class BasePipeWorker(object):
 
         if self._runner:
             self._runner.destory()
-        stage_config = stage_config or self._config[stage]
+        if not stage_config:
+            assert stage in self._config, "Can not find stage config of " + str(stage)
+            stage_config = self._config[stage]
+        tools = tools or []
+        assert all(t in self._tools_config for t in tools), "Missing some tools " + str(tools)
         cache_dir = msc_utils.get_cache_dir().create_dir(stage) if use_cache else None
-        msc_utils.time_stamp(stage + ".build", False)
         runner_cls = self._get_runner_cls(stage_config["run_type"])
         run_config = msc_utils.copy_dict(stage_config.get("run_config"))
         if "generate_config" not in run_config:
@@ -411,52 +444,15 @@ class BasePipeWorker(object):
             **run_config,
         )
         runner.build(cache_dir=cache_dir)
-        info, report = {}, {"build": "{} on {}".format(runner.framework, runner.device)}
         if visualize:
             runner.visualize(msc_utils.get_visual_dir().create_dir(stage.split(".")[0]))
-        if profile and "profile" in stage_config:
-            info["profile"], report["profile"] = self._profile_runner(runner, stage_config)
         if use_cache:
             runner.save_cache(cache_dir)
+        info, report = {}, {"build": "{} on {}".format(runner.framework, runner.device)}
+        if profile and "profile" in stage_config:
+            info["profile"], report["profile"] = self._profile_runner(runner, stage_config)
+        self._runner = runner
         return info, report
-
-    def create_runner_with_tools(
-        self, stage: str, tool_type: str, applied_tools: List[str]
-    ) -> Tuple[dict, dict]:
-        """Create runner with tools.
-
-        Parameters
-        ----------
-        stage: str
-            The stage name
-        tool_type: str
-            The tool type to apply.
-        applied_tools: list<str>
-            The applied tool types.
-
-        Returns
-        -------
-        info: dict
-            The info of create runner.
-        report: dict
-            The report of create runner.
-        """
-
-        assert tool_type in self._tools_config, "Can not find tool_type " + str(tool_type)
-        tool_config = self._tools_config[tool_type]
-        stage_config = {
-            "run_type": tool_config.get("run_type", self._config[stage]["run_type"]),
-            "run_config": self._config[stage]["run_config"],
-        }
-        tool_stage = get_tool_stage(tool_type)
-        return self.create_runner(
-            stage + "." + tool_stage,
-            stage_config,
-            applied_tools + [tool_type],
-            visualize=False,
-            profile=False,
-            use_cache=False,
-        )
 
     def _profile_runner(self, runner: BaseRunner, stage_config: str) -> dict:
         """Profile the runner.
@@ -477,7 +473,6 @@ class BasePipeWorker(object):
         """
 
         stage = runner.stage
-        msc_utils.time_stamp(stage + ".profile", False)
         profile_config = stage_config["profile"]
         msg = "profile({})".format(stage)
         info, report = {}, {}
@@ -486,7 +481,7 @@ class BasePipeWorker(object):
         check_config = profile_config.get("check", {})
         if check_config:
             loader = msc_utils.IODataLoader(self._config["dataset"]["golden"]["loader"])
-            acc_info = {"config": check_config, "passed": 0}
+            info = {"config": check_config, "passed": 0, "iters": []}
             total, passed = 0, 0
             for inputs, outputs in loader:
                 results = runner.run(inputs)
@@ -498,15 +493,14 @@ class BasePipeWorker(object):
                 )
                 total += iter_info["total"]
                 passed += iter_info["passed"]
-                acc_info["iters"].append(iter_info["info"])
+                info["iters"].append(iter_info["info"])
             pass_rate = float(passed) / total
-            acc_info["passed"] = "{}/{}".format(passed, total)
+            info["passed"] = "{}/{}".format(passed, total)
             report["accuracy"] = "{}/{}({:.2f}%)".format(passed, total, pass_rate * 100)
-            info["accuracy"] = acc_info
             msg += " test {} iters -> {}".format(len(loader), report["accuracy"])
             if runner.get_tool(ToolType.PRUNER) or runner.get_tool(ToolType.QUANTIZER):
-                msg = "Disable accuracy check({}) by tools".format(stage)
-                self._logger.debug(self.worker_mark(msg))
+                disable_msg = "Disable accuracy check({}) by tools".format(stage)
+                self._logger.debug(self.worker_mark(disable_msg))
             else:
                 required_err, err_rate = check_config.get("err_rate", 0), (1 - pass_rate)
                 if err_rate > required_err >= 0:
@@ -517,12 +511,7 @@ class BasePipeWorker(object):
                     )
 
         # benchmark model
-        if runner.get_tool(ToolType.TRACKER):
-            benchmark_config = None
-            msg = "Disable benchmark ({}) by tracker".format(stage)
-            self._logger.debug(self.worker_mark(msg))
-        else:
-            benchmark_config = profile_config.get("benchmark", {})
+        benchmark_config = profile_config.get("benchmark", {})
         if benchmark_config:
             for _ in range(benchmark_config.get("warm_up", 10)):
                 runner.run(self._sample_inputs)
@@ -535,6 +524,93 @@ class BasePipeWorker(object):
             msg += " latency {} times -> {}".format(repeat, report["latency"])
         self._logger.info(self.worker_mark(msg))
         return info, report
+
+    def export_model(self, stage: str, folder: msc_utils.MSCDirectory, dump: bool = True) -> Any:
+        """Export the model
+
+        Parameters
+        ----------
+        stage: str
+            The pipeline stage.
+        folder: MSCDirectory
+            The export folder.
+        dump: bool
+            Whether to dump info.
+
+        Returns
+        -------
+        exported:
+            The exported model.
+        """
+
+        if stage == MSCStage.COMPILE:
+            if not dump:
+                return self._runner.runnable
+            model = self._runner.export_runnable(folder)
+            model.update(
+                {
+                    "device": self._runner.device,
+                    "model_type": self.compile_type,
+                    "abstract": self._runner.model_info,
+                }
+            )
+            # save golden
+            num_golden = self._config[MSCStage.EXPORT].get("num_golden", 0)
+            if num_golden > 0:
+                saver_options = {
+                    "input_names": [i[0] for i in self._config["inputs"]],
+                    "output_names": self._config["outputs"],
+                }
+                batch_cnt, model["golden"] = 0, folder.create_dir("golden").path
+                loader = msc_utils.IODataLoader(self._config["dataset"]["golden"]["loader"])
+                with msc_utils.IODataSaver(model["golden"], saver_options) as saver:
+                    for inputs, _ in loader:
+                        if batch_cnt >= num_golden:
+                            break
+                        batch_cnt = saver.save_batch(inputs, self._runner.run(inputs))
+            msc_utils.get_visual_dir().copy(stage, folder.relpath("visualize"))
+            return model
+
+        if stage == MSCStage.OPTIMIZE:
+            module = self._runner.export_module(folder)
+            if not dump:
+                return module
+            path = folder.relpath("model.json")
+            with open(path, "w") as f:
+                f.write(tvm.ir.save_json(module))
+            msc_utils.get_visual_dir().copy(stage, folder.relpath("visualize"))
+            return {"model": path}
+
+        if not dump:
+            return self._model
+        model = self._get_runner_cls(self._model_type).dump_nativate(
+            self._model, folder, **self._config[MSCStage.EXPORT]
+        )
+        return {"model": model}
+
+    def export_tool(self, tool_type: str, folder: msc_utils.MSCDirectory) -> dict:
+        """Export the tool
+
+        Parameters
+        ----------
+        tool_type: str
+            The tool type.
+        folder: MSCDirectory
+            The export folder.
+
+        Returns
+        -------
+        tool: dict
+            The exported tool.
+        """
+
+        run_tool = self._runner.get_tool(tool_type)
+        assert tool_type in self._tools_config, "Can not find tool_type " + str(tool_type)
+        tool = msc_utils.copy_dict(self._tools_config[tool])
+        tool["tool_config"] = run_tool.export_config(tool["tool_config"], folder)
+        if tool["tool_config"]:
+            return tool
+        return None
 
     def get_runnable(self, ret_type: str = "runner") -> Any:
         """Return object by type.
@@ -617,74 +693,7 @@ class BasePipeWorker(object):
             The message with mark.
         """
 
-        return "Worker[{}]: {}".format(self._name, msg)
-
-    def apply_tool(self, tool: dict, stage: str, applied_tools: List[str]) -> str:
-        """Apply tool with runner
-
-        Parameters
-        ----------
-        tool: dict
-            The tool config.
-        stage: str
-            The compile stage.
-
-        Returns
-        -------
-        plan_file: str
-            The plan_file path.
-        """
-
-        self._tools_config.append(tool)
-        tool_type, tool_config = tool["tool_type"], tool["tool_config"]
-        tool_stage = self._get_tool_stage(tool_type)
-        plan_file = tool_config["plan_file"]
-        if os.path.isfile(plan_file):
-            self._logger.info("Skip %s with plan %s", tool_type, plan_file)
-            return plan_file
-        t_stage = stage + "." + tool_stage
-        msc_utils.time_stamp(t_stage)
-        stage_config = {
-            "run_type": tool.get("run_type", self._config[stage]["run_type"]),
-            "run_config": self._config[stage]["run_config"],
-        }
-        runner = self._create_runner(
-            t_stage, stage_config, visualize=False, profile=False, use_cache=False
-        )
-        if "gym_configs" in tool:
-            knowledge = None
-            for idx, config in enumerate(tool["gym_configs"]):
-                knowledge_file = msc_utils.get_config_dir().relpath(
-                    "gym_knowledge_{}.json".format(idx)
-                )
-                gym_mark = "GYM[{}/{}]({} @ {}) ".format(
-                    idx, len(tool["gym_configs"]), runner.framework, t_stage
-                )
-                if os.path.isfile(knowledge_file):
-                    knowledge = knowledge_file
-                    self._logger.info("%sLoad from %d", gym_mark, knowledge)
-                else:
-                    msc_utils.time_stamp(t_stage + ".gym_{}".format(idx))
-                    self._logger.info("%sStart search", gym_mark)
-                    extra_config = {
-                        "env": {
-                            "runner": runner,
-                            "data_loader": self._get_loader(tool_stage),
-                            "knowledge": knowledge,
-                        },
-                        "verbose": self._verbose,
-                    }
-                    controller = create_controller(tool_stage, config, extra_config)
-                    knowledge = controller.run()
-                    msc_utils.save_dict(knowledge, knowledge_file)
-            plan = msc_utils.load_dict(knowledge)
-            self._logger.info("%sFound %d plan", gym_mark, len(plan))
-            return msc_utils.save_dict(plan, plan_file)
-        msc_utils.time_stamp(t_stage + ".make_plan", False)
-        plan_file = runner.make_plan(tool_type, self._get_loader(tool_stage))
-        if tool.get("visualize", False):
-            runner.visualize(msc_utils.get_visual_dir().create_dir(stage))
-        return plan_file
+        return "WORKER({}) {}".format(self._name, msg)
 
     @property
     def runner(self):

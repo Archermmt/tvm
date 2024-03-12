@@ -1001,7 +1001,7 @@ class BaseRunner(object):
             The message with mark.
         """
 
-        return "RUNNER[{}]({} @ {}) {}".format(self._name, self.framework, self._stage, msg)
+        return "RUNNER({}.{} @ {}) {}".format(self._name, self.framework, self._stage, msg)
 
     @property
     def stage(self):

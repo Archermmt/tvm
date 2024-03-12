@@ -56,7 +56,7 @@ def support_tool(tool: dict, stage: str, run_type: str) -> bool:
     tool: dict
         The tool config,
     stage: str
-        The compile stage.
+        The pipeline stage.
     run_type: str
         The runtime type.
 

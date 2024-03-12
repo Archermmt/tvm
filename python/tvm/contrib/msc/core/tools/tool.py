@@ -288,8 +288,10 @@ class BaseTool(object):
 
     Parameters
     ----------
+    tag: str
+        The tag of tool.
     stage: str
-        The stage of tool
+        The stage of tool.
     plan_file: str
         The plan file path.
     strategys: list[dict]
@@ -310,6 +312,7 @@ class BaseTool(object):
 
     def __init__(
         self,
+        tag: str,
         stage: str,
         plan_file: str,
         strategys: List[dict],
@@ -320,6 +323,7 @@ class BaseTool(object):
         verbose_step: int = 50,
         logger: logging.Logger = None,
     ):
+        self._tag = tag
         self._stage = stage
         self._plan_file = plan_file
         if os.path.isfile(plan_file):
@@ -1030,7 +1034,9 @@ class BaseTool(object):
             The message with mark.
         """
 
-        return "{}({} @ {}) {}".format(self.tool_type().upper(), self.framework(), self._stage, msg)
+        return "{}({}.{} @ {}) {}".format(
+            self.tool_type().upper(), self._tag, self.framework(), self._stage, msg
+        )
 
     def msg_mark(self, msg: Any, in_forward: bool = True) -> str:
         """Mark the message with debug info

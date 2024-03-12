@@ -90,7 +90,7 @@ def create_tool(framework: str, tool_type: str, tag: str = "main", **config) -> 
     assert tool_cls, "Can not find tool class for {}:{} @ {}".format(
         tool_type, tool_style, framework
     )
-    return add_tool(tool_cls(**config), tool_type, tag)
+    return add_tool(tool_cls(tag, **config), tool_type, tag)
 
 
 def get_tool(tool_type: str, tag: str = "main") -> BaseTool:
