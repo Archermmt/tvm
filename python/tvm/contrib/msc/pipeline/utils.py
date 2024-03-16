@@ -109,6 +109,7 @@ def create_config(
     compile_type: str = None,
     dataset: Dict[str, dict] = None,
     tools: List[Tuple[str, Union[dict, str]]] = None,
+    dynamic: bool = False,
     skip_config: Dict[str, str] = None,
     **extra_config,
 ) -> dict:
@@ -132,6 +133,8 @@ def create_config(
         The datasets for compile pipeline.
     tools: list<str, str|dict>
         The tools config.
+    dynamic: bool
+        Whether to config dyanmic mode.
     skip_config: dict
         The skip config for compile.
     extra_config: dict
@@ -144,6 +147,8 @@ def create_config(
     tools = tools or []
     tools = [config_tool(t_type, t_config) for t_type, t_config in tools]
     # basic config
+    if dynamic:
+        inputs, outputs = None, None
     config = {
         "model_type": model_type,
         "inputs": inputs,

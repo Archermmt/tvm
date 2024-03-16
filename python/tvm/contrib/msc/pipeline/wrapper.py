@@ -19,12 +19,11 @@
 import shutil
 from typing import Any, Union, List
 
-from tvm.contrib.msc.core.tools.tool import BaseTool, ToolType
 from tvm.contrib.msc.core.utils.message import MSCStage
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 from .manager import MSCManager
-from .dynamic import MSCDynamic
+from .dynamic import MSCDynamic, TorchDynamic
 from .utils import create_config
 
 
@@ -92,18 +91,20 @@ class BaseWrapper(object):
             The workspace.
         """
 
-        self.logger.info("[Wrapper] Start optimize model")
+        self.logger.info("\n%s", msc_utils.split_line("Start optimize model", "*"))
         config = msc_utils.copy_dict(self._config)
         config["workspace"] = self._workspace.create_dir(workspace)
         if MSCStage.OPTIMIZE not in config:
             config[MSCStage.OPTIMIZE] = {
                 "run_type": self.model_type(),
-                "profile": {"check": {"atol": 1e-3, "rtol": 1e-3}, "benchmark": {"repeat": -1}},
+                "profile": {
+                    "check": {"atol": 1e-3, "rtol": 1e-3, "err_rate": -1},
+                },
             }
         self._pipeline = self.pipe_cls(self._meta_model, config, self._plugins, run_compile=False)
         report = self._pipeline.run_pipe()
         if report["success"]:
-            self._optimized_model = self._pipeline.get_runnable("runnable")
+            self._optimized_model = self._pipeline.get_runtime("runnable")
         return self
 
     def compile(
@@ -122,24 +123,24 @@ class BaseWrapper(object):
         """
 
         if self._optimized_model:
-            self.logger.info("[Wrapper] Start compile checkpoint")
+            self.logger.info("\n%s", msc_utils.split_line("Start compile checkpoint", "*"))
             ckpt_path = self._workspace.create_dir(ckpt_path).path
             pipeline = self.export(ckpt_path, dump=dump)
             pipeline["config"]["workspace"] = self._workspace.create_dir(workspace)
             self._pipeline = self.pipe_cls(**pipeline)
             report = self._pipeline.run_pipe()
             if report["success"]:
-                self._compiled_model = self._pipeline.get_runtime()
+                self._compiled_model = self._pipeline.get_runtime("runnable")
             if not self._debug:
                 shutil.rmtree(ckpt_path)
         else:
-            self.logger.info("[Wrapper] Start compile model")
+            self.logger.info("\n%s", msc_utils.split_line("Start compile model", "*"))
             config = msc_utils.copy_dict(self._config)
             config["workspace"] = self._workspace.create_dir(workspace)
             self._pipeline = self.pipe_cls(self._meta_model, config, self._plugins)
             report = self._pipeline.run_pipe()
             if report["success"]:
-                self._compiled_model = self._pipeline.get_runtime()
+                self._compiled_model = self._pipeline.get_runtime("runnable")
         return self
 
     def export(self, path: str = "msc_export", dump: bool = True) -> Union[str, dict]:
@@ -198,8 +199,8 @@ class BaseWrapper(object):
     @classmethod
     def create_config(
         cls,
-        inputs: List[dict],
-        outputs: List[str],
+        inputs: List[dict] = None,
+        outputs: List[str] = None,
         baseline_type: str = None,
         optimize_type: str = None,
         compile_type: str = None,
@@ -223,6 +224,8 @@ class BaseWrapper(object):
             The config kwargs.
         """
 
+        inputs = inputs or []
+        outputs = outputs or []
         return create_config(
             inputs, outputs, cls.model_type(), baseline_type, optimize_type, compile_type, **kwargs
         )
@@ -265,6 +268,12 @@ class TorchWrapper(BaseWrapper):
         if self._get_framework() == MSCFramework.TORCH:
             return self._get_model().eval()
         return self._get_model()
+
+    @property
+    def pipe_cls(self):
+        if self._dynamic:
+            return TorchDynamic
+        return MSCManager
 
     @classmethod
     def model_type(cls):

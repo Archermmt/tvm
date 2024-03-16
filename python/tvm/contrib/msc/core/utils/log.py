@@ -163,3 +163,25 @@ def remove_loggers():
     logger = MSCMap.get(MSCKey.GLOBALE_LOGGER)
     if logger:
         logger.handlers.clear()
+
+
+def split_line(msg: str, symbol: str = "#", width: int = 100) -> str:
+    """Mark message to split line
+
+    Parameters
+    ----------
+    msg: str
+        The message.
+    symbol: str
+        The split symbol.
+    width: int
+        The line width.
+
+    Returns
+    -------
+    split_line: str
+        The split line with message.
+    """
+
+    space = int(width / 4)
+    return "{0}{1}{0}".format(symbol * space, msg.center(space * 2))

@@ -75,24 +75,25 @@ class BasePipeline(object):
         MSCMap.reset()
         self._model, self._meta_config = model, config
         self._config = msc_utils.copy_dict(config)
-        self._model_type = config["model_type"]
-        self._optimize_type = config.get(MSCStage.OPTIMIZE, {}).get("run_type", self._model_type)
-        self._compile_type = config.get(MSCStage.COMPILE, {}).get("run_type", self._model_type)
         if not run_optimize and MSCStage.OPTIMIZE in self._config:
             self._config.pop(MSCStage.OPTIMIZE)
         if not run_compile and MSCStage.COMPILE in self._config:
             self._config.pop(MSCStage.COMPILE)
         self._plugins = load_plugins(plugins) if plugins else {}
-        use_cache = config.get("use_cache", True)
-        self._workspace = msc_utils.set_workspace(config.get("workspace"), use_cache)
-        if "logger" in config:
-            self._logger = config["logger"]
+        use_cache = self._config.get("use_cache", True)
+        if "workspace" in self._config:
+            self._workspace = msc_utils.set_workspace(self._config.pop("workspace"), use_cache)
+        else:
+            self._workspace = msc_utils.set_workspace("msc_workspace", use_cache)
+        if "logger" in self._config:
+            self._logger = self._config.pop("logger")
             MSCMap.set(MSCKey.GLOBALE_LOGGER, self._logger)
         else:
-            verbose = config.get("verbose", "info")
-            log_file = config.get("log_file") or self._workspace.relpath(
-                "MSC_LOG", keep_history=False
-            )
+            verbose = self._config.get("verbose", "info")
+            if "log_file" in self._config:
+                log_file = self._config.pop("log_file")
+            else:
+                log_file = self._workspace.relpath("MSC_LOG", keep_history=False)
             self._logger = msc_utils.set_global_logger(verbose, log_file)
         msc_utils.time_stamp(MSCStage.SETUP)
         self._logger.info(msc_utils.msg_block(self.pipe_mark("SETUP"), self.setup()))
@@ -106,12 +107,23 @@ class BasePipeline(object):
             The setup info.
         """
 
+        # basic config
+        self._model_type = self._config["model_type"]
+        self._optimize_type = self._config.get(MSCStage.OPTIMIZE, {}).get(
+            "run_type", self._model_type
+        )
+        self._compile_type = self._config.get(MSCStage.COMPILE, {}).get(
+            "run_type", self._model_type
+        )
+        self._optimized, self._compiled = False, False
+
         # register plugins
         if self._plugins:
             for t in [self._model_type, self._optimize_type, self._compile_type]:
                 assert t in self._plugins, "Missing plugin for {}".format(t)
             for name, plugin in self._plugins[self._model_type].get_ops_info().items():
                 _ffi_api.RegisterPlugin(name, msc_utils.dump_dict(plugin))
+
         # init report
         self._report = {
             "success": False,
@@ -120,7 +132,6 @@ class BasePipeline(object):
                 "log_file": msc_utils.get_log_file(self._logger),
             },
             "duration": {},
-            "profile": {},
         }
         return {
             "workspace": self._workspace.path,
@@ -174,7 +185,7 @@ class BasePipeline(object):
         Returns
         -------
         info: dict
-            The info of prepare
+            The info of prepare.
         report: dict
             The report of prepare.
         """
@@ -201,18 +212,10 @@ class BasePipeline(object):
 
         raise NotImplementedError("_parse is not implemented in " + str(self.__class__))
 
-    def baseline(self) -> Tuple[dict, dict]:
-        """Run the baseline.
+    def baseline(self):
+        """Run the baseline."""
 
-        Returns
-        -------
-        info: dict
-            The info of stage.
-        report: dict
-            The report of stage.
-        """
-
-        return self._run_stage(MSCStage.BASELINE)
+        self._run_stage(MSCStage.BASELINE)
 
     def optimize(self) -> Tuple[dict, dict]:
         """Run the optimize.
@@ -225,9 +228,8 @@ class BasePipeline(object):
             The report of stage.
         """
 
-        info, report = self._run_stage(MSCStage.OPTIMIZE)
+        self._run_stage(MSCStage.OPTIMIZE)
         self._optimized = True
-        return info, report
 
     def compile(self) -> Tuple[dict, dict]:
         """Run the compile.
@@ -240,9 +242,8 @@ class BasePipeline(object):
             The report of stage.
         """
 
-        info, report = self._run_stage(MSCStage.COMPILE)
+        self._run_stage(MSCStage.COMPILE)
         self._compiled = True
-        return info, report
 
     def _run_stage(self, stage: str) -> Tuple[dict, dict]:
         """Run the stage.
@@ -266,10 +267,11 @@ class BasePipeline(object):
             run_type = tool.get("run_type", self._config[stage]["run_type"])
             if not support_tool(tool, stage, run_type):
                 continue
+            tools.append(tool["tool_type"])
             if self._tool_applied(tool["tool_type"]):
                 self._logger.info(self.pipe_mark("Skip applied tool " + str(tool["tool_type"])))
-                if not tool.get("apply_once", False):
-                    tools.append(tool["tool_type"])
+                if tool.get("apply_once", False):
+                    tools = tools[:-1]
                 continue
             tool_stage = get_tool_stage(tool["tool_type"])
             t_stage = stage + "." + tool_stage
@@ -308,10 +310,10 @@ class BasePipeline(object):
             if tool.get("apply_once", False):
                 msg = "Ignore adding apply once tool " + str(tool["tool_type"])
                 self._logger.debug(self.pipe_mark(msg))
-            else:
-                tools.append(tool["tool_type"])
+                tools = tools[:-1]
         msc_utils.time_stamp(stage + ".build", False)
-        return self._create_runtime(stage, tools=tools)
+        info, report = self._create_runtime(stage, tools=tools)
+        self._record_stage(stage, info, report)
 
     def _tool_applied(self, tool_type: str) -> bool:
         """Check if the tool is applied
@@ -462,7 +464,6 @@ class BasePipeline(object):
                 return val.replace(folder.path, MSCKey.ROOT_MARK)
             return val
 
-        # export compiled
         if self._compiled:
             model = self._export_model(MSCStage.COMPILE, folder, dump)
             if not dump:
@@ -553,7 +554,7 @@ class BasePipeline(object):
             for stage in [MSCStage.BASELINE, MSCStage.OPTIMIZE]:
                 if stage in config:
                     config.pop(stage)
-            if "profile" in config[MSCStage.COMPILE]:
+            if "profile" in config[MSCStage.COMPILE] and self.get_runtime().trained:
                 config[MSCStage.COMPILE]["profile"].setdefault("check", {})["err_rate"] = -1
             config["tools"] = []
             for tool in self._config.get("tools", []):
@@ -622,7 +623,7 @@ class BasePipeline(object):
                 for _ in range(max_batch):
                     yield {i[0]: np.random.rand(*i[1]).astype(i[2]) for i in self._config["inputs"]}
 
-            loader, source_type = get_random, "Random"
+            loader, source_type = get_random, "random"
         elif msc_utils.is_io_dataset(source_loader):
             max_batch = config.get("max_batch", -1)
 
@@ -630,7 +631,7 @@ class BasePipeline(object):
                 for inputs, _ in msc_utils.IODataLoader(source_loader, end=max_batch):
                     yield inputs
 
-            loader, source_type = load_datas, "IOData"
+            loader, source_type = load_datas, "io_data"
         elif callable(source_loader):
             max_batch = config.get("max_batch", -1)
             load_kwargs = config.get("load_kwargs", {})
@@ -641,7 +642,7 @@ class BasePipeline(object):
                         break
                     yield inputs
 
-            loader, source_type = get_source, "Custom"
+            loader, source_type = get_source, "custom"
         else:
             raise TypeError(
                 "Unexpected source loader {}({})".format(source_loader, type(source_loader))
@@ -666,7 +667,7 @@ class BasePipeline(object):
         if info:
             self._logger.info(msc_utils.msg_block(self.pipe_mark(stage.upper()), info))
         if report:
-            self._report.setdefault(stage, {}).update(report)
+            self._report["info"].setdefault(stage, {}).update(report)
 
     def destory(self, keep_workspace: bool = False):
         """Destroy the pipeline
@@ -687,8 +688,13 @@ class BasePipeline(object):
 
         raise NotImplementedError("_destory is not implemented in " + str(self.__class__))
 
-    def get_runtime(self) -> Any:
+    def get_runtime(self, ret_type: str = "runner") -> Any:
         """Get the runtime of pipeline
+
+        Parameters
+        ----------
+        ret_type: str
+            The return type runner| runnable| model.
 
         Returns
         -------
@@ -698,15 +704,17 @@ class BasePipeline(object):
 
         raise NotImplementedError("get_runtime is not implemented in " + str(self.__class__))
 
-    def create_worker(self, model: Any = None, **extra_config):
+    def create_worker(self, model: Any = None, name: str = "main", worker_config: dict = None):
         """Create pipe worker
 
         Parameters
         -------
         model: Any
             The raw model in framwork.
-        extra_config: dict
-            The extra config for pipeline.
+        name: str
+            The name of worker.
+        worker_config: dict
+            The extra config for worker.
 
         Returns
         -------
@@ -714,9 +722,9 @@ class BasePipeline(object):
             The message with mark.
         """
 
-        config = msc_utils.update_dict(msc_utils.copy_dict(self._config), extra_config)
+        config = msc_utils.update_dict(msc_utils.copy_dict(self._config), worker_config)
         return self.worker_cls(
-            model or self._model, config, self._workspace, self._plugins, self._logger
+            model or self._model, config, self._workspace, self._plugins, self._logger, name=name
         )
 
     def pipe_mark(self, msg: Any) -> str:

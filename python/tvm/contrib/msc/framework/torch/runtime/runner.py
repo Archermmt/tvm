@@ -17,7 +17,6 @@
 # pylint: disable=unused-import
 """tvm.contrib.msc.framework.torch.runtime.runner"""
 
-import os
 import time
 from typing import Dict, List, Union, Tuple, Any
 import numpy as np

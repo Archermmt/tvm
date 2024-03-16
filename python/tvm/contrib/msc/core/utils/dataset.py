@@ -302,12 +302,12 @@ class BaseDataSaver(object):
         return self
 
     def __exit__(self, exception_type, exception_value, traceback):
-        self._info["num_datas"] = self._current
         self.finalize()
 
     def finalize(self):
         """Finalize the saver"""
 
+        self._info["num_datas"] = self._current
         with open(os.path.join(self._folder, "datas_info.json"), "w") as f:
             f.write(json.dumps(self._info, indent=2))
 
@@ -424,7 +424,13 @@ class IODataSaver(BaseDataSaver):
         assert "input_names" in options, "input_names should be given to setup IODataSaver"
         self._input_names = options["input_names"]
         self._output_names = options.get("output_names", [])
-        return {"inputs": {}, "outputs": {}, "num_datas": 0}
+        return {
+            "inputs": {},
+            "outputs": {},
+            "num_datas": 0,
+            "input_names": self._input_names,
+            "output_names": self._output_names,
+        }
 
     def finalize(self):
         """Finalize the saver"""

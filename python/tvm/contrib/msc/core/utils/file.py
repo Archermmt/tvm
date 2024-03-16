@@ -358,6 +358,38 @@ def get_workspace() -> MSCDirectory:
     return workspace
 
 
+class ChangeWorkspace(object):
+    """Change the workspace
+
+    Parameters
+    ----------
+    new_workspace: MSCDirectory
+        The new workspace.
+    """
+
+    def __init__(self, new_workspace: MSCDirectory):
+        self._src_workspace = get_workspace()
+        self._new_workspace = new_workspace
+
+    def __enter__(self):
+        set_workspace(self._new_workspace)
+
+    def __exit__(self, exception_type, exception_value, traceback):
+        set_workspace(self._src_workspace)
+
+
+def change_workspace(new_workspace: MSCDirectory):
+    """Change the workspace
+
+    Parameters
+    ----------
+    new_workspace: MSCDirectory
+        The new workspace.
+    """
+
+    return ChangeWorkspace(new_workspace)
+
+
 def get_workspace_subdir(
     name: str = None, keep_history: bool = True, cleanup: bool = False
 ) -> MSCDirectory:

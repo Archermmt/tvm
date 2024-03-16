@@ -50,10 +50,10 @@ class MSCManager(BasePipeline):
 
         Returns
         -------
+        info: dict
+            The info of prepare.
         report: dict
             The report of prepare.
-        info: dict
-            The info of prepare
         """
 
         return self._worker.prepare(data_loader)
@@ -221,8 +221,13 @@ class MSCManager(BasePipeline):
 
         self._worker.destory()
 
-    def get_runtime(self) -> Any:
+    def get_runtime(self, ret_type: str = "runner") -> Any:
         """Get the runtime of pipeline
+
+        Parameters
+        ----------
+        ret_type: str
+            The return type runner| runnable| model.
 
         Returns
         -------
@@ -230,7 +235,7 @@ class MSCManager(BasePipeline):
             The runnable object.
         """
 
-        return self._worker.runner
+        return self._worker.get_runnable(ret_type)
 
     def pipe_mark(self, msg: Any) -> str:
         """Mark the message with pipeline info

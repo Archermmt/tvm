@@ -21,7 +21,7 @@ import logging
 from typing import List, Tuple
 
 from .arguments import dump_dict, map_dict
-from .log import get_global_logger
+from .log import get_global_logger, split_line
 from .namespace import MSCMap, MSCKey
 
 
@@ -83,13 +83,13 @@ def time_stamp(stage: str, log_stage: bool = True, logger: logging.Logger = None
             last_stage = MSCMap.get(MSCKey.MSC_STAGE)
             if last_stage:
                 end_msg = "[MSC] End {}".format(last_stage.upper())
-                logger.info("\n{0} {1} {0}\n".format("#" * 20, end_msg.center(40)))
+                logger.info("\n%s\n", split_line(end_msg))
             start_msg = "[MSC] Start {}".format(stage.upper())
-            logger.info("\n{0} {1} {0}".format("#" * 20, start_msg.center(40)))
+            logger.info("\n%s", split_line(start_msg))
         MSCMap.set(MSCKey.MSC_STAGE, stage.upper())
     elif log_stage:
         start_msg = "Start {}".format(stage)
-        logger.debug("\n{0} {1} {0}".format("+" * 20, start_msg.center(40)))
+        logger.debug("\n%s", split_line(start_msg, "+"))
 
 
 def get_duration() -> dict:
@@ -163,7 +163,7 @@ def msg_block(title: str, msg: str, width: int = 100, symbol: str = "-"):
 
     if isinstance(msg, dict):
         msg = dump_dict(msg, "table:" + str(width))
-    return "\n{0} {1} {0}\n{2}".format(symbol * 20, title.center(40), msg)
+    return "\n{}\n{}".format(split_line(title, "-"), msg)
 
 
 def current_stage():

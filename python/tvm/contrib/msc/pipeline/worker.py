@@ -67,7 +67,7 @@ class BasePipeWorker(object):
         # check/set default stage
         for key in ["inputs", "outputs", "dataset"]:
             assert key in config, "Missing {} in config".format(key)
-        for stage in [MSCStage.PREPARE, MSCStage.PARSE, MSCStage.COMPILE, MSCStage.EXPORT]:
+        for stage in [MSCStage.PREPARE, MSCStage.PARSE, MSCStage.EXPORT]:
             config.setdefault(stage, {})
 
         self._config = config
@@ -96,7 +96,7 @@ class BasePipeWorker(object):
         self._debug_levels = self.update_config()
         self._tools_config = {t["tool_type"]: t for t in self._config["tools"]}
         self._relax_mod, self._sample_inputs = None, None
-        self._tools_config, self._runner = [], None
+        self._runner = None
 
     def update_config(self) -> dict:
         """Update config
@@ -190,7 +190,7 @@ class BasePipeWorker(object):
             )
         return tools
 
-    def prepare(self, data_loader: Any) -> Tuple[dict, dict]:
+    def prepare(self, data_loader: Any = None) -> Tuple[dict, dict]:
         """Prepare datas for the pipeline.
 
         Parameters
@@ -218,17 +218,17 @@ class BasePipeWorker(object):
         else:
             golden_folder = msc_utils.get_dataset_dir().relpath("Golden", use_cache)
         if msc_utils.is_io_dataset(golden_folder):
-            loader, source_type = msc_utils.IODataLoader(golden_folder), "Cache"
+            loader, source_type = msc_utils.IODataLoader(golden_folder), "cache"
             self._sample_inputs = loader[0][0]
             datas_info = loader.info
             msg = "Load {} golden from {}".format(len(loader), golden_folder)
             self._logger.debug(self.worker_mark(msg))
         elif run_func:
-            loader, source_type = data_loader, "Native"
+            source_type = "native"
             saver_options = {"input_names": input_names, "output_names": self._config["outputs"]}
             cnt, max_golden = 0, self._config["dataset"][MSCStage.PREPARE].get("max_golden", 5)
             with msc_utils.IODataSaver(golden_folder, saver_options) as saver:
-                for inputs in loader():
+                for inputs in data_loader():
                     if cnt >= max_golden > 0:
                         break
                     if not self._sample_inputs:
@@ -238,7 +238,7 @@ class BasePipeWorker(object):
                     outputs, _ = run_func(self._model, inputs, input_names, self._config["outputs"])
                     cnt = saver.save_batch(inputs, outputs)
                 datas_info = saver.info
-            msg = "Saved {} golden to {}".format(cnt, golden_folder)
+            msg = "Save {} golden to {}".format(cnt, golden_folder)
             self._logger.debug(self.worker_mark(msg))
         else:
             raise Exception("golden_folder or runner should given to save golden")
@@ -265,14 +265,12 @@ class BasePipeWorker(object):
         if "profile" in stage_config and run_func:
             benchmark = stage_config["profile"].get("benchmark", {})
             benchmark["repeat"] = self._get_repeat(benchmark)
-            pre_msg = "Prepare profile with {}({})".format(run_func.__name__, benchmark)
-            self._logger.debug(self.worker_mark(pre_msg))
             _, avg_time = run_func(
                 self._model, self._sample_inputs, input_names, self._config["outputs"], **benchmark
             )
-            report = {"latency": "{:.2f} ms @ {}".format(avg_time, self._device)}
-            msg = "Profile(prepare) {} times -> {}".format(benchmark["repeat"], report["latency"])
-            self._logger.info(self.worker_mark(msg))
+            latency = "{:.2f} ms @ {}".format(avg_time, self._device)
+            info["latency"] = latency + " (repeat {})".format(benchmark["repeat"])
+            report["profile"] = latency
 
         return info, report
 
@@ -327,6 +325,25 @@ class BasePipeWorker(object):
                 self._logger.debug(self.worker_mark(msg))
         return info, {}
 
+    def get_tool_config(self, tool_type: str, key: str = "tool_config", default: Any = None) -> Any:
+        """Get the tool config
+
+        Parameters
+        ----------
+        tool_type: str
+            The tool type.
+        key: str
+            The config key
+
+        Returns
+        -------
+        config:
+            The tool config or info.
+        """
+
+        assert tool_type in self._tools_config, "Can not find tool_type " + str(tool_type)
+        return self._tools_config[tool_type].get(key, default)
+
     def tool_applied(self, tool_type: str) -> bool:
         """Check if the tool is applied
 
@@ -341,8 +358,8 @@ class BasePipeWorker(object):
             Whether the tool is applied.
         """
 
-        assert tool_type in self._tools_config, "Can not find tool_type " + str(tool_type)
-        return os.path.isfile(self._tools_config[tool_type]["plan_file"])
+        config = self.get_tool_config(tool_type)
+        return os.path.isfile(config["plan_file"])
 
     def apply_tool(
         self, tool_type: str, knowledge: dict = None, data_loader: Any = None
@@ -366,14 +383,13 @@ class BasePipeWorker(object):
             The report of apply tool.
         """
 
-        assert tool_type in self._tools_config, "Can not find tool_type " + str(tool_type)
-        plan_file = self._tools_config[tool_type]["plan_file"]
+        plan_file = self.get_tool_config(tool_type)["plan_file"]
         if knowledge:
             with open(plan_file, "w") as f:
                 f.write(json.dumps(knowledge, indent=2))
         else:
             self._runner.make_plan(tool_type, data_loader)
-        if self._tools_config[tool_type].get("visualize", False):
+        if self.get_tool_config(tool_type, "visualize", False):
             self._runner.visualize(
                 msc_utils.get_visual_dir().create_dir(self._runner.stage.split(".")[0])
             )
@@ -448,13 +464,13 @@ class BasePipeWorker(object):
             runner.visualize(msc_utils.get_visual_dir().create_dir(stage.split(".")[0]))
         if use_cache:
             runner.save_cache(cache_dir)
-        info, report = {}, {"build": "{} on {}".format(runner.framework, runner.device)}
+        info, report = {}, {"runtime": "{} @ {}".format(runner.framework, runner.device)}
         if profile and "profile" in stage_config:
             info["profile"], report["profile"] = self._profile_runner(runner, stage_config)
         self._runner = runner
         return info, report
 
-    def _profile_runner(self, runner: BaseRunner, stage_config: str) -> dict:
+    def _profile_runner(self, runner: BaseRunner, stage_config: str) -> Tuple[dict, str]:
         """Profile the runner.
 
         Parameters
@@ -468,42 +484,44 @@ class BasePipeWorker(object):
         -------
         info: dict
             The info of profile.
-        report: dict
+        report: str
             The report of profile.
         """
 
         stage = runner.stage
         profile_config = stage_config["profile"]
-        msg = "profile({})".format(stage)
-        info, report = {}, {}
+        info, report = {}, ""
 
         # check accuracy
         check_config = profile_config.get("check", {})
         if check_config:
             loader = msc_utils.IODataLoader(self._config["dataset"]["golden"]["loader"])
-            info = {"config": check_config, "passed": 0, "iters": []}
+            acc_info = {"passed": ""}
             total, passed = 0, 0
-            for inputs, outputs in loader:
+            for idx, (inputs, outputs) in enumerate(loader):
                 results = runner.run(inputs)
                 iter_info = msc_utils.compare_arrays(
                     outputs,
                     results,
                     atol=check_config.get("atol", 1e-2),
                     rtol=check_config.get("rtol", 1e-2),
+                    report_detail=runner.debug_level >= 2,
                 )
                 total += iter_info["total"]
                 passed += iter_info["passed"]
-                info["iters"].append(iter_info["info"])
+                acc_info["iter_" + str(idx)] = iter_info["info"]
             pass_rate = float(passed) / total
-            info["passed"] = "{}/{}".format(passed, total)
-            report["accuracy"] = "{}/{}({:.2f}%)".format(passed, total, pass_rate * 100)
-            msg += " test {} iters -> {}".format(len(loader), report["accuracy"])
+            accuracy = "{}/{}({:.2f}%)".format(passed, total, pass_rate * 100)
+            acc_info["passed"] = "{} {}".format(accuracy, check_config)
+            info["accuracy"] = acc_info if runner.debug_level >= 1 else accuracy
+            report = "pass " + accuracy
             if runner.get_tool(ToolType.PRUNER) or runner.get_tool(ToolType.QUANTIZER):
                 disable_msg = "Disable accuracy check({}) by tools".format(stage)
                 self._logger.debug(self.worker_mark(disable_msg))
             else:
                 required_err, err_rate = check_config.get("err_rate", 0), (1 - pass_rate)
                 if err_rate > required_err >= 0:
+                    self._logger.error(msc_utils.msg_block(self.worker_mark("ACCURACY"), acc_info))
                     raise Exception(
                         "Failed to profile the runner({}), err_rate {} > required {}".format(
                             stage, err_rate, required_err
@@ -520,9 +538,9 @@ class BasePipeWorker(object):
             for _ in range(repeat):
                 runner.run(self._sample_inputs)
             avg_time = (time.time() - start) * 1000 / repeat
-            report["latency"] = "{:.2f} ms @ {}".format(avg_time, runner.device)
-            msg += " latency {} times -> {}".format(repeat, report["latency"])
-        self._logger.info(self.worker_mark(msg))
+            latency = "{:.2f} ms @ {}".format(avg_time, runner.device)
+            info["latency"] = latency + " (repeat {})".format(repeat)
+            report += (", " if report else "") + latency
         return info, report
 
     def export_model(self, stage: str, folder: msc_utils.MSCDirectory, dump: bool = True) -> Any:
@@ -606,7 +624,7 @@ class BasePipeWorker(object):
 
         run_tool = self._runner.get_tool(tool_type)
         assert tool_type in self._tools_config, "Can not find tool_type " + str(tool_type)
-        tool = msc_utils.copy_dict(self._tools_config[tool])
+        tool = msc_utils.copy_dict(self._tools_config[tool_type])
         tool["tool_config"] = run_tool.export_config(tool["tool_config"], folder)
         if tool["tool_config"]:
             return tool
@@ -618,7 +636,7 @@ class BasePipeWorker(object):
         Parameters
         ----------
         ret_type: str
-            The return type runner| model.
+            The return type runner| runnable| model.
 
         Returns
         -------
@@ -629,9 +647,9 @@ class BasePipeWorker(object):
         assert self._runner, "Failed to create runner, call run_pipe first"
         if ret_type == "runner":
             return self._runner
-        elif ret_type == "runnable":
+        if ret_type == "runnable":
             return self._runner.runnable
-        elif ret_type == "model":
+        if ret_type == "model":
             return self._runner.model
         raise Exception("Unexpect return type " + str(ret_type))
 

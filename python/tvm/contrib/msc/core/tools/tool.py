@@ -1054,11 +1054,12 @@ class BaseTool(object):
             The message with mark.
         """
 
-        mark = "{}.G[{}]".format(self.tool_type().upper(), self._graph_id)
+        mark = "{}({} @ {}) G[{}]".format(
+            self.tool_type().upper(), self._tag, self._stage, self._graph_id
+        )
         if in_forward:
             mark += ".F[{}]".format(self._forward_cnt)
-        mark += "({}) ".format(self._stage)
-        return mark + str(msg)
+        return mark + " " + str(msg)
 
     def debug_tensors(
         self, name: str, consumer: str, t_mark: str, tensors: Dict[str, Any], debug_level: int = 3
@@ -1439,9 +1440,8 @@ class WeightTool(BaseTool):
                 _ffi_api.WeightGraph(graph, self._main_wtypes, self._relation_wtypes)
                 for graph in graphs
             ]
-            self._logger.debug(
-                "%s build %d weight graphs", self.tool_type(), len(self._weight_graphs)
-            )
+            msg = "build {} weight graphs".format(len(self._weight_graphs))
+            self._logger.debug(self.tool_mark(msg))
         if self.on_debug(2, in_forward=False):
             weight_graphs = {g.name: g.inspect() for g in self._weight_graphs}
             title = self.tool_mark("WEIGHT_GRAPHS({})".format(len(weight_graphs)))
@@ -1478,12 +1478,8 @@ class WeightTool(BaseTool):
         self._weight_graphs = [
             WeightGraph.from_json(cache_dir.relpath(f)) for f in cache_info["weight_graphs"]
         ]
-        self._logger.debug(
-            "%s load %d weight graphs from %s",
-            self.tool_type(),
-            len(self._weight_graphs),
-            cache_dir,
-        )
+        msg = "load {} weight graphs from {}".format(len(self._weight_graphs), cache_dir)
+        self._logger.debug(self.tool_mark(msg))
 
     def save_cache(self, cache_dir: msc_utils.MSCDirectory) -> dict:
         """Save runner to cache

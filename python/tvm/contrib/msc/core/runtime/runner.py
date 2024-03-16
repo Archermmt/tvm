@@ -274,7 +274,7 @@ class BaseRunner(object):
         build_msg += "runnable({}, {}) on {}".format(
             self.framework, "train" if self._training else "eval", self._device
         )
-        self._logger.info(build_msg)
+        self._logger.info(self.runner_mark(build_msg))
         return self._runnable
 
     def run(
@@ -584,8 +584,7 @@ class BaseRunner(object):
         """Change status to eval"""
 
         if self._training:
-            self._trained = True
-            self._training = False
+            self._training, self._trained = False, True
             for tool in self.get_tools():
                 tool.eval()
             self._eval()
@@ -1010,6 +1009,10 @@ class BaseRunner(object):
     @property
     def debug_level(self):
         return self._debug_level
+
+    @property
+    def trained(self):
+        return self._trained
 
     @property
     def model(self):
