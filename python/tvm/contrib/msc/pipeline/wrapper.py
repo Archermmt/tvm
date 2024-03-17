@@ -38,8 +38,6 @@ class BaseWrapper(object):
         The config for pipeline
     plugins: dict
         The plugins for pipeline.
-    dynamic: bool
-        Whether to use dynamic mode.
     """
 
     def __init__(

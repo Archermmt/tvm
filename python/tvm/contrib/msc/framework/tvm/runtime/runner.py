@@ -163,6 +163,24 @@ class TVMRunner(ModelRunner):
             "abstract": self.model_info,
         }
 
+    def export_runnable(self, folder: msc_utils.MSCDirectory) -> dict:
+        """Export the runnable
+
+        Parameters
+        -------
+        folder: MSCDirectory
+            The export folder.
+
+        Returns
+        -------
+        info: dict
+            The runnable info.
+        """
+
+        export_path = folder.relpath("model.so")
+        self._executable.export_library(export_path)
+        return {"model": export_path}
+
     @property
     def codegen_func(self):
         return to_relax
