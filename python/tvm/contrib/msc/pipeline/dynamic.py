@@ -37,7 +37,7 @@ class MSCDynamic(BasePipeline):
             The setup info.
         """
 
-        self._jit, self._workers = None, {}
+        self._jit, self._worker_ctxs = None, {}
         self._current_stage, self._jit_caches = None, {}
         return super().setup()
 
@@ -84,9 +84,8 @@ class MSCDynamic(BasePipeline):
                 break
             self._jit.run(inputs)
             cnt += 1
-        # create workers
-        info, report = {}, {}
 
+        # create workers
         def _get_worker_config(name: str, cache: dict):
             saver = cache.get("saver")
             assert saver, "Failed to record datas for " + name
@@ -110,12 +109,16 @@ class MSCDynamic(BasePipeline):
                     tool["tool_config"] = msc_utils.update_dict(tool["tool_config"], worker_config)
             return w_config
 
+        info, report = {}, {}
         for name, cache in self._jit_caches.items():
             runner_ctx = self._jit.get_runner_ctx(name)
             w_model = worker_models.get(name, runner_ctx["model"])
-            self._workers[name] = self.create_worker(w_model, name, _get_worker_config(name, cache))
-            with msc_utils.change_workspace(self._workspace.create_dir(name)):
-                info[name], report[name] = self._workers[name].prepare()
+            self._worker_ctxs[name] = {
+                "worker": self.create_worker(w_model, name, _get_worker_config(name, cache)),
+                "workspace": self._workspace.create_dir(name),
+            }
+            with msc_utils.change_workspace(self._worker_ctxs[name]["workspace"]):
+                info[name], report[name] = self._worker_ctxs[name]["worker"].prepare()
         self._jit_caches = {}
         return info, report
 
@@ -131,9 +134,9 @@ class MSCDynamic(BasePipeline):
         """
 
         info, report = {}, {}
-        for name, worker in self._workers.items():
-            with msc_utils.change_workspace(self._workspace.create_dir(name)):
-                info[name], report[name] = worker.parse()
+        for name, w_ctx in self._worker_ctxs.items():
+            with msc_utils.change_workspace(w_ctx["workspace"]):
+                info[name], report[name] = w_ctx["worker"].parse()
         return info, report
 
     def _tool_applied(self, tool_type: str) -> bool:
@@ -150,7 +153,7 @@ class MSCDynamic(BasePipeline):
             Whether the tool is applied.
         """
 
-        return all(w.tool_applied(tool_type) for w in self._workers.values())
+        return all(w["worker"].tool_applied(tool_type) for w in self._worker_ctxs.values())
 
     def _apply_tool(
         self, tool_type: str, knowledge: dict = None, data_loader: Any = None
@@ -179,10 +182,9 @@ class MSCDynamic(BasePipeline):
 
         self._jit.make_plan(tool_type, data_loader)
         info, report = {}, {}
-        for name, worker in self._workers.items():
-            with msc_utils.change_workspace(self._workspace.create_dir(name)):
-                info[name], report[name] = worker.apply_tool(tool_type)
-                self._jit.set_runner(name, worker.runner)
+        for name, w_ctx in self._worker_ctxs.items():
+            with msc_utils.change_workspace(w_ctx["workspace"]):
+                info[name], report[name] = w_ctx["worker"].apply_tool(tool_type)
         return info, report
 
     def _create_runtime(
@@ -223,12 +225,12 @@ class MSCDynamic(BasePipeline):
         """
 
         info, report = {}, {}
-        for name, worker in self._workers.items():
-            with msc_utils.change_workspace(self._workspace.create_dir(name)):
-                info[name], report[name] = worker.create_runner(
+        for name, w_ctx in self._worker_ctxs.items():
+            with msc_utils.change_workspace(w_ctx["workspace"]):
+                info[name], report[name] = w_ctx["worker"].create_runner(
                     stage, tools, run_type, run_config, visualize, profile, use_cache
                 )
-                self._jit.set_runner(name, worker.runner)
+                self._jit.set_runner(name, w_ctx["worker"].runner)
         return info, report
 
     def _export_model(self, stage: str, folder: msc_utils.MSCDirectory, dump: bool = True) -> Any:
@@ -254,7 +256,8 @@ class MSCDynamic(BasePipeline):
         else:
             model = self._model
         worker_models = {
-            n: w.export_model(stage, folder.create_dir(n), dump) for n, w in self._workers.items()
+            n: w["worker"].export_model(stage, folder.create_dir(n), dump)
+            for n, w in self._worker_ctxs.items()
         }
         return {"model": model, "worker_models": worker_models}
 
@@ -275,9 +278,9 @@ class MSCDynamic(BasePipeline):
         """
 
         configs = {}
-        for name, worker in self._workers.items():
-            with msc_utils.change_workspace(self._workspace.create_dir(name)):
-                configs[name] = worker.export_tool(tool_type, folder.create_dir(name))
+        for name, w_ctx in self._worker_ctxs.items():
+            with msc_utils.change_workspace(w_ctx["workspace"]):
+                configs[name] = w_ctx["worker"].export_tool(tool_type, folder.create_dir(name))
         assert tool_type in self._tools_config, "Can not find tool_type " + str(tool_type)
         return msc_utils.update_dict(self._tools_config["tool_type"], {"worker_configs": configs})
 
@@ -292,16 +295,16 @@ class MSCDynamic(BasePipeline):
             The export folder.
         """
 
-        for name in self._workers:
-            with msc_utils.change_workspace(self._workspace.create_dir(name)):
+        for name, w_ctx in self._worker_ctxs.items():
+            with msc_utils.change_workspace(w_ctx["workspace"]):
                 msc_utils.get_visual_dir().copy(stage, folder.create_dir("visualize").relpath(name))
         super()._export_files(stage, folder)
 
     def _destory(self):
         """Destory the pipeline"""
 
-        for worker in self._workers.values():
-            worker.destory()
+        for w_ctx in self._worker_ctxs.values():
+            w_ctx["worker"].destory()
 
     def get_runtime(self, ret_type: str = "runner") -> Any:
         """Get the runtime of pipeline

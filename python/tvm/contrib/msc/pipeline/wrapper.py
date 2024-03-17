@@ -233,10 +233,7 @@ class TorchWrapper(BaseWrapper):
         framework = self._get_framework()
         if framework != MSCFramework.TORCH:
             inputs = [msc_utils.cast_array(i, framework, self.device) for i in inputs]
-        for idx, i in enumerate(inputs):
-            print("TorchWrapper input[{}]: {}".format(idx, msc_utils.inspect_array(i)))
         outputs = self._get_model()(*inputs)
-        print("TorchWrapper outputs {}:{}".format(msc_utils.inspect_array(outputs), outputs))
         if framework == MSCFramework.TORCH:
             return outputs
         if isinstance(outputs, (tuple, list)):

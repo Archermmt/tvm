@@ -281,5 +281,4 @@ def test_tensorrt_pipeline(dynamic):
 
 
 if __name__ == "__main__":
-    # tvm.testing.main()
-    test_tvm_pipeline(True)
+    tvm.testing.main()

@@ -394,6 +394,7 @@ class BasePipeWorker(object):
 
         plan_file = self.get_tool_config(tool_type)["plan_file"]
         if knowledge:
+            print("[TMINFO] has knowledge " + str(knowledge))
             with open(plan_file, "w") as f:
                 f.write(json.dumps(knowledge, indent=2))
         else:

@@ -84,7 +84,7 @@ class BasePipeline(object):
             self._config.pop(MSCStage.COMPILE)
         for stage in [MSCStage.PREPARE, MSCStage.PARSE, MSCStage.EXPORT]:
             self._config.setdefault(stage, {})
-        self._plugins = load_plugins(plugins) if plugins else {}
+        self._verbose = self._config.get("verbose", "info")
         use_cache = self._config.get("use_cache", True)
         if "workspace" in self._config:
             self._workspace = msc_utils.set_workspace(self._config.pop("workspace"), use_cache)
@@ -94,12 +94,12 @@ class BasePipeline(object):
             self._logger = self._config.pop("logger")
             MSCMap.set(MSCKey.GLOBALE_LOGGER, self._logger)
         else:
-            verbose = self._config.get("verbose", "info")
             if "log_file" in self._config:
                 log_file = self._config.pop("log_file")
             else:
                 log_file = self._workspace.relpath("MSC_LOG", keep_history=False)
-            self._logger = msc_utils.set_global_logger(verbose, log_file)
+            self._logger = msc_utils.set_global_logger(self._verbose, log_file)
+        self._plugins = load_plugins(plugins) if plugins else {}
         msc_utils.time_stamp(MSCStage.SETUP)
         self._logger.info(msc_utils.msg_block(self.pipe_mark("SETUP"), self.setup()))
 
@@ -144,6 +144,7 @@ class BasePipeline(object):
         return {
             "workspace": self._workspace.path,
             "log_file": msc_utils.get_log_file(self._logger),
+            "verbose": self._verbose,
             "plugins": self._plugins,
             "config": self._config,
         }
@@ -307,7 +308,7 @@ class BasePipeline(object):
                         gym_stage = tool_stage + ".gym_{}".format(idx)
                         msc_utils.time_stamp(gym_stage)
                         self._logger.info(self.pipe_mark(gym_mark + "Start search"))
-                        knowledge = self._run_gym(gym_stage, config, knowledge, loader)
+                        knowledge = self._run_gym(tool_stage, config, knowledge, loader)
                         msc_utils.save_dict(knowledge, knowledge_file)
             msc_utils.time_stamp(t_stage + ".apply", False)
             info, report = self._apply_tool(tool["tool_type"], knowledge, loader)

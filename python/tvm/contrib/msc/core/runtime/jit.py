@@ -170,10 +170,11 @@ class BaseJIT(object):
             The saved plan file.
         """
 
+        tools = {n: r["runner"].get_tool(tool_type) for n, r in self._runner_ctxs.items()}
+
         def _finalize_tool(
             checker: callable, post_batch: callable = None, post_iter: callable = None
         ):
-            tools = {n: r["runner"].get_tool(tool_type) for n, r in self._runner_ctxs.items()}
             while any(not checker(t) for t in tools.values()):
                 assert data_loader, "data_loader should be given to make plan for " + tool_type
                 for inputs in data_loader():
@@ -186,7 +187,7 @@ class BaseJIT(object):
                 if post_iter:
                     for t in tools.values():
                         post_iter(t)
-            return {n: t.finalize() for n, v in tools.items()}
+            return {n: t.finalize() for n, t in tools.items()}
 
         if tool_type == ToolType.PRUNER:
             plans = _finalize_tool(lambda t: t.pruned)
@@ -201,11 +202,9 @@ class BaseJIT(object):
         elif tool_type == ToolType.TRACKER:
             plans = _finalize_tool(lambda t: t.tracked)
         else:
-            plans = {
-                n: r["runner"].get_tool(tool_type).finalize() for n, r in self._runner_ctxs.items()
-            }
-        plans_info = ",".join(["{}({})".format(n, len(p)) for n, p in plans.items()])
-        self._logger.debug("Made %d plans for %s", plans_info, tool_type)
+            plans = {n: t.finalize() for n, t in tools.items()}
+        plans_info = ", ".join(["{}({})".format(n, len(p)) for n, p in plans.items()])
+        self._logger.debug("Made %s plans for %s", plans_info, tool_type)
 
     def _redirect_run(self, *args, runner_name: str = "worker", **kwargs) -> Any:
         """Redirect forward of model

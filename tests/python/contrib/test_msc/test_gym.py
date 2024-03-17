@@ -187,7 +187,7 @@ def _check_manager(manager, expected_info):
     if not msc_utils.dict_equal(model_info, expected_info):
         passed = False
         err = "Model info {} mismatch with expected {}".format(model_info, expected_info)
-    manager.destory()
+    # manager.destory()
     if not passed:
         raise Exception("{}\nReport:{}".format(err, json.dumps(manager.report, indent=2)))
 
