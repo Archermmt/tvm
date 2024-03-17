@@ -25,6 +25,19 @@ from tvm.contrib.msc.core import utils as msc_utils
 class PruneConfiger(ToolConfiger):
     """Configer for prune"""
 
+    def config_apply(self) -> dict:
+        """Get the config for apply
+
+        Returns
+        -------
+        config: dict
+            The apply config.
+        """
+
+        config = super().config_apply()
+        config.update({"exportable": False})
+        return config
+
     def config_gym(self, raw_config: Union[dict, str]) -> dict:
         """Config the gym
 

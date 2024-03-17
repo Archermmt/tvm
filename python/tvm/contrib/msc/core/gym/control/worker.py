@@ -200,7 +200,7 @@ class WorkerFactory(object):
 
         Returns
         -------
-        worker: GymBaseWorker
+        worker: BaseGymWorker
             The create worker.
         """
 

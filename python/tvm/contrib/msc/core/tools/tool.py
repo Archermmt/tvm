@@ -288,8 +288,10 @@ class BaseTool(object):
 
     Parameters
     ----------
+    tag: str
+        The tag of tool.
     stage: str
-        The stage of tool
+        The stage of tool.
     plan_file: str
         The plan file path.
     strategys: list[dict]
@@ -310,6 +312,7 @@ class BaseTool(object):
 
     def __init__(
         self,
+        tag: str,
         stage: str,
         plan_file: str,
         strategys: List[dict],
@@ -320,6 +323,7 @@ class BaseTool(object):
         verbose_step: int = 50,
         logger: logging.Logger = None,
     ):
+        self._tag = tag
         self._stage = stage
         self._plan_file = plan_file
         if os.path.isfile(plan_file):
@@ -554,11 +558,10 @@ class BaseTool(object):
             The exported config.
         """
 
-        config = msc_utils.copy_dict(config)
         plan_file = msc_utils.to_abs_path(config["plan_file"], msc_utils.get_config_dir())
         if os.path.isfile(plan_file):
-            config["plan_file"] = folder.create_dir("tools").copy(plan_file)
-        return config
+            return {"plan_file": folder.create_dir("tools").copy(plan_file)}
+        return {}
 
     def load_cache(self, cache_dir: msc_utils.MSCDirectory, cache_info: dict):
         """Save runner to cache
@@ -1016,7 +1019,7 @@ class BaseTool(object):
             return False
         return self._debug_level >= debug_level
 
-    def tool_mark(self, msg: Any) -> dict:
+    def tool_mark(self, msg: Any) -> str:
         """Mark the message with tool info
 
         Parameters
@@ -1030,7 +1033,9 @@ class BaseTool(object):
             The message with mark.
         """
 
-        return "{}({} @ {}) {}".format(self.tool_type().upper(), self.framework(), self._stage, msg)
+        return "{}[{}]({} @ {}) {}".format(
+            self.tool_type().upper(), self._tag, self.framework(), self._stage, msg
+        )
 
     def msg_mark(self, msg: Any, in_forward: bool = True) -> str:
         """Mark the message with debug info
@@ -1048,11 +1053,12 @@ class BaseTool(object):
             The message with mark.
         """
 
-        mark = "{}.G[{}]".format(self.tool_type().upper(), self._graph_id)
+        mark = "{}({} @ {}) G[{}]".format(
+            self.tool_type().upper(), self._tag, self._stage, self._graph_id
+        )
         if in_forward:
             mark += ".F[{}]".format(self._forward_cnt)
-        mark += "({}) ".format(self._stage)
-        return mark + str(msg)
+        return mark + " " + str(msg)
 
     def debug_tensors(
         self, name: str, consumer: str, t_mark: str, tensors: Dict[str, Any], debug_level: int = 3
@@ -1433,9 +1439,8 @@ class WeightTool(BaseTool):
                 _ffi_api.WeightGraph(graph, self._main_wtypes, self._relation_wtypes)
                 for graph in graphs
             ]
-            self._logger.debug(
-                "%s build %d weight graphs", self.tool_type(), len(self._weight_graphs)
-            )
+            msg = "build {} weight graphs".format(len(self._weight_graphs))
+            self._logger.debug(self.tool_mark(msg))
         if self.on_debug(2, in_forward=False):
             weight_graphs = {g.name: g.inspect() for g in self._weight_graphs}
             title = self.tool_mark("WEIGHT_GRAPHS({})".format(len(weight_graphs)))
@@ -1472,12 +1477,8 @@ class WeightTool(BaseTool):
         self._weight_graphs = [
             WeightGraph.from_json(cache_dir.relpath(f)) for f in cache_info["weight_graphs"]
         ]
-        self._logger.debug(
-            "%s load %d weight graphs from %s",
-            self.tool_type(),
-            len(self._weight_graphs),
-            cache_dir,
-        )
+        msg = "load {} weight graphs from {}".format(len(self._weight_graphs), cache_dir)
+        self._logger.debug(self.tool_mark(msg))
 
     def save_cache(self, cache_dir: msc_utils.MSCDirectory) -> dict:
         """Save runner to cache

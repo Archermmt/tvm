@@ -114,7 +114,7 @@ class MSCDirectory(object):
         """Finalize the directory"""
 
         if not os.path.isdir(self._path):
-            return
+            return self._path
 
         def _remove_empty(path: str):
             sub_paths = [os.path.join(path, f) for f in os.listdir(path)]
@@ -356,6 +356,38 @@ def get_workspace() -> MSCDirectory:
     workspace = MSCMap.get(MSCKey.WORKSPACE)
     assert workspace, "Can not find workspace, please call set_workspace"
     return workspace
+
+
+class ChangeWorkspace(object):
+    """Change the workspace
+
+    Parameters
+    ----------
+    new_workspace: MSCDirectory
+        The new workspace.
+    """
+
+    def __init__(self, new_workspace: MSCDirectory):
+        self._src_workspace = get_workspace()
+        self._new_workspace = new_workspace
+
+    def __enter__(self):
+        set_workspace(self._new_workspace)
+
+    def __exit__(self, exception_type, exception_value, traceback):
+        set_workspace(self._src_workspace)
+
+
+def change_workspace(new_workspace: MSCDirectory):
+    """Change the workspace
+
+    Parameters
+    ----------
+    new_workspace: MSCDirectory
+        The new workspace.
+    """
+
+    return ChangeWorkspace(new_workspace)
 
 
 def get_workspace_subdir(

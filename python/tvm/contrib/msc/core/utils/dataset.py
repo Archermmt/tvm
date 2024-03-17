@@ -23,8 +23,28 @@ import json
 from typing import List, Union, Dict, Any
 import numpy as np
 
+import tvm
 from .arguments import load_dict
-from .info import cast_array
+from .info import cast_array, is_array
+
+
+def format_datas(datas: Union[List[Any], Dict[str, Any]], names: List[str], style="dict") -> Any:
+    if isinstance(datas, (list, tuple, tvm.ir.container.Array)):
+        assert len(datas) == len(names), "datas({}) mismatch with names {}".format(
+            len(datas), names
+        )
+        datas = dict(zip(names, datas))
+    if not isinstance(datas, dict):
+        assert len(names) == 1, "Expect 1 names, get " + str(names)
+        datas = {names[0]: datas}
+    elif len(datas) > len(names):
+        datas = {n: datas[n] for n in datas}
+    assert all(is_array(d) for d in datas.values()), "Expected all tensors as array like"
+    if style == "dict":
+        return datas
+    if style == "list":
+        return [datas[n] for n in names]
+    raise TypeError("Unexpected style " + str(style))
 
 
 class BaseDataLoader(object):
@@ -302,12 +322,12 @@ class BaseDataSaver(object):
         return self
 
     def __exit__(self, exception_type, exception_value, traceback):
-        self._info["num_datas"] = self._current
         self.finalize()
 
     def finalize(self):
         """Finalize the saver"""
 
+        self._info["num_datas"] = self._current
         with open(os.path.join(self._folder, "datas_info.json"), "w") as f:
             f.write(json.dumps(self._info, indent=2))
 
@@ -424,7 +444,13 @@ class IODataSaver(BaseDataSaver):
         assert "input_names" in options, "input_names should be given to setup IODataSaver"
         self._input_names = options["input_names"]
         self._output_names = options.get("output_names", [])
-        return {"inputs": {}, "outputs": {}, "num_datas": 0}
+        return {
+            "inputs": {},
+            "outputs": {},
+            "num_datas": 0,
+            "input_names": self._input_names,
+            "output_names": self._output_names,
+        }
 
     def finalize(self):
         """Finalize the saver"""
@@ -475,29 +501,11 @@ class IODataSaver(BaseDataSaver):
            The current batch cnt.
         """
 
-        if isinstance(inputs, dict):
-            assert set(inputs.keys()) == set(
-                self._input_names
-            ), "Input names mismatch {} with {}".format(inputs.keys(), self._input_names)
-        elif isinstance(inputs, (tuple, list)):
-            assert len(inputs) == len(
-                self._input_names
-            ), "Inputs size {} mismatch with input_names {}".format(len(inputs), self._input_names)
-            inputs = dict(zip(self._input_names, inputs))
+        inputs = format_datas(inputs, self._input_names, style="dict")
         for name, data in inputs.items():
             self._save_data(self._current, name, data, "inputs")
         if outputs:
-            if isinstance(outputs, dict):
-                assert set(outputs.keys()) == set(
-                    self._output_names
-                ), "Output names mismatch {} with {}".format(outputs.keys(), self._output_names)
-            elif isinstance(outputs, (tuple, list)):
-                assert len(outputs) == len(
-                    self._output_names
-                ), "Outputs size {} mismatch with input_names {}".format(
-                    len(outputs), self._output_names
-                )
-                outputs = dict(zip(self._output_names, outputs))
+            outputs = format_datas(outputs, self._output_names, style="dict")
             for name, data in outputs.items():
                 self._save_data(self._current, name, data, "outputs")
         self._current += 1

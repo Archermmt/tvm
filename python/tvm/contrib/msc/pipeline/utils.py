@@ -23,6 +23,31 @@ from tvm.contrib.msc.core.utils.message import MSCStage
 from tvm.contrib.msc.core import utils as msc_utils
 
 
+def get_tool_stage(tool_type: str) -> str:
+    """Map the stage according to tool_type
+
+    Parameters
+    ----------
+    tool_type: str
+        The tool type.
+
+    Returns
+    -------
+    stage: str
+        The stage.
+    """
+
+    if tool_type == ToolType.PRUNER:
+        return MSCStage.PRUNE
+    if tool_type == ToolType.QUANTIZER:
+        return MSCStage.QUANTIZE
+    if tool_type == ToolType.DISTILLER:
+        return MSCStage.DISTILL
+    if tool_type == ToolType.TRACKER:
+        return MSCStage.TRACK
+    return tool_type
+
+
 def support_tool(tool: dict, stage: str, run_type: str) -> bool:
     """Check if the tool is supported
 
@@ -31,7 +56,7 @@ def support_tool(tool: dict, stage: str, run_type: str) -> bool:
     tool: dict
         The tool config,
     stage: str
-        The compile stage.
+        The pipeline stage.
     run_type: str
         The runtime type.
 
@@ -84,6 +109,7 @@ def create_config(
     compile_type: str = None,
     dataset: Dict[str, dict] = None,
     tools: List[Tuple[str, Union[dict, str]]] = None,
+    dynamic: bool = False,
     skip_config: Dict[str, str] = None,
     **extra_config,
 ) -> dict:
@@ -107,6 +133,8 @@ def create_config(
         The datasets for compile pipeline.
     tools: list<str, str|dict>
         The tools config.
+    dynamic: bool
+        Whether to config dyanmic mode.
     skip_config: dict
         The skip config for compile.
     extra_config: dict
@@ -121,6 +149,7 @@ def create_config(
     # basic config
     config = {
         "model_type": model_type,
+        "dynamic": dynamic,
         "inputs": inputs,
         "outputs": outputs,
         "dataset": dataset,

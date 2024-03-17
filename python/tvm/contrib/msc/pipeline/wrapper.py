@@ -19,12 +19,12 @@
 import shutil
 from typing import Any, Union, List
 
-from tvm.contrib.msc.core.tools.tool import BaseTool, ToolType
 from tvm.contrib.msc.core.utils.message import MSCStage
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 from .manager import MSCManager
-from .config import create_config
+from .dynamic import MSCDynamic, TorchDynamic
+from .utils import create_config
 
 
 class BaseWrapper(object):
@@ -41,22 +41,19 @@ class BaseWrapper(object):
     """
 
     def __init__(
-        self,
-        model: Any,
-        config: dict,
-        workspace: str = "msc_workspace",
-        plugins: dict = None,
+        self, model: Any, config: dict, workspace: str = "msc_workspace", plugins: dict = None
     ):
         self._meta_model = model
         self._optimized_model, self._compiled_model = None, None
         self._config = config
         self._plugins = plugins
+        self._dynamic = self._config.get("dynamic", False)
         verbose = config.get("verbose", "info")
         self._debug = verbose.startswith("debug")
         self._workspace = msc_utils.msc_dir(workspace, keep_history=self._debug)
         log_path = self._workspace.relpath("MSC_LOG", keep_history=False)
         self._config["logger"] = msc_utils.create_file_logger(verbose, log_path)
-        self._manager = None
+        self._pipeline = None
         self.setup()
 
     def __str__(self):
@@ -87,18 +84,18 @@ class BaseWrapper(object):
             The workspace.
         """
 
-        self.logger.info("[Wrapper] Start optimize model")
+        self.logger.info(msc_utils.split_line("Start optimize model", "*"))
         config = msc_utils.copy_dict(self._config)
         config["workspace"] = self._workspace.create_dir(workspace)
         if MSCStage.OPTIMIZE not in config:
-            config[MSCStage.OPTIMIZE] = {
-                "run_type": self.model_type(),
-                "profile": {"check": {"atol": 1e-3, "rtol": 1e-3}, "benchmark": {"repeat": -1}},
-            }
-        self._manager = MSCManager(self._meta_model, config, self._plugins, run_compile=False)
-        report = self._manager.run_pipe()
+            config[MSCStage.OPTIMIZE] = {"run_type": self.model_type()}
+            profile = config.get(MSCStage.BASELINE, {}).get("profile")
+            if profile:
+                config[MSCStage.OPTIMIZE]["profile"] = profile
+        self._pipeline = self.pipe_cls(self._meta_model, config, self._plugins, run_compile=False)
+        report = self._pipeline.run_pipe()
         if report["success"]:
-            self._optimized_model = self._manager.get_runnable("runnable")
+            self._optimized_model = self._pipeline.get_runtime("runnable")
         return self
 
     def compile(
@@ -117,24 +114,24 @@ class BaseWrapper(object):
         """
 
         if self._optimized_model:
-            self.logger.info("[Wrapper] Start compile checkpoint")
+            self.logger.info(msc_utils.split_line("Start compile checkpoint", "*"))
             ckpt_path = self._workspace.create_dir(ckpt_path).path
             pipeline = self.export(ckpt_path, dump=dump)
             pipeline["config"]["workspace"] = self._workspace.create_dir(workspace)
-            self._manager = MSCManager(**pipeline)
-            report = self._manager.run_pipe()
+            self._pipeline = self.pipe_cls(**pipeline)
+            report = self._pipeline.run_pipe()
             if report["success"]:
-                self._compiled_model = self._manager.get_runnable("runnable")
+                self._compiled_model = self._pipeline.get_runtime("runnable")
             if not self._debug:
                 shutil.rmtree(ckpt_path)
         else:
-            self.logger.info("[Wrapper] Start compile model")
+            self.logger.info(msc_utils.split_line("Start compile model", "*"))
             config = msc_utils.copy_dict(self._config)
             config["workspace"] = self._workspace.create_dir(workspace)
-            self._manager = MSCManager(self._meta_model, config, self._plugins)
-            report = self._manager.run_pipe()
+            self._pipeline = self.pipe_cls(self._meta_model, config, self._plugins)
+            report = self._pipeline.run_pipe()
             if report["success"]:
-                self._compiled_model = self._manager.get_runnable("runnable")
+                self._compiled_model = self._pipeline.get_runtime("runnable")
         return self
 
     def export(self, path: str = "msc_export", dump: bool = True) -> Union[str, dict]:
@@ -153,66 +150,24 @@ class BaseWrapper(object):
             The exported path/pipeline info.
         """
 
-        if not self._manager:
-            self._manager = MSCManager(self._meta_model, self._config, self._plugins)
-        exported = self._manager.export(path, dump=dump)
+        if not self._pipeline:
+            self._pipeline = self.pipe_cls(self._meta_model, self._config, self._plugins)
+        exported = self._pipeline.export(path, dump=dump)
         if not self._debug:
-            self._manager.destory()
+            self._pipeline.destory()
         return exported
-
-    def get_tools(self, tool_types: List[str]) -> List[BaseTool]:
-        """Get the tools from manager
-
-        Parameters
-        ----------
-        tool_types: list<str>
-            The tool types.
-
-        Returns
-        -------
-        tools: list<BaseTool>
-            The tools.
-        """
-
-        if not self._manager:
-            return []
-        tool_types = tool_types or ToolType.all_types()
-        tools = []
-        for t in tool_types:
-            tool = self._manager.runner.get_tool(t)
-            if tool:
-                tools.append(tool)
-        return tools
-
-    def disable_tools(self, tool_types: List[str]):
-        """Disable the tools
-
-        Parameters
-        ----------
-        tool_types: list<str>
-            The tool types.
-        """
-
-        for tool in self.get_tools(tool_types):
-            tool.disable()
-
-    def enable_tools(self, tool_types: List[str]):
-        """Enable the tools
-
-        Parameters
-        ----------
-        tool_types: list<str>
-            The tool types.
-        """
-
-        for tool in self.get_tools(tool_types):
-            tool.enable()
 
     def _get_model(self) -> Any:
         return self._compiled_model or self._optimized_model or self._meta_model
 
     def _get_framework(self) -> str:
-        return self._manager.runner.framework if self._manager else self.model_type()
+        return self._pipeline.get_runtime().framework if self._pipeline else self.model_type()
+
+    @property
+    def pipe_cls(self):
+        if self._dynamic:
+            return MSCDynamic
+        return MSCManager
 
     @property
     def optimized(self):
@@ -224,8 +179,8 @@ class BaseWrapper(object):
 
     @property
     def device(self):
-        if self._manager:
-            return self._manager.runner.device
+        if self._pipeline:
+            return self._pipeline.get_runtime().device
         return "cpu"
 
     @property
@@ -287,21 +242,27 @@ class TorchWrapper(BaseWrapper):
         framework = self._get_framework()
         if framework == MSCFramework.TORCH:
             return self._get_model().parameters()
-        return self._manager.runner.get_weights(MSCFramework.TORCH)
+        return self._pipeline.get_runtime().get_weights(MSCFramework.TORCH)
 
     def train(self):
-        if self._manager:
-            self._manager.runner.train()
+        if self._pipeline:
+            self._pipeline.get_runtime().train()
         if self._get_framework() == MSCFramework.TORCH:
             return self._get_model().train()
         return self._get_model()
 
     def eval(self):
-        if self._manager:
-            self._manager.runner.eval()
+        if self._pipeline:
+            self._pipeline.get_runtime().eval()
         if self._get_framework() == MSCFramework.TORCH:
             return self._get_model().eval()
         return self._get_model()
+
+    @property
+    def pipe_cls(self):
+        if self._dynamic:
+            return TorchDynamic
+        return MSCManager
 
     @classmethod
     def model_type(cls):

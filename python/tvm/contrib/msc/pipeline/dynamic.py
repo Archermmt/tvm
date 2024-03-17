@@ -16,101 +16,20 @@
 # under the License.
 """tvm.contrib.msc.pipeline.dynamic"""
 
-import os
-import time
-import json
-from typing import Dict, Any, Union, List
-import traceback
-import numpy as np
+from typing import Tuple, Any, List
 
-import tvm
-from tvm.contrib.msc.core.runtime import BaseRunner
-from tvm.contrib.msc.core.tools import ToolType
-from tvm.contrib.msc.core.utils.namespace import MSCFramework, MSCMap, MSCKey
+from tvm.contrib.msc.core.runtime import BaseJIT
 from tvm.contrib.msc.core.utils.message import MSCStage
 from tvm.contrib.msc.core import utils as msc_utils
-from tvm.contrib.msc.core.gym.control import create_controller
-from tvm.contrib.msc.core import _ffi_api
-from tvm.contrib.msc.plugin.utils import export_plugins, load_plugins
-from .config import support_tool
+from .pipeline import BasePipeline
+from .worker import MSCPipeWorker
 
 
-class BaseDynamic(object):
-    """Base Dynamic of MSC
+class MSCDynamic(BasePipeline):
+    """Dynamic of Pipeline, process dynamic model"""
 
-    Parameters
-    ----------
-    model: Any
-        The raw model in framwork.
-    config: dict
-        The config for pipeline.
-    plugins: dict
-        The plugins for pipeline.
-    root: str
-        The root path for files.
-    run_optimize: bool
-        Whether to run optimize.
-    run_compile: bool
-        Whether to run compile.
-    """
-
-    def __init__(
-        self,
-        model: Any,
-        config: dict,
-        plugins: dict = None,
-        root: str = None,
-        run_optimize: bool = True,
-        run_compile: bool = True,
-    ):
-        # change path to root path
-        if root:
-
-            def _from_root_mark(val):
-                if isinstance(val, str) and MSCKey.ROOT_MARK in val:
-                    return val.replace(MSCKey.ROOT_MARK, root)
-                return val
-
-            model = _from_root_mark(model)
-            config = msc_utils.map_dict(config, _from_root_mark)
-            plugins = msc_utils.map_dict(plugins, _from_root_mark)
-
-        # check stage
-        for stage in ["dataset", MSCStage.PREPARE, MSCStage.PARSE, MSCStage.COMPILE]:
-            config.setdefault(stage, {})
-
-        MSCMap.reset()
-        use_cache = config.get("use_cache", True)
-        self._workspace = msc_utils.set_workspace(config.get("workspace"), use_cache)
-        self._model_type = config["model_type"]
-        self._model = model
-        self._plugins = load_plugins(plugins) if plugins else {}
-        self._verbose = config.get("verbose", "info")
-        if "logger" in config:
-            self._logger = config["logger"]
-            MSCMap.set(MSCKey.GLOBALE_LOGGER, self._logger)
-        else:
-            log_path = config.get("log_path") or self._workspace.relpath(
-                "MSC_LOG", keep_history=False
-            )
-            self._logger = msc_utils.set_global_logger(self._verbose, log_path)
-        self._optimized, self._compiled = False, False
-        msc_utils.time_stamp(MSCStage.SETUP)
-        self._logger.info(
-            msc_utils.msg_block("SETUP", self.setup(config, run_optimize, run_compile))
-        )
-
-    def setup(self, config: dict, run_optimize: bool = True, run_compile: bool = True) -> dict:
-        """Setup the dynamic
-
-        Parameters
-        ----------
-        config: dict
-            The config for manager.
-        run_optimize: bool
-            Whether to run optimize.
-        run_compile: bool
-            Whether to run compile.
+    def setup(self) -> dict:
+        """Setup the pipeline
 
         Returns
         -------
@@ -118,247 +37,428 @@ class BaseDynamic(object):
             The setup info.
         """
 
-        self._meta_config = config
-        self._optimize_type = config.get(MSCStage.OPTIMIZE, {}).get("run_type", self._model_type)
-        self._compile_type = config.get(MSCStage.COMPILE, {}).get("run_type", self._model_type)
-        # register plugins
-        if self._plugins:
-            for t in [self._model_type, self._optimize_type, self._compile_type]:
-                assert t in self._plugins, "Missing plugin for {}".format(t)
-            for name, plugin in self._plugins[self._model_type].get_ops_info().items():
-                _ffi_api.RegisterPlugin(name, msc_utils.dump_dict(plugin))
-        self._common_config, self._debug_levels = self.update_config(config)
-        if not run_optimize and MSCStage.OPTIMIZE in self._common_config:
-            self._common_config.pop(MSCStage.OPTIMIZE)
-        if not run_compile and MSCStage.COMPILE in self._common_config:
-            self._common_config.pop(MSCStage.COMPILE)
-        self._report = {
-            "success": False,
-            "info": {
-                "workspace": self._workspace.path,
-                "model_type": self._model_type,
-            },
-            "duration": {},
-            "profile": {},
-        }
-        return {
-            "workspace": self._workspace.path,
-            "plugins": self._plugins,
-            "common_config": self._common_config,
-        }
+        self._jit, self._worker_ctxs = None, {}
+        self._current_stage, self._jit_caches = None, {}
+        return super().setup()
 
-    def update_config(self, config: dict) -> dict:
-        """Update config
+    def _prepare(self, data_loader: Any) -> Tuple[dict, dict]:
+        """Prepare datas for the pipeline.
 
         Parameters
         ----------
-        config: dict
-            The config for manager.
+        data_loader:
+            The data loader.
 
         Returns
         -------
-        config: dict
-            The updated config.
+        info: dict
+            The info of prepare.
+        report: dict
+            The report of prepare.
         """
 
-        config, debug_levels = msc_utils.copy_dict(config), {}
-
-        def _set_debug_level(stage: str, sub_config: dict, default: int = None) -> dict:
-            if "debug_level" in sub_config:
-                debug_levels[stage] = sub_config["debug_level"]
-            elif default is not None:
-                debug_levels[stage] = default
-                sub_config["debug_level"] = default
-            return debug_levels
-
-        if self._verbose.startswith("debug:"):
-            debug_level = int(self._verbose.split(":")[1])
+        hooks = {"pre_forward": [self.pre_forward], "post_forward": [self.post_forward]}
+        if isinstance(self._model, dict) and "model" in self._model:
+            worker_models = self._model["worker_models"]
+            self._model, device, training = self.jit_cls.load_native(
+                self._model["model"], self._config
+            )
         else:
-            debug_level = 0
-        for stage in [MSCStage.BASELINE, MSCStage.OPTIMIZE, MSCStage.COMPILE]:
-            if stage not in config:
-                continue
-            debug_levels = _set_debug_level(stage, config[stage]["run_config"], debug_level)
-            for t_config in config.get("tools", []):
-                if not support_tool(t_config, stage, config[stage]["run_type"]):
-                    continue
-                t_stage = stage + "." + self._get_tool_stage(t_config["tool_type"])
-                debug_levels = _set_debug_level(t_stage, t_config["tool_config"], debug_level)
-        ordered_keys = [
-            "model_type",
-            "dataset",
-            "tools",
-            MSCStage.PREPARE,
-            MSCStage.PARSE,
-            MSCStage.BASELINE,
-            MSCStage.OPTIMIZE,
-            MSCStage.COMPILE,
-        ]
-        return {k: config[k] for k in ordered_keys if k in config}, debug_levels
-
-    def run_pipe(self) -> dict:
-        """Run the pipeline and return object.
-
-        Returns
-        -------
-        report:
-            The pipeline report.
-        """
-
-        err_msg = None
-        try:
-            self.prepare()
-            self.parse()
-            if MSCStage.BASELINE in self._common_config:
-                self.baseline()
-            if MSCStage.OPTIMIZE in self._common_config:
-                self.optimize()
-            if MSCStage.COMPILE in self._common_config:
-                self.compile()
-        except Exception as exc:  # pylint: disable=broad-exception-caught
-            err_msg = "Pipeline failed:{}\nTrace: {}".format(exc, traceback.format_exc())
-        self.summary(err_msg)
-        self._logger.info(msc_utils.msg_block("SUMMARY", self._report, 0))
-        self._workspace.finalize()
-        return self._report
-
-    def __str__(self):
-        if self.compiled:
-            phase = "compiled"
-        elif self.optimized:
-            phase = "optimized"
-        else:
-            phase = "meta"
-        return "({}) {}".format(phase, self._get_model().__str__())
-
-    def __getattr__(self, name):
-        if hasattr(self._get_model(), name):
-            return getattr(self._get_model(), name)
-        return self._get_model().__getattr__(name)
-
-    def __call__(self, *inputs):
-        return self._get_model()(*inputs)
-
-    def setup(self):
-        """Setup the wrapper"""
-
-        return
-
-    def change_stage(self, stage: str):
-        """Change the stage"""
-
-        self._stage = stage
-
-    def prepare(self):
-        """Prepare the golden datas"""
-
-        return
-
-    def parse(self):
-        """Parse the relax module"""
-
-        return
-
-    def redirect_forward(self, *inputs, msc_name: str = None):
-        """Redirect forward method"""
-
-        # print("[TMINFO] graph_module " + str(self._graph_module))
-        # print("example_inputs " + str(self._example_inputs))
-        print("inputs " + str(inputs))
-        return self._graph_module.forward(*inputs)
-
-    def optimize(self, dataset: dict = None, workspace: str = "Optimize"):
-        """Optimize the model
-
-        Parameters
-        ----------
-        dataset: dict
-            The dataset.
-        workspace: str
-            The workspace.
-        """
-
-        self._managers = {}
-
-        import torch  # type: ignore[import]
-        from torch import fx  # type: ignore[import]
-        from torch import _dynamo as dynamo  # type: ignore[import]
-
-        def _optimize(graph_module: fx.GraphModule, example_inputs):
-            name = "msc_" + str(len(self._managers))
-            self._managers[name] = {"model": graph_module}
-            return partial(self.redirect_forward, msc_name=name)
-
-        dynamo.reset()
-        self._managers = {}
-        self._optimized_model = torch.compile(self._meta_model, backend=_optimize)
-        assert MSCStage.PREPARE in dataset, "{} is needed to optimize model"
-        self.change_stage(MSCStage.PREPARE)
-        cnt, max_golden = 0, dataset[MSCStage.PREPARE].get("max_golden", 5)
-        for inputs in dataset[MSCStage.PREPARE]["loader"]():
+            worker_models = {}
+            self._model, device, training = self.jit_cls.load_native(self._model, self._config)
+        self._jit = self.jit_cls(
+            self._model,
+            inputs=[i[0] for i in self._config["inputs"]],
+            outputs=self._config["outputs"],
+            device=device,
+            training=training,
+            hooks=hooks,
+            logger=self._logger,
+        )
+        self._jit.build()
+        assert MSCStage.PREPARE in self._config["dataset"], "prepare dataset is needed"
+        cnt, max_golden = 0, self._config["dataset"][MSCStage.PREPARE].get("max_golden", 5)
+        self._current_stage, self._jit_caches = MSCStage.PREPARE, {}
+        for inputs in data_loader():
             if cnt >= max_golden > 0:
                 break
-            print("running {} th forward".format(cnt))
-            if isinstance(inputs, (list, tuple)):
-                self._optimized_model(*inputs)
-            else:
-                self._optimized_model(inputs)
+            self._jit.run(inputs)
             cnt += 1
-        raise Exception("stop here!!")
-        return self
 
-    def _get_model(self) -> Any:
-        return self._compiled_model or self._optimized_model or self._meta_model
+        # create workers
+        def _get_worker_config(name: str, cache: dict):
+            saver = cache.get("saver")
+            assert saver, "Failed to record datas for " + name
+            saver.finalize()
 
-    @classmethod
-    def create_config(cls, **kwargs) -> dict:
-        """Create config for msc pipeline
+            def _to_input(i_name):
+                i_info = saver.info["inputs"][i_name]
+                return (i_name, i_info["shape"], i_info["dtype"])
+
+            w_config = msc_utils.copy_dict(self._config)
+            w_config.update(
+                {
+                    "inputs": [_to_input(i) for i in saver.info["input_names"]],
+                    "outputs": saver.info["output_names"],
+                }
+            )
+            w_config["dataset"]["golden"] = {"loader": saver.folder}
+            for tool in w_config.get("tools", []):
+                worker_config = tool.get("worker_configs", {}).get(name)
+                if worker_config:
+                    tool["tool_config"] = msc_utils.update_dict(tool["tool_config"], worker_config)
+            return w_config
+
+        info, report = {}, {}
+        for name, cache in self._jit_caches.items():
+            runner_ctx = self._jit.get_runner_ctx(name)
+            w_model = worker_models.get(name, runner_ctx["model"])
+            self._worker_ctxs[name] = {
+                "worker": self.create_worker(w_model, name, _get_worker_config(name, cache)),
+                "workspace": self._workspace.create_dir(name),
+            }
+            with msc_utils.change_workspace(self._worker_ctxs[name]["workspace"]):
+                info[name], report[name] = self._worker_ctxs[name]["worker"].prepare()
+        self._jit_caches = {}
+        return info, report
+
+    def _parse(self) -> Tuple[dict, dict]:
+        """Parse relax module for the pipeline.
+
+        Returns
+        -------
+        info: dict
+            The info of parse.
+        report: dict
+            The report of parse.
+        """
+
+        info, report = {}, {}
+        for name, w_ctx in self._worker_ctxs.items():
+            with msc_utils.change_workspace(w_ctx["workspace"]):
+                info[name], report[name] = w_ctx["worker"].parse()
+        return info, report
+
+    def _tool_applied(self, tool_type: str) -> bool:
+        """Check if the tool is applied
 
         Parameters
         ----------
-        kwargs: dict
-            The config kwargs.
+        tool_type: str
+            The tool type.
+
+        Returns
+        -------
+        applied: bool
+            Whether the tool is applied.
         """
 
-        return create_config([], [], MSCFramework.TORCH, **kwargs)
+        return all(w["worker"].tool_applied(tool_type) for w in self._worker_ctxs.values())
 
-    @property
-    def optimized(self):
-        return self._optimized_model is not None
-
-    @property
-    def compiled(self):
-        return self._compiled_model is not None
-
-    @property
-    def logger(self):
-        return self._common_config["logger"]
-
-    @classmethod
-    def model_type(cls):
-        return MSCFramework.MSC
-
-
-class TorchDynamic(BaseDynamic):
-    def optimize(self, dataset: dict = None, workspace: str = "Optimize"):
-        """Optimize the model
+    def _apply_tool(
+        self, tool_type: str, knowledge: dict = None, data_loader: Any = None
+    ) -> Tuple[dict, dict]:
+        """Apply tool with runner
 
         Parameters
         ----------
-        dataset: dict
-            The dataset.
-        workspace: str
-            The workspace.
+        tool_type: str
+            The tool type to apply.
+        knowledge: dict
+            The pre knowledge.
+        data_loader:
+            The data loader.
+
+        Returns
+        -------
+        info: dict
+            The info of apply tool.
+        report: dict
+            The report of apply tool.
         """
 
-        import torch  # type: ignore[import]
-        from torch import fx  # type: ignore[import]
-        from torch import _dynamo as dynamo  # type: ignore[import]
+        if knowledge:
+            raise NotImplementedError("Apply tool with knowledge is not supported")
 
-        def _optimize(graph_module: fx.GraphModule, example_inputs):
-            name = "msc_" + str(len(self._managers))
-            self._managers[name] = {"model": graph_module}
-            return partial(self.redirect_forward, msc_name=name)
+        self._jit.make_plan(tool_type, data_loader)
+        info, report = {}, {}
+        for name, w_ctx in self._worker_ctxs.items():
+            with msc_utils.change_workspace(w_ctx["workspace"]):
+                info[name], report[name] = w_ctx["worker"].apply_tool(tool_type)
+        return info, report
 
-        dynamo.reset()
-        return torch.compile(self._meta_model, backend=_optimize)
+    def _create_runtime(
+        self,
+        stage: str,
+        tools: List[str] = None,
+        run_type: str = None,
+        run_config: dict = None,
+        visualize: bool = True,
+        profile: bool = True,
+        use_cache: bool = True,
+    ) -> Tuple[dict, dict]:
+        """Create runtime.
+
+        Parameters
+        ----------
+        stage: str
+            The pipeline stage.
+        tools: list<str>
+            The tools to apply.
+        run_type: str
+            The type of runner.
+        run_config: dict
+            The config of runner.
+        visualize: bool
+            Whether to visualize the runner
+        profile: bool
+            Whether to profile the runner.
+        use_cache: bool
+            Whether to use cache.
+
+        Returns
+        -------
+        info: dict
+            The info of stage.
+        report: dict
+            The report of stage.
+        """
+
+        info, report = {}, {}
+        for name, w_ctx in self._worker_ctxs.items():
+            with msc_utils.change_workspace(w_ctx["workspace"]):
+                info[name], report[name] = w_ctx["worker"].create_runner(
+                    stage, tools, run_type, run_config, visualize, profile, use_cache
+                )
+                self._jit.set_runner(name, w_ctx["worker"].runner)
+        return info, report
+
+    def _export_model(self, stage: str, folder: msc_utils.MSCDirectory, dump: bool = True) -> Any:
+        """Export the model
+
+        Parameters
+        ----------
+        stage: str
+            The pipeline stage.
+        folder: MSCDirectory
+            The export folder.
+        dump: bool
+            Whether to dump info.
+
+        Returns
+        -------
+        exported:
+            The exported model.
+        """
+
+        if dump:
+            model = self.jit_cls.dump_nativate(self._model, folder, **self._config[MSCStage.EXPORT])
+        else:
+            model = self._model
+        worker_models = {
+            n: w["worker"].export_model(stage, folder.create_dir(n), dump)
+            for n, w in self._worker_ctxs.items()
+        }
+        return {"model": model, "worker_models": worker_models}
+
+    def _export_tool(self, tool_type: str, folder: msc_utils.MSCDirectory) -> dict:
+        """Export the tool
+
+        Parameters
+        ----------
+        tool_type: str
+            The tool type.
+        folder: MSCDirectory
+            The export folder.
+
+        Returns
+        -------
+        configs: dict
+            The exported tool configs.
+        """
+
+        configs = {}
+        for name, w_ctx in self._worker_ctxs.items():
+            with msc_utils.change_workspace(w_ctx["workspace"]):
+                configs[name] = w_ctx["worker"].export_tool(tool_type, folder.create_dir(name))
+        assert tool_type in self._tools_config, "Can not find tool_type " + str(tool_type)
+        return msc_utils.update_dict(self._tools_config["tool_type"], {"worker_configs": configs})
+
+    def _export_files(self, stage: str, folder: msc_utils.MSCDirectory):
+        """Export the files of pipeline
+
+        Parameters
+        ----------
+        stage: str
+            The pipeline stage.
+        folder: MSCDirectory
+            The export folder.
+        """
+
+        for name, w_ctx in self._worker_ctxs.items():
+            with msc_utils.change_workspace(w_ctx["workspace"]):
+                msc_utils.get_visual_dir().copy(stage, folder.create_dir("visualize").relpath(name))
+        super()._export_files(stage, folder)
+
+    def _destory(self):
+        """Destory the pipeline"""
+
+        for w_ctx in self._worker_ctxs.values():
+            w_ctx["worker"].destory()
+
+    def get_runtime(self, ret_type: str = "runner") -> Any:
+        """Get the runtime of pipeline
+
+        Parameters
+        ----------
+        ret_type: str
+            The return type runner| runnable| model.
+
+        Returns
+        -------
+        runnable:
+            The runnable object.
+        """
+
+        if ret_type == "runner":
+            return self._jit
+        if ret_type in ("model", "runnable"):
+            return self._jit.jit_model
+        raise TypeError("Unexpect return type " + str(ret_type))
+
+    def pre_forward(self, runner_name: str, inputs: List[Tuple[str, Any]]) -> Any:
+        """pre forward hook for jit model
+
+        Parameters
+        ----------
+        runner_name: str
+            The runner name.
+        inputs:
+            The msc format inputs.
+        """
+
+        cache = self._jit_caches.setdefault(runner_name, {})
+        if self._current_stage == MSCStage.PREPARE:
+            cache["inputs"] = inputs
+        self._pre_forward(runner_name, inputs)
+
+    def _pre_forward(self, runner_name: str, inputs: List[Tuple[str, Any]]) -> Any:
+        """pre forward hook for jit model
+
+        Parameters
+        ----------
+        runner_name: str
+            The runner name.
+        inputs:
+            The msc format inputs.
+        """
+
+        return None
+
+    def post_forward(
+        self, runner_name: str, outputs: List[Tuple[str, Any]]
+    ) -> List[Tuple[str, Any]]:
+        """pre forward hook for jit model
+
+        Parameters
+        ----------
+        runner_name: str
+            The runner name.
+        outputs:
+            The outputs.
+
+        Returns
+        -------
+        outputs:
+            The outputs.
+        """
+
+        cache = self._jit_caches[runner_name]
+        if self._current_stage == MSCStage.PREPARE:
+            assert "inputs" in cache, "Failed to record inputs"
+            if "saver" not in cache:
+                golden = (
+                    msc_utils.get_dataset_dir().create_dir(runner_name).relpath("Golden", False)
+                )
+                saver_options = {
+                    "input_names": [i[0] for i in cache["inputs"]],
+                    "output_names": [o[0] for o in outputs],
+                }
+                cache["saver"] = msc_utils.IODataSaver(golden, saver_options)
+            cache["saver"].save_batch([i[1] for i in cache["inputs"]], [o[1] for o in outputs])
+        return self._post_forward(runner_name, outputs)
+
+    def _post_forward(
+        self, runner_name: str, outputs: List[Tuple[str, Any]]
+    ) -> List[Tuple[str, Any]]:
+        """pre forward hook for jit model
+
+        Parameters
+        ----------
+        runner_name: str
+            The runner name.
+        outputs:
+            The outputs.
+
+        Returns
+        -------
+        outputs:
+            The outputs.
+        """
+
+        return outputs
+
+    def _record_stage(self, stage: str, info: dict = None, report: dict = None):
+        """Record the stage
+
+        Parameters
+        -------
+        stage: str
+            The compile stage
+        info: dict
+            The info of stage.
+        report: dict
+            The report of stage.
+        """
+
+        stage_report = {}
+        for name, w_report in report.items():
+            for k, v in w_report.items():
+                stage_report.setdefault(k, {})[name] = v
+        info = {k: v for k, v in info.items() if v}
+        super()._record_stage(stage, info, stage_report)
+
+    def pipe_mark(self, msg: Any) -> str:
+        """Mark the message with pipeline info
+
+        Parameters
+        -------
+        msg: str
+            The message
+
+        Returns
+        -------
+        msg: str
+            The message with mark.
+        """
+
+        return "DYNAMIC " + str(msg)
+
+    @property
+    def jit_cls(self):
+        return BaseJIT
+
+    @property
+    def worker_cls(self):
+        return MSCPipeWorker
+
+
+class TorchDynamic(MSCDynamic):
+    """Dynamic of Pipeline, process torch dynamo"""
+
+    @property
+    def jit_cls(self):
+        # pylint: disable=import-outside-toplevel
+        from tvm.contrib.msc.framework.torch.runtime import TorchJIT
+
+        return TorchJIT

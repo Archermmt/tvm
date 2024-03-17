@@ -23,9 +23,9 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, TypeVar
 
 import numpy as np
 
+from tvm import te
 from tvm import tir as _tir
 from tvm.script import tir as T
-from tvm import te
 
 from ... import expr as rx
 from ... import op as _op
@@ -976,6 +976,100 @@ def softmax(x: Tensor, axis: int = -1, name: str = "softmax") -> Tensor:
     The input tensor is required to have float dtype
     """
     return wrap_nested(_op.nn.softmax(x._expr, axis), name)
+
+
+def tanh(x: Tensor, name: str = "tanh") -> Tensor:
+    r"""Applies the hyperbolic tangent function.
+
+    .. math::
+        \text{Tanh}(x) = \frac{e^x - e^{-x}}{e^x + e^{-x}}
+
+    Parameters
+    ----------
+    x : Tensor
+        The input data to the operator.
+
+    name : str
+        Name hint.
+
+    Returns
+    -------
+    result : Tensor
+        The computed result.
+
+    Note
+    ----
+    The input tensor is required to have float dtype
+    """
+    return wrap_nested(_op.tanh(x._expr), name)
+
+
+def exp(x: Tensor, name: str = "exp") -> Tensor:
+    r"""Applies the exponential function.
+
+    .. math::
+        \text{Exp}(x) = e^x
+
+    Parameters
+    ----------
+    x : Tensor
+        The input data to the operator.
+
+    name : str
+        Name hint.
+
+    Returns
+    -------
+    result : Tensor
+        The computed result.
+
+    Note
+    ----
+    The input tensor is required to have float dtype
+    """
+    return wrap_nested(_op.exp(x._expr), name)
+
+
+def permute(x: Tensor, axes: Optional[List[int]], name: str = "permute") -> Tensor:
+    """Permutes the dimensions of the input tensor.
+
+    Parameters
+    ----------
+    x : Tensor
+        The input data to the operator.
+
+    axes : Optional[List[int]]
+        The target axes order.
+
+    name : str
+        Name hint.
+
+    Returns
+    -------
+    result : Tensor
+        The transposed result.
+    """
+
+    return wrap_nested(_op.permute_dims(x._expr, axes=axes), name)
+
+
+def negative(x: Tensor, name: str = "neg") -> Tensor:
+    """Numerical negative of the input tensor.
+
+    Parameters
+    ----------
+    x : Tensor
+        The input data to the operator.
+
+    name : str
+        Name hint.
+
+    Returns
+    -------
+    result : Tensor
+        The computed result.
+    """
+    return wrap_nested(_op.negative(x._expr), name)
 
 
 def layer_norm(
@@ -2386,13 +2480,13 @@ def sample_top_p_top_k_from_sorted_prob(
                     or v_ax1 + 1 == vocab_size
                 ):
                     if v_ax1 == 0:
-                        output_index[v_ax0, 0] = indices[v_ax0, 0]
+                        output_index[v_ax0, 0] = indices[sample_indices[v_ax0, T.int64(0)], 0]
                     elif (
                         usample[v_ax0, T.int64(0)]
                         >= cumsum_sorted[sample_indices[v_ax0, T.int64(0)], v_ax1 - 1]
                         / renorm_prob[sample_indices[v_ax0, T.int64(0)], 0]
                     ):
-                        output_index[v_ax0, 0] = indices[v_ax0, v_ax1]
+                        output_index[v_ax0, 0] = indices[sample_indices[v_ax0, T.int64(0)], v_ax1]
 
     cumsum_sorted = cumsum(sorted_prob, axis=1)
 

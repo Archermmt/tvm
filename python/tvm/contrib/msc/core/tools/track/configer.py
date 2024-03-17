@@ -26,7 +26,7 @@ class TrackConfiger(ToolConfiger):
     """Configer for track"""
 
     def config_apply(self) -> dict:
-        """Get the config fro apply
+        """Get the config for apply
 
         Returns
         -------
