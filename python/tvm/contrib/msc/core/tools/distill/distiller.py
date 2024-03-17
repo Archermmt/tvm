@@ -37,7 +37,7 @@ class BaseDistiller(BaseTool):
             The setup info.
         """
 
-        self._max_iter = self._options.get("max_iter", 5)
+        self._max_iter = self._options.get("max_iter", 1)
         self._save_step = self._options.get("save_step", 50)
         if "weights_folder" in self._options:
             self._weights_folder = msc_utils.msc_dir(self._options["weights_folder"])

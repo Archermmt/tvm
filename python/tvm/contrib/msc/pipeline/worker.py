@@ -92,7 +92,7 @@ class BasePipeWorker(object):
         """
 
         self._debug_levels = self.update_config()
-        self._tools_config = {t["tool_type"]: t for t in self._config["tools"]}
+        self._tools_config = {t["tool_type"]: t for t in self._config.get("tools", [])}
         self._relax_mod, self._sample_inputs = None, None
         self._runner = None
 
@@ -233,7 +233,12 @@ class BasePipeWorker(object):
                         self._sample_inputs = {
                             k: msc_utils.cast_array(v) for k, v in inputs.items()
                         }
-                    outputs, _ = run_func(self._model, inputs, input_names, self._config["outputs"])
+                    try:
+                        outputs, _ = run_func(
+                            self._model, inputs, input_names, self._config["outputs"]
+                        )
+                    except:
+                        outputs = None
                     cnt = saver.save_batch(inputs, outputs)
                 datas_info = saver.info
             msg = "Save {} golden to {}".format(cnt, golden_folder)
@@ -263,13 +268,19 @@ class BasePipeWorker(object):
         if "profile" in stage_config and run_func:
             benchmark = stage_config["profile"].get("benchmark", {})
             benchmark["repeat"] = self._get_repeat(benchmark)
-            _, avg_time = run_func(
-                self._model, self._sample_inputs, input_names, self._config["outputs"], **benchmark
-            )
-            latency = "{:.2f} ms @ {}".format(avg_time, self._device)
-            info["latency"] = latency + " (repeat {})".format(benchmark["repeat"])
-            report["profile"] = latency
-
+            try:
+                _, avg_time = run_func(
+                    self._model,
+                    self._sample_inputs,
+                    input_names,
+                    self._config["outputs"],
+                    **benchmark,
+                )
+                latency = "{:.2f} ms @ {}".format(avg_time, self._device)
+                info["latency"] = latency + " (repeat {})".format(benchmark["repeat"])
+                report["profile"] = latency
+            except:
+                report["profile"] = "failed run native"
         return info, report
 
     def parse(self) -> Tuple[dict, dict]:
@@ -396,8 +407,9 @@ class BasePipeWorker(object):
     def create_runner(
         self,
         stage: str,
-        stage_config: dict = None,
         tools: List[str] = None,
+        run_type: str = None,
+        run_config: dict = None,
         visualize: bool = True,
         profile: bool = True,
         use_cache: bool = True,
@@ -408,10 +420,12 @@ class BasePipeWorker(object):
         ----------
         stage: str
             The stage name
-        stage_config: dict
-            The config of this stage.
         tools: list<str>
             The tools to apply.
+        run_type: str
+            The type of runner.
+        run_config: dict
+            The config of runner.
         visualize: bool
             Whether to visualize the runner
         profile: bool
@@ -429,14 +443,14 @@ class BasePipeWorker(object):
 
         if self._runner:
             self._runner.destory()
-        if not stage_config:
-            assert stage in self._config, "Can not find stage config of " + str(stage)
-            stage_config = self._config[stage]
         tools = tools or []
         assert all(t in self._tools_config for t in tools), "Missing some tools " + str(tools)
-        cache_dir = msc_utils.get_cache_dir().create_dir(stage) if use_cache else None
-        runner_cls = self._get_runner_cls(stage_config["run_type"])
-        run_config = msc_utils.copy_dict(stage_config.get("run_config"))
+        main_stage = stage.split(".")[0]
+        if not run_type:
+            run_type = self._config[main_stage]["run_type"]
+        if not run_config:
+            run_config = self._config[main_stage].get("run_config", {})
+        runner_cls = self._get_runner_cls(run_type)
         if "generate_config" not in run_config:
             run_config["generate_config"] = {}
         cleanup = self._debug_levels.get(stage, 0) == 0
@@ -451,32 +465,34 @@ class BasePipeWorker(object):
         runner = runner_cls(
             self._relax_mod,
             tools_config=[self._tools_config[t] for t in tools],
-            plugin=self._plugins.get(stage_config["run_type"]),
+            plugin=self._plugins.get(run_type),
             stage=stage,
             name=self._name,
             logger=self._logger,
             **run_config,
         )
+        cache_dir = msc_utils.get_cache_dir().create_dir(stage) if use_cache else None
         runner.build(cache_dir=cache_dir)
         if visualize:
-            runner.visualize(msc_utils.get_visual_dir().create_dir(stage.split(".")[0]))
+            runner.visualize(msc_utils.get_visual_dir().create_dir(main_stage))
         if use_cache:
             runner.save_cache(cache_dir)
         info, report = {}, {"runtime": "{} @ {}".format(runner.framework, runner.device)}
-        if profile and "profile" in stage_config:
-            info["profile"], report["profile"] = self._profile_runner(runner, stage_config)
+        if profile and "profile" in self._config[main_stage]:
+            profile_config = self._config[main_stage]["profile"]
+            info["profile"], report["profile"] = self._profile_runner(runner, profile_config)
         self._runner = runner
         return info, report
 
-    def _profile_runner(self, runner: BaseRunner, stage_config: str) -> Tuple[dict, str]:
+    def _profile_runner(self, runner: BaseRunner, profile_config: dict) -> Tuple[dict, str]:
         """Profile the runner.
 
         Parameters
         ----------
         runner: BaseRunner
             The runner to be profiled
-        stage_config: dict
-            The config of this stage.
+        profile_config: dict
+            The config of profile.
 
         Returns
         -------
@@ -487,7 +503,6 @@ class BasePipeWorker(object):
         """
 
         stage = runner.stage
-        profile_config = stage_config["profile"]
         info, report = {}, ""
 
         # check accuracy
@@ -575,7 +590,8 @@ class BasePipeWorker(object):
 
         if not dump:
             return self._model
-        return self._get_runner_cls(self._model_type).dump_nativate(self._model, folder)
+        dump_func = self._get_runner_cls(self._model_type).dump_nativate
+        return dump_func(self._model, folder, **self._config[MSCStage.EXPORT])
 
     def export_tool(self, tool_type: str, folder: msc_utils.MSCDirectory) -> dict:
         """Export the tool
@@ -589,17 +605,13 @@ class BasePipeWorker(object):
 
         Returns
         -------
-        tool: dict
-            The exported tool.
+        config: dict
+            The exported tool config.
         """
 
         run_tool = self._runner.get_tool(tool_type)
         assert tool_type in self._tools_config, "Can not find tool_type " + str(tool_type)
-        tool = msc_utils.copy_dict(self._tools_config[tool_type])
-        tool["tool_config"] = run_tool.export_config(tool["tool_config"], folder)
-        if tool["tool_config"]:
-            return tool
-        return None
+        return run_tool.export_config(self._tools_config[tool_type]["tool_config"], folder)
 
     def get_runnable(self, ret_type: str = "runner") -> Any:
         """Return object by type.

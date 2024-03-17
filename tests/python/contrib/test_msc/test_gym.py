@@ -48,7 +48,7 @@ def _get_config(
     path = "_".join(["test_gym", model_type, compile_type] + [t["tool_type"] for t in tools])
     return {
         "workspace": msc_utils.msc_dir(path),
-        "verbose": "debug:1",
+        "verbose": "debug:3",
         "model_type": model_type,
         "inputs": inputs,
         "outputs": outputs,
@@ -179,7 +179,7 @@ def _get_torch_model(name, training=False):
 def _check_manager(manager, expected_info):
     """Check the manager results"""
 
-    model_info = manager.runner.model_info
+    model_info = manager.get_runtime().model_info
     passed, err = True, ""
     if not manager.report["success"]:
         passed = False

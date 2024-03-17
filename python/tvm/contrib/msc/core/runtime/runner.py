@@ -624,41 +624,35 @@ class BaseRunner(object):
             The saved plan file.
         """
 
+        def _finalize_tool(
+            checker: callable, post_batch: callable = None, post_iter: callable = None
+        ):
+            tool = self.get_tool(tool_type)
+            while not checker(tool):
+                assert data_loader, "data_loader should be given to make plan for " + tool_type
+                for inputs in data_loader():
+                    outputs = self.run(inputs, ret_type="native")
+                    if post_batch:
+                        post_batch(tool, outputs)
+                    if checker(tool):
+                        break
+                if post_iter:
+                    post_iter(tool)
+            return tool.finalize()
+
         assert tool_type in self._tools, "Can not find tool " + str(tool_type)
         if tool_type == ToolType.PRUNER:
-            pruner = self.get_tool(ToolType.PRUNER)
-            if not pruner.pruned:
-                assert data_loader, "data_loader should be given to plan prune"
-                for inputs in data_loader():
-                    self.run(inputs, ret_type="native")
-                    break
-            plan = pruner.finalize()
+            plan = _finalize_tool(lambda t: t.pruned)
         elif tool_type == ToolType.QUANTIZER:
-            quantizer = self.get_tool(ToolType.QUANTIZER)
-            while not quantizer.calibrated:
-                assert data_loader, "data_loader should be given to plan prune"
-                for inputs in data_loader():
-                    self.run(inputs, ret_type="native")
-                quantizer.calibrate()
-            plan = quantizer.finalize()
+            plan = _finalize_tool(lambda t: t.calibrated, post_iter=lambda t: t.calibrate())
         elif tool_type == ToolType.DISTILLER:
-            distiller = self.get_tool(ToolType.DISTILLER)
-            while not distiller.distilled:
-                assert data_loader, "data_loader should be given to plan prune"
-                for inputs in data_loader():
-                    loss = self.run(inputs, ret_type="native")
-                    distiller.learn(loss)
-                distiller.distill()
-            plan = distiller.finalize()
+            plan = _finalize_tool(
+                lambda t: t.distilled,
+                post_batch=lambda t, outputs: t.learn(outputs),
+                post_iter=lambda t: t.distill(),
+            )
         elif tool_type == ToolType.TRACKER:
-            tracker = self.get_tool(ToolType.TRACKER)
-            if not tracker.tracked:
-                assert data_loader, "data_loader should be given to plan prune"
-                for inputs in data_loader():
-                    self.run(inputs, ret_type="native")
-                    if tracker.tracked:
-                        break
-            plan = tracker.finalize()
+            plan = _finalize_tool(lambda t: t.tracked)
         else:
             plan = self.get_tool(tool_type).finalize()
         self._logger.debug("Made %d plan for %s", len(plan), tool_type)

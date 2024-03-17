@@ -65,7 +65,7 @@ class TorchJIT(BaseJIT):
             graph_module = graph_module.train() if self._training else graph_module.eval()
             name = "jit_" + str(len(self._runner_ctxs))
             self._runner_ctxs[name] = {"model": graph_module}
-            return partial(self._redirect_forward, runner_name=name)
+            return partial(self._redirect_run, runner_name=name)
 
         dynamo.reset()
         return torch.compile(self._model, backend=_compile)
@@ -175,7 +175,9 @@ class TorchJIT(BaseJIT):
         return TorchRunner.load_native(model, config)
 
     @classmethod
-    def dump_nativate(cls, model: torch.nn.Module, folder: msc_utils.MSCDirectory) -> str:
+    def dump_nativate(
+        cls, model: torch.nn.Module, folder: msc_utils.MSCDirectory, mode: str = "fx", **kwargs
+    ) -> str:
         """Dump the nativate model
 
         Parameters
@@ -184,6 +186,10 @@ class TorchJIT(BaseJIT):
             The runnable model.
         folder: MSCDirectory
             The export folder.
+        mode: str
+            The export mode.
+        kwargs: dict
+            The kwargs.
 
         Returns
         -------
@@ -191,7 +197,8 @@ class TorchJIT(BaseJIT):
             The exported path
         """
 
-        return TorchRunner.dump_nativate(model, folder)
+        assert mode == "fx", "TorchJIT only support dump nativate as fx, get " + mode
+        return TorchRunner.dump_nativate(model, folder, mode, **kwargs)
 
     @classmethod
     def support_device(cls, device: str) -> bool:

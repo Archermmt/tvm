@@ -86,8 +86,9 @@ class MSCDynamic(BasePipeline):
             cnt += 1
         # create workers
         info, report = {}, {}
-        for name, cache in self._jit_caches.items():
-            runner_ctx, saver = self._jit.get_runner_ctx(name), cache.get("saver")
+
+        def _get_worker_config(name: str, cache: dict):
+            saver = cache.get("saver")
             assert saver, "Failed to record datas for " + name
             saver.finalize()
 
@@ -95,7 +96,6 @@ class MSCDynamic(BasePipeline):
                 i_info = saver.info["inputs"][i_name]
                 return (i_name, i_info["shape"], i_info["dtype"])
 
-            w_model = worker_models.get(name, runner_ctx["model"])
             w_config = msc_utils.copy_dict(self._config)
             w_config.update(
                 {
@@ -104,7 +104,16 @@ class MSCDynamic(BasePipeline):
                 }
             )
             w_config["dataset"]["golden"] = {"loader": saver.folder}
-            self._workers[name] = self.create_worker(w_model, name, w_config)
+            for tool in w_config.get("tools", []):
+                worker_config = tool.get("worker_configs", {}).get(name)
+                if worker_config:
+                    tool["tool_config"] = msc_utils.update_dict(tool["tool_config"], worker_config)
+            return w_config
+
+        for name, cache in self._jit_caches.items():
+            runner_ctx = self._jit.get_runner_ctx(name)
+            w_model = worker_models.get(name, runner_ctx["model"])
+            self._workers[name] = self.create_worker(w_model, name, _get_worker_config(name, cache))
             with msc_utils.change_workspace(self._workspace.create_dir(name)):
                 info[name], report[name] = self._workers[name].prepare()
         self._jit_caches = {}
@@ -165,13 +174,23 @@ class MSCDynamic(BasePipeline):
             The report of apply tool.
         """
 
-        raise Exception("should support _apply_tool!!")
+        if knowledge:
+            raise NotImplementedError("Apply tool with knowledge is not supported")
+
+        self._jit.make_plan(tool_type, data_loader)
+        info, report = {}, {}
+        for name, worker in self._workers.items():
+            with msc_utils.change_workspace(self._workspace.create_dir(name)):
+                info[name], report[name] = worker.apply_tool(tool_type)
+                self._jit.set_runner(name, worker.runner)
+        return info, report
 
     def _create_runtime(
         self,
         stage: str,
-        stage_config: dict = None,
         tools: List[str] = None,
+        run_type: str = None,
+        run_config: dict = None,
         visualize: bool = True,
         profile: bool = True,
         use_cache: bool = True,
@@ -182,10 +201,12 @@ class MSCDynamic(BasePipeline):
         ----------
         stage: str
             The pipeline stage.
-        stage_config: dict
-            The config of this stage.
         tools: list<str>
             The tools to apply.
+        run_type: str
+            The type of runner.
+        run_config: dict
+            The config of runner.
         visualize: bool
             Whether to visualize the runner
         profile: bool
@@ -205,7 +226,7 @@ class MSCDynamic(BasePipeline):
         for name, worker in self._workers.items():
             with msc_utils.change_workspace(self._workspace.create_dir(name)):
                 info[name], report[name] = worker.create_runner(
-                    stage, stage_config, tools, visualize, profile, use_cache
+                    stage, tools, run_type, run_config, visualize, profile, use_cache
                 )
                 self._jit.set_runner(name, worker.runner)
         return info, report
@@ -228,11 +249,53 @@ class MSCDynamic(BasePipeline):
             The exported model.
         """
 
-        model = self.jit_cls.dump_nativate(self._model, folder) if dump else self._model
+        if dump:
+            model = self.jit_cls.dump_nativate(self._model, folder, **self._config[MSCStage.EXPORT])
+        else:
+            model = self._model
         worker_models = {
             n: w.export_model(stage, folder.create_dir(n), dump) for n, w in self._workers.items()
         }
         return {"model": model, "worker_models": worker_models}
+
+    def _export_tool(self, tool_type: str, folder: msc_utils.MSCDirectory) -> dict:
+        """Export the tool
+
+        Parameters
+        ----------
+        tool_type: str
+            The tool type.
+        folder: MSCDirectory
+            The export folder.
+
+        Returns
+        -------
+        configs: dict
+            The exported tool configs.
+        """
+
+        configs = {}
+        for name, worker in self._workers.items():
+            with msc_utils.change_workspace(self._workspace.create_dir(name)):
+                configs[name] = worker.export_tool(tool_type, folder.create_dir(name))
+        assert tool_type in self._tools_config, "Can not find tool_type " + str(tool_type)
+        return msc_utils.update_dict(self._tools_config["tool_type"], {"worker_configs": configs})
+
+    def _export_files(self, stage: str, folder: msc_utils.MSCDirectory):
+        """Export the files of pipeline
+
+        Parameters
+        ----------
+        stage: str
+            The pipeline stage.
+        folder: MSCDirectory
+            The export folder.
+        """
+
+        for name in self._workers:
+            with msc_utils.change_workspace(self._workspace.create_dir(name)):
+                msc_utils.get_visual_dir().copy(stage, folder.create_dir("visualize").relpath(name))
+        super()._export_files(stage, folder)
 
     def _destory(self):
         """Destory the pipeline"""

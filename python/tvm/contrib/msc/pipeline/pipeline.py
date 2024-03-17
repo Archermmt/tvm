@@ -112,7 +112,7 @@ class BasePipeline(object):
             The setup info.
         """
 
-        # basic config
+        # define run type
         self._model_type = self._config["model_type"]
         self._optimize_type = self._config.get(MSCStage.OPTIMIZE, {}).get(
             "run_type", self._model_type
@@ -121,6 +121,9 @@ class BasePipeline(object):
             "run_type", self._model_type
         )
         self._optimized, self._compiled = False, False
+
+        # map tools
+        self._tools_config = {t["tool_type"]: t for t in self._config.get("tools", [])}
 
         # register plugins
         if self._plugins:
@@ -280,14 +283,11 @@ class BasePipeline(object):
                 continue
             tool_stage = get_tool_stage(tool["tool_type"])
             t_stage = stage + "." + tool_stage
+            run_type = tool.get("run_type", self._config[stage]["run_type"])
             msc_utils.time_stamp(t_stage)
-            stage_config = {
-                "run_type": tool.get("run_type", self._config[stage]["run_type"]),
-                "run_config": self._config[stage]["run_config"],
-            }
             msc_utils.time_stamp(t_stage + ".build", False)
             info, report = self._create_runtime(
-                t_stage, stage_config, tools, visualize=False, profile=False, use_cache=False
+                t_stage, tools, run_type=run_type, visualize=False, profile=False, use_cache=False
             )
             self._record_stage(t_stage + ".build", info, report)
             knowledge, loader = None, self._get_loader(tool_stage)
@@ -317,7 +317,7 @@ class BasePipeline(object):
                 self._logger.debug(self.pipe_mark(msg))
                 tools = tools[:-1]
         msc_utils.time_stamp(stage + ".build", False)
-        info, report = self._create_runtime(stage, tools=tools)
+        info, report = self._create_runtime(stage, tools)
         self._record_stage(stage, info, report)
 
     def _tool_applied(self, tool_type: str) -> bool:
@@ -363,8 +363,9 @@ class BasePipeline(object):
     def _create_runtime(
         self,
         stage: str,
-        stage_config: dict = None,
         tools: List[str] = None,
+        run_type: str = None,
+        run_config: dict = None,
         visualize: bool = True,
         profile: bool = True,
         use_cache: bool = True,
@@ -375,10 +376,12 @@ class BasePipeline(object):
         ----------
         stage: str
             The pipeline stage.
-        stage_config: dict
-            The config of this stage.
         tools: list<str>
             The tools to apply.
+        run_type: str
+            The type of runner.
+        run_config: dict
+            The config of runner.
         visualize: bool
             Whether to visualize the runner
         profile: bool
@@ -582,10 +585,7 @@ class BasePipeline(object):
                 if not tool.get("exportable", True):
                     self._logger.info(self.pipe_mark(skip_msg + "(unexportable)"))
                     continue
-                exported_tool = msc_utils.update_dict(
-                    tool, {"tool_config": self._export_tool(tool_type, folder)}
-                )
-                config["tools"].append(exported_tool)
+                config["tools"].append(self._export_tool(tool_type, folder))
         # remove not serializable items
         if dump:
             remove_keys = {"workspace", "logger"}

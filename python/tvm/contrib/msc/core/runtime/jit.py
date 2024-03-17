@@ -21,6 +21,7 @@ import logging
 from typing import Any, List, Tuple, Union, Dict
 
 from tvm.contrib.msc.core import utils as msc_utils
+from tvm.contrib.msc.core.tools import BaseTool, ToolType, ToolScope, create_tool, remove_tools
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from .runner import BaseRunner
 
@@ -153,7 +154,60 @@ class BaseJIT(object):
 
         raise NotImplementedError("_build is not implemented in " + str(self.__class__))
 
-    def _redirect_forward(self, *args, runner_name: str = "worker", **kwargs) -> Any:
+    def make_plan(self, tool_type: str, data_loader: Any = None) -> str:
+        """Execute tool and get plan
+
+        Parameters
+        -------
+        tool_type: str
+            The tool type, should be in ToolType
+        data_loader:
+            The data loader.
+
+        Returns
+        -------
+        plan_file: str
+            The saved plan file.
+        """
+
+        def _finalize_tool(
+            checker: callable, post_batch: callable = None, post_iter: callable = None
+        ):
+            tools = {n: r["runner"].get_tool(tool_type) for n, r in self._runner_ctxs.items()}
+            while any(not checker(t) for t in tools.values()):
+                assert data_loader, "data_loader should be given to make plan for " + tool_type
+                for inputs in data_loader():
+                    outputs = self.run(inputs, ret_type="native")
+                    if post_batch:
+                        for t in tools.values():
+                            post_batch(t, outputs)
+                    if all(checker(t) for t in tools.values()):
+                        break
+                if post_iter:
+                    for t in tools.values():
+                        post_iter(t)
+            return {n: t.finalize() for n, v in tools.items()}
+
+        if tool_type == ToolType.PRUNER:
+            plans = _finalize_tool(lambda t: t.pruned)
+        elif tool_type == ToolType.QUANTIZER:
+            plans = _finalize_tool(lambda t: t.calibrated, post_iter=lambda t: t.calibrate())
+        elif tool_type == ToolType.DISTILLER:
+            plans = _finalize_tool(
+                lambda t: t.distilled,
+                post_batch=lambda t, outputs: t.learn(outputs),
+                post_iter=lambda t: t.distill(),
+            )
+        elif tool_type == ToolType.TRACKER:
+            plans = _finalize_tool(lambda t: t.tracked)
+        else:
+            plans = {
+                n: r["runner"].get_tool(tool_type).finalize() for n, r in self._runner_ctxs.items()
+            }
+        plans_info = ",".join(["{}({})".format(n, len(p)) for n, p in plans.items()])
+        self._logger.debug("Made %d plans for %s", plans_info, tool_type)
+
+    def _redirect_run(self, *args, runner_name: str = "worker", **kwargs) -> Any:
         """Redirect forward of model
 
         Parameters

@@ -82,14 +82,14 @@ def time_stamp(stage: str, log_stage: bool = True, logger: logging.Logger = None
         if log_stage:
             last_stage = MSCMap.get(MSCKey.MSC_STAGE)
             if last_stage:
-                end_msg = "[MSC] End {}".format(last_stage.upper())
-                logger.info("\n%s\n", split_line(end_msg))
-            start_msg = "[MSC] Start {}".format(stage.upper())
-            logger.info("\n%s", split_line(start_msg))
+                end_msg = "End {}".format(last_stage.upper())
+                logger.info("%s\n", split_line(end_msg))
+            start_msg = "Start {}".format(stage.upper())
+            logger.info(split_line(start_msg))
         MSCMap.set(MSCKey.MSC_STAGE, stage.upper())
     elif log_stage:
         start_msg = "Start {}".format(stage)
-        logger.debug("\n%s", split_line(start_msg, "+"))
+        logger.debug(split_line(start_msg, "+"))
 
 
 def get_duration() -> dict:
@@ -163,7 +163,7 @@ def msg_block(title: str, msg: str, width: int = 100, symbol: str = "-"):
 
     if isinstance(msg, dict):
         msg = dump_dict(msg, "table:" + str(width))
-    return "\n{}\n{}".format(split_line(title, "-"), msg)
+    return "{}\n{}".format(split_line(title, "-"), msg)
 
 
 def current_stage():

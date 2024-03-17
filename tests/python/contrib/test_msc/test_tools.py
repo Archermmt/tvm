@@ -180,7 +180,7 @@ def _get_torch_model(name, training=False):
 def _check_manager(manager, expected_info):
     """Check the manager results"""
 
-    model_info = manager.runner.model_info
+    model_info = manager.get_runtime().model_info
     passed, err = True, ""
     if not manager.report["success"]:
         passed = False

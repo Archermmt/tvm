@@ -114,8 +114,9 @@ class MSCManager(BasePipeline):
     def _create_runtime(
         self,
         stage: str,
-        stage_config: dict = None,
         tools: List[str] = None,
+        run_type: str = None,
+        run_config: dict = None,
         visualize: bool = True,
         profile: bool = True,
         use_cache: bool = True,
@@ -126,10 +127,12 @@ class MSCManager(BasePipeline):
         ----------
         stage: str
             The pipeline stage.
-        stage_config: dict
-            The config of this stage.
         tools: list<str>
             The tools to apply.
+        run_type: str
+            The type of runner.
+        run_config: dict
+            The config of runner.
         visualize: bool
             Whether to visualize the runner
         profile: bool
@@ -145,7 +148,9 @@ class MSCManager(BasePipeline):
             The report of stage.
         """
 
-        return self._worker.create_runner(stage, stage_config, tools, visualize, profile, use_cache)
+        return self._worker.create_runner(
+            stage, tools, run_type, run_config, visualize, profile, use_cache
+        )
 
     def _run_gym(self, stage: str, config: dict, knowledge: dict, data_loader: Any) -> dict:
         """Run gym.
@@ -210,11 +215,13 @@ class MSCManager(BasePipeline):
 
         Returns
         -------
-        tool: dict
-            The exported tool.
+        config: dict
+            The exported tool config.
         """
 
-        return self._worker.export_tool(tool_type, folder)
+        assert tool_type in self._tools_config, "Can not find tool_type " + str(tool_type)
+        exp_config = {"tool_config": self._worker.export_tool(tool_type, folder)}
+        return msc_utils.update_dict(self._tools_config["tool_type"], exp_config)
 
     def _export_files(self, stage: str, folder: msc_utils.MSCDirectory):
         """Export the files of pipeline

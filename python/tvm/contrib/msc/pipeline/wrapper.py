@@ -86,7 +86,7 @@ class BaseWrapper(object):
             The workspace.
         """
 
-        self.logger.info("\n%s", msc_utils.split_line("Start optimize model", "*"))
+        self.logger.info(msc_utils.split_line("Start optimize model", "*"))
         config = msc_utils.copy_dict(self._config)
         config["workspace"] = self._workspace.create_dir(workspace)
         if MSCStage.OPTIMIZE not in config:
@@ -116,7 +116,7 @@ class BaseWrapper(object):
         """
 
         if self._optimized_model:
-            self.logger.info("\n%s", msc_utils.split_line("Start compile checkpoint", "*"))
+            self.logger.info(msc_utils.split_line("Start compile checkpoint", "*"))
             ckpt_path = self._workspace.create_dir(ckpt_path).path
             pipeline = self.export(ckpt_path, dump=dump)
             pipeline["config"]["workspace"] = self._workspace.create_dir(workspace)
@@ -127,7 +127,7 @@ class BaseWrapper(object):
             if not self._debug:
                 shutil.rmtree(ckpt_path)
         else:
-            self.logger.info("\n%s", msc_utils.split_line("Start compile model", "*"))
+            self.logger.info(msc_utils.split_line("Start compile model", "*"))
             config = msc_utils.copy_dict(self._config)
             config["workspace"] = self._workspace.create_dir(workspace)
             self._pipeline = self.pipe_cls(self._meta_model, config, self._plugins)
