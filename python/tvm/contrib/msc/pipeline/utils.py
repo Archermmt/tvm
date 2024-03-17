@@ -149,6 +149,7 @@ def create_config(
     # basic config
     config = {
         "model_type": model_type,
+        "dynamic": dynamic,
         "inputs": inputs,
         "outputs": outputs,
         "dataset": dataset,

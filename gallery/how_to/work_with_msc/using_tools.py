@@ -116,18 +116,12 @@ if __name__ == "__main__":
     acc = eval_model(model, testloader, max_iter=args.test_iter)
     print("Baseline acc: " + str(acc))
 
-    model = TorchWrapper(
-        model, get_config(_get_calib_datas, _get_train_datas), dynamic=args.dynamic
-    )
+    model = TorchWrapper(model, get_config(_get_calib_datas, _get_train_datas))
 
     # optimize the model with tool
     model.optimize()
     acc = eval_model(model, testloader, max_iter=args.test_iter)
     print("Optimized acc: " + str(acc))
-
-    path = model.export()
-    print("Export model to " + str(path))
-    raise Exception("stop here!!")
 
     # train the model with tool
     optimizer = optim.Adam(model.parameters(), lr=0.0000001, weight_decay=0.08)

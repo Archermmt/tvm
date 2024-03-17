@@ -82,6 +82,8 @@ class BasePipeline(object):
             self._config.pop(MSCStage.OPTIMIZE)
         if not run_compile and MSCStage.COMPILE in self._config:
             self._config.pop(MSCStage.COMPILE)
+        for stage in [MSCStage.PREPARE, MSCStage.PARSE, MSCStage.EXPORT]:
+            self._config.setdefault(stage, {})
         self._plugins = load_plugins(plugins) if plugins else {}
         use_cache = self._config.get("use_cache", True)
         if "workspace" in self._config:
@@ -739,7 +741,7 @@ class BasePipeline(object):
 
         raise NotImplementedError("get_runtime is not implemented in " + str(self.__class__))
 
-    def create_worker(self, model: Any, name: str, worker_config: dict = None):
+    def create_worker(self, model: Any, name: str, config: dict = None):
         """Create pipe worker
 
         Parameters
@@ -757,9 +759,13 @@ class BasePipeline(object):
             The message with mark.
         """
 
-        config = msc_utils.update_dict(msc_utils.copy_dict(self._config), worker_config)
         return self.worker_cls(
-            model or self._model, config, self._workspace, self._plugins, self._logger, name=name
+            model,
+            config or self._config,
+            self._workspace,
+            self._plugins,
+            self._logger,
+            name=name,
         )
 
     def pipe_mark(self, msg: Any) -> str:

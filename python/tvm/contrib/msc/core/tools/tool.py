@@ -1033,7 +1033,7 @@ class BaseTool(object):
             The message with mark.
         """
 
-        return "{}({}.{} @ {}) {}".format(
+        return "{}[{}]({} @ {}) {}".format(
             self.tool_type().upper(), self._tag, self.framework(), self._stage, msg
         )
 

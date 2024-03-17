@@ -43,23 +43,18 @@ class BaseWrapper(object):
     """
 
     def __init__(
-        self,
-        model: Any,
-        config: dict,
-        workspace: str = "msc_workspace",
-        plugins: dict = None,
-        dynamic: bool = False,
+        self, model: Any, config: dict, workspace: str = "msc_workspace", plugins: dict = None
     ):
         self._meta_model = model
         self._optimized_model, self._compiled_model = None, None
         self._config = config
         self._plugins = plugins
+        self._dynamic = self._config.get("dynamic", False)
         verbose = config.get("verbose", "info")
         self._debug = verbose.startswith("debug")
         self._workspace = msc_utils.msc_dir(workspace, keep_history=self._debug)
         log_path = self._workspace.relpath("MSC_LOG", keep_history=False)
         self._config["logger"] = msc_utils.create_file_logger(verbose, log_path)
-        self._dynamic = dynamic
         self._pipeline = None
         self.setup()
 

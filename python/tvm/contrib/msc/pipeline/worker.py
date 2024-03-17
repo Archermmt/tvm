@@ -67,10 +67,8 @@ class BasePipeWorker(object):
         # check/set default stage
         for key in ["inputs", "outputs", "dataset"]:
             assert key in config, "Missing {} in config".format(key)
-        for stage in [MSCStage.PREPARE, MSCStage.PARSE, MSCStage.EXPORT]:
-            config.setdefault(stage, {})
 
-        self._config = config
+        self._config = msc_utils.copy_dict(config)
         self._workspace = workspace
         self._plugins = plugins
         self._model_type = config["model_type"]
@@ -684,7 +682,7 @@ class BasePipeWorker(object):
             The message with mark.
         """
 
-        return "WORKER({}) {}".format(self._name, msg)
+        return "WORKER[{}] {}".format(self._name, msg)
 
     @property
     def runner(self):

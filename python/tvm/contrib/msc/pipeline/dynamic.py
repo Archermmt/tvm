@@ -16,22 +16,11 @@
 # under the License.
 """tvm.contrib.msc.pipeline.dynamic"""
 
-import os
-import time
-import json
-from typing import Tuple, Any, Union, List
-from functools import partial
-import numpy as np
+from typing import Tuple, Any, List
 
-import tvm
-from tvm.contrib.msc.core.runtime import BaseRunner, BaseJIT
-from tvm.contrib.msc.core.tools import ToolType
-from tvm.contrib.msc.core.utils.namespace import MSCFramework, MSCMap, MSCKey
+from tvm.contrib.msc.core.runtime import BaseJIT
 from tvm.contrib.msc.core.utils.message import MSCStage
 from tvm.contrib.msc.core import utils as msc_utils
-from tvm.contrib.msc.core.gym.control import create_controller
-from tvm.contrib.msc.core import _ffi_api
-from tvm.contrib.msc.plugin.utils import export_plugins, load_plugins
 from .pipeline import BasePipeline
 from .worker import MSCPipeWorker
 
@@ -70,13 +59,15 @@ class MSCDynamic(BasePipeline):
 
         hooks = {"pre_forward": [self.pre_forward], "post_forward": [self.post_forward]}
         if isinstance(self._model, dict) and "model" in self._model:
-            model, device, training = self.jit_cls.load_native(self._model["model"], self._config)
             worker_models = self._model["worker_models"]
+            self._model, device, training = self.jit_cls.load_native(
+                self._model["model"], self._config
+            )
         else:
-            model, device, training = self.jit_cls.load_native(self._model, self._config)
             worker_models = {}
+            self._model, device, training = self.jit_cls.load_native(self._model, self._config)
         self._jit = self.jit_cls(
-            model,
+            self._model,
             inputs=[i[0] for i in self._config["inputs"]],
             outputs=self._config["outputs"],
             device=device,
@@ -105,11 +96,14 @@ class MSCDynamic(BasePipeline):
                 return (i_name, i_info["shape"], i_info["dtype"])
 
             w_model = worker_models.get(name, runner_ctx["model"])
-            w_config = {
-                "inputs": [_to_input(i) for i in saver.info["input_names"]],
-                "outputs": saver.info["output_names"],
-                "dataset": {"golden": {"loader": saver.folder}},
-            }
+            w_config = msc_utils.copy_dict(self._config)
+            w_config.update(
+                {
+                    "inputs": [_to_input(i) for i in saver.info["input_names"]],
+                    "outputs": saver.info["output_names"],
+                }
+            )
+            w_config["dataset"]["golden"] = {"loader": saver.folder}
             self._workers[name] = self.create_worker(w_model, name, w_config)
             with msc_utils.change_workspace(self._workspace.create_dir(name)):
                 info[name], report[name] = self._workers[name].prepare()
