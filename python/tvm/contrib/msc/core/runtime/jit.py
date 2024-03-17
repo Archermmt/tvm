@@ -18,7 +18,7 @@
 """tvm.contrib.msc.core.runtime.jit_model"""
 
 import logging
-from typing import Any, List, Tuple
+from typing import Any, List, Tuple, Union, Dict
 
 from tvm.contrib.msc.core import utils as msc_utils
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
@@ -32,6 +32,14 @@ class BaseJIT(object):
     ----------
     model:
         The model to be jit compile.
+    inputs: list<str>
+        The input names.
+    outputs: list<str>
+        The output names.
+    device: str
+        The device to build runnable.
+    training: bool
+        Whether compile model to trainable.
     hooks: dict
         The hooks for runners.
     logger: logging.Logger
@@ -41,14 +49,21 @@ class BaseJIT(object):
     def __init__(
         self,
         model: Any,
+        inputs: List[str],
+        outputs: List[str],
+        device: str = "cpu",
+        training: bool = False,
         hooks: dict = None,
         logger: logging.Logger = None,
     ):
         self._model = model
         self._jit_model = model
+        self._inputs = inputs
+        self._outputs = outputs
+        self._device = device if self.support_device(device) else "cpu"
+        self._training, self._trained = training, training
         self._hooks = hooks or {}
         self._runner_ctxs = {}
-        self._training, self._trained = False, False
         self._logger = logger or msc_utils.get_global_logger()
         self._logger.info(msc_utils.msg_block(self.jit_mark("SETUP"), self.setup()))
 
@@ -61,10 +76,40 @@ class BaseJIT(object):
             The setup info.
         """
 
-        return {"hooks": self._hooks, "training": self._training}
+        return {
+            "inputs": self._inputs,
+            "outputs": self._outputs,
+            "device": self._device,
+            "training": self._training,
+            "hooks": self._hooks,
+        }
 
-    def __call__(self, inputs: Any):
-        """Call the jit model
+    def run(
+        self, inputs: Union[List[Any], Dict[str, Any]], ret_type="native"
+    ) -> Union[List[Any], Dict[str, Any]]:
+        """Run the jit to get outputs
+
+        Parameters
+        -------
+        inputs: list<data> or dict<str, data>
+            The inputs in list or dict.
+        ret_type: str
+            The return type list| dict
+
+        Returns
+        -------
+        outputs: dict<str, data>
+            The outputs in dict.
+        """
+
+        inputs = msc_utils.format_datas(inputs, self._inputs, style="dict")
+        outputs = self._call_jit(inputs)
+        if ret_type == "native":
+            return outputs
+        return msc_utils.format_datas(outputs, self._outputs, style=ret_type)
+
+    def _call_jit(self, inputs: Dict[str, Any]) -> Any:
+        """Run the jit model
 
         Parameters
         ----------
@@ -72,7 +117,7 @@ class BaseJIT(object):
             The inputs of model.
         """
 
-        raise NotImplementedError("__call__ is not implemented in " + str(self.__class__))
+        raise NotImplementedError("_call_jit is not implemented in " + str(self.__class__))
 
     def set_runner(self, runner_name: str, runner: BaseRunner):
         """Set runner in runner ctx
@@ -127,19 +172,21 @@ class BaseJIT(object):
         """
 
         assert runner_name in self._runner_ctxs, "Failed to create runner " + runner_name
-        inputs = self._to_msc_inputs(*args, **kwargs)
+        inputs = self._to_msc_inputs(runner_name, *args, **kwargs)
         for hook in self._hooks.get("pre_forward", []):
             hook(runner_name, inputs)
         outputs = self._run_ctx(self.get_runner_ctx(runner_name), inputs)
         for hook in self._hooks.get("post_forward", []):
             outputs = hook(runner_name, outputs)
-        return self._from_msc_outputs(outputs)
+        return self._from_msc_outputs(runner_name, outputs)
 
-    def _to_msc_inputs(self, *args, **kwargs) -> List[Tuple[str, Any]]:
+    def _to_msc_inputs(self, runner_name: str, *args, **kwargs) -> List[Tuple[str, Any]]:
         """Change inputs to msc format
 
         Parameters
         ----------
+        runner_name: str
+            The runner name.
         args:
             The arguments.
         kwargs:
@@ -153,11 +200,13 @@ class BaseJIT(object):
 
         raise NotImplementedError("_to_msc_inputs is not implemented in " + str(self.__class__))
 
-    def _from_msc_outputs(self, outputs: List[Tuple[str, Any]]) -> Any:
+    def _from_msc_outputs(self, runner_name: str, outputs: List[Tuple[str, Any]]) -> Any:
         """Change inputs from msc format
 
         Parameters
         ----------
+        runner_name: str
+            The runner name.
         outputs: list<(str, tensor)>
             The msc format outputs.
 
@@ -249,3 +298,15 @@ class BaseJIT(object):
     @property
     def framework(self):
         return MSCFramework.MSC
+
+    @classmethod
+    def support_device(cls, device: str) -> bool:
+        """Check if the device is enabled
+
+        Returns
+        -------
+        enabled: bool
+            Whether the device is enabled.
+        """
+
+        return True

@@ -68,7 +68,10 @@ class BasePipeline(object):
                     return val.replace(MSCKey.ROOT_MARK, root)
                 return val
 
-            model = _from_root_mark(model)
+            if isinstance(model, dict):
+                model = msc_utils.map_dict(model, _from_root_mark)
+            elif isinstance(model, str):
+                model = _from_root_mark(model)
             config = msc_utils.map_dict(config, _from_root_mark)
             plugins = msc_utils.map_dict(plugins, _from_root_mark)
 
@@ -459,30 +462,49 @@ class BasePipeline(object):
         else:
             folder = msc_utils.msc_dir(path, keep_history=False)
 
+        if self._compiled:
+            stage = MSCStage.COMPILE
+        elif self._optimized:
+            stage = MSCStage.OPTIMIZE
+        else:
+            stage = MSCStage.SETUP
+
         def _to_root_mark(val):
             if isinstance(val, str) and folder.path != val and folder.path in val:
                 return val.replace(folder.path, MSCKey.ROOT_MARK)
             return val
 
+        model = self._export_model(stage, folder.create_dir("model"), dump)
         if self._compiled:
-            model = self._export_model(MSCStage.COMPILE, folder, dump)
-            if not dump:
-                return model
             if self._plugins:
                 plugin = self._plugins[self.compile_type]
                 model["plugins"] = plugin.copy_libs(folder.create_dir("plugins"))
-            model = msc_utils.map_dict(model, _to_root_mark)
-            with open(folder.relpath("model.json"), "w") as f:
-                f.write(json.dumps(model, indent=2))
+            compiled = {"model": model}
+            # save golden
+            num_golden = self._config[MSCStage.EXPORT].get("num_golden", 0)
+            if num_golden > 0:
+                saver_options = {
+                    "input_names": [i[0] for i in self._config["inputs"]],
+                    "output_names": self._config["outputs"],
+                }
+                batch_cnt, compiled["golden"] = 0, folder.create_dir("golden").path
+                with msc_utils.IODataSaver(compiled["golden"], saver_options) as saver:
+                    for inputs in self._get_loader():
+                        if batch_cnt >= num_golden:
+                            break
+                        batch_cnt = saver.save_batch(inputs, self.get_runtime().run(inputs))
+            compiled = msc_utils.map_dict(compiled, _to_root_mark)
+            if not dump:
+                return compiled
+            with open(folder.relpath("compiled.json"), "w") as f:
+                f.write(json.dumps(compiled, indent=2))
         else:
             if dump:
                 plugins = export_plugins(self._plugins, folder.create_dir("plugins"))
             else:
                 plugins = self._plugins
-
-            stage = MSCStage.OPTIMIZE if self._optimized else MSCStage.BASELINE
             pipeline = {
-                "model": self._export_model(stage, folder.create_dir("model"), dump),
+                "model": model,
                 "config": self.export_config(folder, dump),
                 "plugins": plugins,
                 "root": folder.path,
@@ -492,13 +514,9 @@ class BasePipeline(object):
                 return pipeline
             with open(folder.relpath("pipeline.json"), "w") as f:
                 f.write(json.dumps(pipeline, indent=2))
-        # copy common files
-        if self._optimized or self._compiled:
-            for log_h in self._logger.handlers:
-                if isinstance(log_h, logging.FileHandler):
-                    folder.copy(log_h.baseFilename)
-            with open(folder.relpath("report.json"), "w") as f:
-                f.write(json.dumps(self._report, indent=2))
+        # export files
+        if stage in (MSCStage.OPTIMIZE, MSCStage.COMPILE):
+            self._export_files(stage, folder)
         folder.finalize()
         if path.endswith(".tar.gz"):
             msc_utils.pack_folder(path.replace(".tar.gz", ""), "tar.gz")
@@ -521,7 +539,7 @@ class BasePipeline(object):
         """
 
         # dump the dataloader
-        def _save_dataset(name, info, dump: bool):
+        def _export_dataset(name, info, dump: bool):
             loader, max_batch = info["loader"], info.get("max_batch", -1)
             data_folder = folder.create_dir("dataset")
             if isinstance(loader, str) and msc_utils.is_callable(loader):
@@ -530,12 +548,8 @@ class BasePipeline(object):
             elif msc_utils.is_io_dataset(loader):
                 exp_loader = data_folder.copy(loader, name)
             elif callable(loader) and dump:
-                saver_options = {
-                    "input_names": [i[0] for i in self._config["inputs"]],
-                    "output_names": self._config["outputs"],
-                }
-                batch_cnt = 0
-                exp_loader = data_folder.create_dir(name).path
+                saver_options = {"input_names": [i[0] for i in self._config["inputs"]]}
+                batch_cnt, exp_loader = 0, data_folder.create_dir(name).path
                 with msc_utils.IODataSaver(exp_loader, saver_options) as saver:
                     for inputs in loader():
                         if batch_cnt >= max_batch > 0:
@@ -547,7 +561,7 @@ class BasePipeline(object):
 
         config = msc_utils.copy_dict(self._meta_config)
         config["dataset"] = {
-            k: _save_dataset(k, v, dump) for k, v in self._config["dataset"].items()
+            k: _export_dataset(k, v, dump) for k, v in self._config["dataset"].items()
         }
         if self._optimized:
             config["model_type"] = MSCFramework.TVM
@@ -558,14 +572,18 @@ class BasePipeline(object):
                 config[MSCStage.COMPILE]["profile"].setdefault("check", {})["err_rate"] = -1
             config["tools"] = []
             for tool in self._config.get("tools", []):
+                tool_type = tool["tool_type"]
+                skip_msg = "Skip export tool " + tool_type
                 if not support_tool(tool, MSCStage.COMPILE, self._compile_type):
+                    self._logger.info(self.pipe_mark(skip_msg + "(unsupported)"))
                     continue
-                exported_tool = self._export_tool(tool["tool_type"], folder)
-                if exported_tool:
-                    config["tools"].append(exported_tool)
-                else:
-                    msg = "Skip unexportable tool {}".format(tool["tool_type"])
-                    self._logger.info(self.pipe_mark(msg))
+                if not tool.get("exportable", True):
+                    self._logger.info(self.pipe_mark(skip_msg + "(unexportable)"))
+                    continue
+                exported_tool = msc_utils.update_dict(
+                    tool, {"tool_config": self._export_tool(tool_type, folder)}
+                )
+                config["tools"].append(exported_tool)
         # remove not serializable items
         if dump:
             remove_keys = {"workspace", "logger"}
@@ -609,6 +627,23 @@ class BasePipeline(object):
         """
 
         raise NotImplementedError("_export_tool is not implemented in " + str(self.__class__))
+
+    def _export_files(self, stage: str, folder: msc_utils.MSCDirectory):
+        """Export the files of pipeline
+
+        Parameters
+        ----------
+        stage: str
+            The pipeline stage.
+        folder: MSCDirectory
+            The export folder.
+        """
+
+        for log_h in self._logger.handlers:
+            if isinstance(log_h, logging.FileHandler):
+                folder.copy(log_h.baseFilename)
+        with open(folder.relpath("report.json"), "w") as f:
+            f.write(json.dumps(self._report, indent=2))
 
     def _get_loader(self, name: str = MSCStage.PREPARE) -> Any:
         """Get the data loader"""
@@ -704,7 +739,7 @@ class BasePipeline(object):
 
         raise NotImplementedError("get_runtime is not implemented in " + str(self.__class__))
 
-    def create_worker(self, model: Any = None, name: str = "main", worker_config: dict = None):
+    def create_worker(self, model: Any, name: str, worker_config: dict = None):
         """Create pipe worker
 
         Parameters

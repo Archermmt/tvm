@@ -95,12 +95,10 @@ class BaseWrapper(object):
         config = msc_utils.copy_dict(self._config)
         config["workspace"] = self._workspace.create_dir(workspace)
         if MSCStage.OPTIMIZE not in config:
-            config[MSCStage.OPTIMIZE] = {
-                "run_type": self.model_type(),
-                "profile": {
-                    "check": {"atol": 1e-3, "rtol": 1e-3, "err_rate": -1},
-                },
-            }
+            config[MSCStage.OPTIMIZE] = {"run_type": self.model_type()}
+            profile = config.get(MSCStage.BASELINE, {}).get("profile")
+            if profile:
+                config[MSCStage.OPTIMIZE]["profile"] = profile
         self._pipeline = self.pipe_cls(self._meta_model, config, self._plugins, run_compile=False)
         report = self._pipeline.run_pipe()
         if report["success"]:
@@ -199,8 +197,8 @@ class BaseWrapper(object):
     @classmethod
     def create_config(
         cls,
-        inputs: List[dict] = None,
-        outputs: List[str] = None,
+        inputs: List[dict],
+        outputs: List[str],
         baseline_type: str = None,
         optimize_type: str = None,
         compile_type: str = None,
@@ -224,8 +222,6 @@ class BaseWrapper(object):
             The config kwargs.
         """
 
-        inputs = inputs or []
-        outputs = outputs or []
         return create_config(
             inputs, outputs, cls.model_type(), baseline_type, optimize_type, compile_type, **kwargs
         )
@@ -242,7 +238,10 @@ class TorchWrapper(BaseWrapper):
         framework = self._get_framework()
         if framework != MSCFramework.TORCH:
             inputs = [msc_utils.cast_array(i, framework, self.device) for i in inputs]
+        for idx, i in enumerate(inputs):
+            print("TorchWrapper input[{}]: {}".format(idx, msc_utils.inspect_array(i)))
         outputs = self._get_model()(*inputs)
+        print("TorchWrapper outputs {}:{}".format(msc_utils.inspect_array(outputs), outputs))
         if framework == MSCFramework.TORCH:
             return outputs
         if isinstance(outputs, (tuple, list)):

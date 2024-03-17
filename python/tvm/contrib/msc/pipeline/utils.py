@@ -147,8 +147,6 @@ def create_config(
     tools = tools or []
     tools = [config_tool(t_type, t_config) for t_type, t_config in tools]
     # basic config
-    if dynamic:
-        inputs, outputs = None, None
     config = {
         "model_type": model_type,
         "inputs": inputs,

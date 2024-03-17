@@ -129,21 +129,6 @@ class TorchRunner(ModelRunner):
                 )
         return params
 
-    def _device_enabled(self, device: str) -> bool:
-        """Check if the device is enabled
-
-        Returns
-        -------
-        enabled: bool
-            Whether the device is enabled.
-        """
-
-        if device == "cpu":
-            return True
-        if device.startswith("cuda"):
-            return torch.cuda.is_available()
-        return False
-
     @property
     def codegen_func(self):
         return to_torch
@@ -173,8 +158,8 @@ class TorchRunner(ModelRunner):
             Whether the model is for training.
         """
 
-        if isinstance(model, dict) and "model" in model:
-            native_model = msc_utils.load_callable(model["model"])
+        if isinstance(model, str) and ":" in model:
+            native_model = msc_utils.load_callable(model)
         elif isinstance(model, torch.nn.Module):
             native_model = model
         else:
@@ -191,42 +176,6 @@ class TorchRunner(ModelRunner):
         else:
             device = "cpu"
         return native_model, device, model.training
-
-    @classmethod
-    def update_config(cls, stage: str, config: dict, model: Any = None) -> dict:
-        """Update the config for parse
-
-        Parameters
-        -------
-        stage: str
-            The stage to be updated
-        config: dict
-            The config for pipeline.
-        model:
-            The native model.
-
-        Returns
-        -------
-        config: dict
-            The updated config.
-        """
-
-        config = ModelRunner.update_config(stage, config, model)
-        if stage not in config:
-            return config
-        if stage == MSCStage.PARSE:
-            config["parse"]["parser"] = from_torch
-            parse_config = config["parse"].get("parse_config", {})
-            parse_config.update(
-                {
-                    "input_info": [
-                        [i[1], "float" if len(i) < 2 else i[2]] for i in config["inputs"]
-                    ],
-                    "input_names": [i[0] for i in config["inputs"]],
-                }
-            )
-            config["parse"]["parse_config"] = parse_config
-        return config
 
     @classmethod
     def run_native(
@@ -320,4 +269,56 @@ class TorchRunner(ModelRunner):
         graph_model = torch.fx.symbolic_trace(model)
         exp_path = folder.create_dir("model")
         graph_model.to_folder(exp_path.path, "native_model")
-        return {"model": exp_path.relpath("module.py") + ":native_model"}
+        return exp_path.relpath("module.py") + ":native_model"
+
+    @classmethod
+    def update_config(cls, stage: str, config: dict, model: Any = None) -> dict:
+        """Update the config for parse
+
+        Parameters
+        -------
+        stage: str
+            The stage to be updated
+        config: dict
+            The config for pipeline.
+        model:
+            The native model.
+
+        Returns
+        -------
+        config: dict
+            The updated config.
+        """
+
+        config = ModelRunner.update_config(stage, config, model)
+        if stage not in config:
+            return config
+        if stage == MSCStage.PARSE:
+            config["parse"]["parser"] = from_torch
+            parse_config = config["parse"].get("parse_config", {})
+            parse_config.update(
+                {
+                    "input_info": [
+                        [i[1], "float" if len(i) < 2 else i[2]] for i in config["inputs"]
+                    ],
+                    "input_names": [i[0] for i in config["inputs"]],
+                }
+            )
+            config["parse"]["parse_config"] = parse_config
+        return config
+
+    @classmethod
+    def support_device(cls, device: str) -> bool:
+        """Check if the device is enabled
+
+        Returns
+        -------
+        enabled: bool
+            Whether the device is enabled.
+        """
+
+        if device == "cpu":
+            return True
+        if device.startswith("cuda"):
+            return torch.cuda.is_available()
+        return False

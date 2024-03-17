@@ -55,7 +55,7 @@ class BaseRunner(object):
     device: str
         The device to build runnable.
     training: bool
-        Whether compile model to trainable
+        Whether compile model to trainable.
     stage: str
         The stage of runner.
     plugin: PluginManager
@@ -94,7 +94,7 @@ class BaseRunner(object):
         self._translate_config = msc_utils.copy_dict(translate_config)
         self._generate_config = msc_utils.copy_dict(generate_config)
         self._build_config = msc_utils.copy_dict(build_config)
-        self._device = device if self._device_enabled(device) else "cpu"
+        self._device = device if self.support_device(device) else "cpu"
         self._stage = stage
         self._plugin = plugin
         self._name = name
@@ -295,45 +295,13 @@ class BaseRunner(object):
             The outputs in dict.
         """
 
-        model_inputs = self.get_inputs()
-        model_outputs = self.get_outputs()
-        if isinstance(inputs, (list, tuple)):
-            assert len(inputs) == len(
-                model_inputs
-            ), "inputs({}) mismatch with model inputs {}".format(len(inputs), model_inputs)
-            inputs = {info["name"]: data for info, data in zip(model_inputs, inputs)}
-        assert isinstance(inputs, dict), "Expect inputs as list or dict, get {}({})".format(
-            inputs, type(inputs)
-        )
-        assert all(
-            msc_utils.is_array(data) for data in inputs.values()
-        ), "Expected all inputs as array like"
-        inputs = {i["name"]: inputs[i["name"]] for i in model_inputs}
+        in_names = [i["name"] for i in self.get_inputs()]
+        inputs = msc_utils.format_datas(inputs, in_names, style="dict")
         outputs = self._call_runnable(self._runnable, inputs, self._device)
         if ret_type == "native":
             return outputs
-        if ret_type == "dict":
-            if isinstance(outputs, (list, tuple, tvm.ir.container.Array)):
-                assert len(outputs) == len(
-                    model_outputs
-                ), "outputs({}) mismatch with model outputs {}".format(len(outputs), model_outputs)
-                outputs = {info["name"]: data for info, data in zip(model_outputs, outputs)}
-            if not isinstance(outputs, dict):
-                assert len(model_outputs) == 1, "Expect model_outputs with len 1, get " + str(
-                    model_outputs
-                )
-                outputs = {model_outputs[0]["name"]: outputs}
-            return {name: msc_utils.cast_array(data) for name, data in outputs.items()}
-        if ret_type == "list":
-            if isinstance(outputs, dict):
-                assert len(outputs) == len(
-                    model_outputs
-                ), "outputs({}) mismatch with model outputs {}".format(len(outputs), model_outputs)
-                outputs = [outputs[o["name"]] for o in model_outputs]
-            if not isinstance(outputs, (list, tuple)):
-                outputs = [outputs]
-            return [msc_utils.cast_array(data) for data in outputs]
-        return outputs
+        out_names = [o["name"] for o in self.get_outputs()]
+        return msc_utils.format_datas(outputs, out_names, style=ret_type)
 
     def save_cache(
         self,
@@ -975,17 +943,6 @@ class BaseRunner(object):
 
         raise NotImplementedError("_call_runnable is not implemented for " + str(self.__class__))
 
-    def _device_enabled(self, device: str) -> bool:
-        """Check if the device is enabled
-
-        Returns
-        -------
-        enabled: bool
-            Whether the device is enabled.
-        """
-
-        return True
-
     def runner_mark(self, msg: Any) -> str:
         """Mark the message with runner info
 
@@ -1096,6 +1053,18 @@ class BaseRunner(object):
             run_config["translate_config"]["build"]["output_aliases"] = config["outputs"]
             config[stage]["run_config"] = run_config
         return config
+
+    @classmethod
+    def support_device(cls, device: str) -> bool:
+        """Check if the device is enabled
+
+        Returns
+        -------
+        enabled: bool
+            Whether the device is enabled.
+        """
+
+        return True
 
 
 class ModelRunner(BaseRunner):
@@ -1441,22 +1410,6 @@ class BYOCRunner(BaseRunner):
             self._logger.debug(msc_utils.msg_block(title, sub_graphs))
         return self._byoc_graph.inspect()
 
-    def _device_enabled(self, device: str) -> bool:
-        """Check if the device is enabled
-
-        Returns
-        -------
-        enabled: bool
-            Whether the device is enabled.
-        """
-
-        if device == "cpu":
-            return True
-        if device.startswith("cuda"):
-            dev_id = int(device.split(":")[1]) if ":" in device else 0
-            return tvm.cuda(dev_id).exist
-        return False
-
     def export_runnable(self, folder: msc_utils.MSCDirectory) -> dict:
         """Export the runnable
 
@@ -1471,10 +1424,32 @@ class BYOCRunner(BaseRunner):
             The runnable info.
         """
 
-        export_path = folder.relpath("model.so")
-        self._executable.export_library(export_path)
-        return {"model": export_path}
+        export_lib = folder.relpath("lib.so")
+        self._executable.export_library(export_lib)
+        return {
+            "lib": export_lib,
+            "device": self.device,
+            "model_type": self.framework,
+            "abstract": self.model_info,
+        }
 
     @property
     def partition_func(self):
         raise NotImplementedError("partition_func is not implemented for " + str(self.__class__))
+
+    @classmethod
+    def support_device(cls, device: str) -> bool:
+        """Check if the device is enabled
+
+        Returns
+        -------
+        enabled: bool
+            Whether the device is enabled.
+        """
+
+        if device == "cpu":
+            return True
+        if device.startswith("cuda"):
+            dev_id = int(device.split(":")[1]) if ":" in device else 0
+            return tvm.cuda(dev_id).exist
+        return False

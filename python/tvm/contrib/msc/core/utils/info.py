@@ -299,8 +299,8 @@ def inspect_array(data: Any, as_str: bool = True) -> Union[Dict[str, Any], str]:
 
 
 def compare_arrays(
-    golden: Dict[str, np.ndarray],
-    datas: Dict[str, np.ndarray],
+    golden: Dict[str, Any],
+    datas: Dict[str, Any],
     atol: float = 1e-2,
     rtol: float = 1e-2,
     report_detail: bool = False,
@@ -309,9 +309,9 @@ def compare_arrays(
 
     Parameters
     ----------
-    golden: dict<str, np.ndarray>
+    golden: dict<str, array_like>
         The golden datas.
-    datas: dict<str, np.ndarray>
+    datas: dict<str, array_like>
         The datas to be compared.
     atol: float
         The atol for compare.
@@ -329,6 +329,8 @@ def compare_arrays(
     assert golden.keys() == datas.keys(), "golden {} and datas {} mismatch".format(
         golden.keys(), datas.keys()
     )
+    golden = {k: cast_array(v) for k, v in golden.items()}
+    datas = {k: cast_array(v) for k, v in datas.items()}
     report = {"total": 0, "passed": 0, "info": {}}
 
     def _add_report(name: str, gol: Any, data: Any, passed: bool):

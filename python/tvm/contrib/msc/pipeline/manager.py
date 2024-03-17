@@ -36,7 +36,7 @@ class MSCManager(BasePipeline):
             The setup info.
         """
 
-        self._worker = self.create_worker()
+        self._worker = self.create_worker(self._model, "main")
         self._config = self._worker._config
         return super().setup()
 
@@ -215,6 +215,20 @@ class MSCManager(BasePipeline):
         """
 
         return self._worker.export_tool(tool_type, folder)
+
+    def _export_files(self, stage: str, folder: msc_utils.MSCDirectory):
+        """Export the files of pipeline
+
+        Parameters
+        ----------
+        stage: str
+            The pipeline stage.
+        folder: MSCDirectory
+            The export folder.
+        """
+
+        msc_utils.get_visual_dir().copy(stage, folder.relpath("visualize"))
+        super()._export_files(stage, folder)
 
     def _destory(self):
         """Destory the pipeline"""

@@ -24,6 +24,19 @@ from tvm.contrib.msc.core import utils as msc_utils
 class DistillConfiger(ToolConfiger):
     """Configer for distill"""
 
+    def config_apply(self) -> dict:
+        """Get the config for apply
+
+        Returns
+        -------
+        config: dict
+            The apply config.
+        """
+
+        config = super().config_apply()
+        config.update({"exportable": False})
+        return config
+
     @classmethod
     def tool_type(cls):
         return ToolType.DISTILLER

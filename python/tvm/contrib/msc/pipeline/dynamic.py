@@ -69,7 +69,21 @@ class MSCDynamic(BasePipeline):
         """
 
         hooks = {"pre_forward": [self.pre_forward], "post_forward": [self.post_forward]}
-        self._jit = self.jit_cls(self._model, hooks=hooks, logger=self._logger)
+        if isinstance(self._model, dict) and "model" in self._model:
+            model, device, training = self.jit_cls.load_native(self._model["model"], self._config)
+            worker_models = self._model["worker_models"]
+        else:
+            model, device, training = self.jit_cls.load_native(self._model, self._config)
+            worker_models = {}
+        self._jit = self.jit_cls(
+            model,
+            inputs=[i[0] for i in self._config["inputs"]],
+            outputs=self._config["outputs"],
+            device=device,
+            training=training,
+            hooks=hooks,
+            logger=self._logger,
+        )
         self._jit.build()
         assert MSCStage.PREPARE in self._config["dataset"], "prepare dataset is needed"
         cnt, max_golden = 0, self._config["dataset"][MSCStage.PREPARE].get("max_golden", 5)
@@ -77,7 +91,7 @@ class MSCDynamic(BasePipeline):
         for inputs in data_loader():
             if cnt >= max_golden > 0:
                 break
-            self._jit(inputs)
+            self._jit.run(inputs)
             cnt += 1
         # create workers
         info, report = {}, {}
@@ -90,12 +104,13 @@ class MSCDynamic(BasePipeline):
                 i_info = saver.info["inputs"][i_name]
                 return (i_name, i_info["shape"], i_info["dtype"])
 
+            w_model = worker_models.get(name, runner_ctx["model"])
             w_config = {
                 "inputs": [_to_input(i) for i in saver.info["input_names"]],
                 "outputs": saver.info["output_names"],
                 "dataset": {"golden": {"loader": saver.folder}},
             }
-            self._workers[name] = self.create_worker(runner_ctx["model"], name, w_config)
+            self._workers[name] = self.create_worker(w_model, name, w_config)
             with msc_utils.change_workspace(self._workspace.create_dir(name)):
                 info[name], report[name] = self._workers[name].prepare()
         self._jit_caches = {}
@@ -201,6 +216,30 @@ class MSCDynamic(BasePipeline):
                 self._jit.set_runner(name, worker.runner)
         return info, report
 
+    def _export_model(self, stage: str, folder: msc_utils.MSCDirectory, dump: bool = True) -> Any:
+        """Export the model
+
+        Parameters
+        ----------
+        stage: str
+            The pipeline stage.
+        folder: MSCDirectory
+            The export folder.
+        dump: bool
+            Whether to dump info.
+
+        Returns
+        -------
+        exported:
+            The exported model.
+        """
+
+        model = self.jit_cls.dump_nativate(self._model, folder) if dump else self._model
+        worker_models = {
+            n: w.export_model(stage, folder.create_dir(n), dump) for n, w in self._workers.items()
+        }
+        return {"model": model, "worker_models": worker_models}
+
     def _destory(self):
         """Destory the pipeline"""
 
@@ -225,7 +264,7 @@ class MSCDynamic(BasePipeline):
             return self._jit
         if ret_type in ("model", "runnable"):
             return self._jit.jit_model
-        raise Exception("Unexpect return type " + str(ret_type))
+        raise TypeError("Unexpect return type " + str(ret_type))
 
     def pre_forward(self, runner_name: str, inputs: List[Tuple[str, Any]]) -> Any:
         """pre forward hook for jit model

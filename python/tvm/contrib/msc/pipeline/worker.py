@@ -564,30 +564,7 @@ class BasePipeWorker(object):
         if stage == MSCStage.COMPILE:
             if not dump:
                 return self._runner.runnable
-            model = self._runner.export_runnable(folder)
-            model.update(
-                {
-                    "device": self._runner.device,
-                    "model_type": self.compile_type,
-                    "abstract": self._runner.model_info,
-                }
-            )
-            # save golden
-            num_golden = self._config[MSCStage.EXPORT].get("num_golden", 0)
-            if num_golden > 0:
-                saver_options = {
-                    "input_names": [i[0] for i in self._config["inputs"]],
-                    "output_names": self._config["outputs"],
-                }
-                batch_cnt, model["golden"] = 0, folder.create_dir("golden").path
-                loader = msc_utils.IODataLoader(self._config["dataset"]["golden"]["loader"])
-                with msc_utils.IODataSaver(model["golden"], saver_options) as saver:
-                    for inputs, _ in loader:
-                        if batch_cnt >= num_golden:
-                            break
-                        batch_cnt = saver.save_batch(inputs, self._runner.run(inputs))
-            msc_utils.get_visual_dir().copy(stage, folder.relpath("visualize"))
-            return model
+            return self._runner.export_runnable(folder)
 
         if stage == MSCStage.OPTIMIZE:
             module = self._runner.export_module(folder)
@@ -596,15 +573,11 @@ class BasePipeWorker(object):
             path = folder.relpath("model.json")
             with open(path, "w") as f:
                 f.write(tvm.ir.save_json(module))
-            msc_utils.get_visual_dir().copy(stage, folder.relpath("visualize"))
-            return {"model": path}
+            return path
 
         if not dump:
             return self._model
-        model = self._get_runner_cls(self._model_type).dump_nativate(
-            self._model, folder, **self._config[MSCStage.EXPORT]
-        )
-        return {"model": model}
+        return self._get_runner_cls(self._model_type).dump_nativate(self._model, folder)
 
     def export_tool(self, tool_type: str, folder: msc_utils.MSCDirectory) -> dict:
         """Export the tool
@@ -651,7 +624,7 @@ class BasePipeWorker(object):
             return self._runner.runnable
         if ret_type == "model":
             return self._runner.model
-        raise Exception("Unexpect return type " + str(ret_type))
+        raise TypeError("Unexpect return type " + str(ret_type))
 
     def _get_repeat(self, benchmark: dict, device: str = None) -> int:
         """Get the repeat number for benchmark

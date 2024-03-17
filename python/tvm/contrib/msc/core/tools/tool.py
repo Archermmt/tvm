@@ -558,11 +558,10 @@ class BaseTool(object):
             The exported config.
         """
 
-        config = msc_utils.copy_dict(config)
         plan_file = msc_utils.to_abs_path(config["plan_file"], msc_utils.get_config_dir())
         if os.path.isfile(plan_file):
-            config["plan_file"] = folder.create_dir("tools").copy(plan_file)
-        return config
+            return {"plan_file": folder.create_dir("tools").copy(plan_file)}
+        return {}
 
     def load_cache(self, cache_dir: msc_utils.MSCDirectory, cache_info: dict):
         """Save runner to cache
