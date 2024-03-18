@@ -1316,10 +1316,7 @@ class BYOCRunner(BaseRunner):
         """
 
         extra_option = self._generate_config.get("extra_option", {})
-        if self._stage == MSCStage.COMPILE and not self.get_tool(ToolType.TRACKER):
-            extra_option["tool_tag"] = ""
-        else:
-            extra_option["tool_tag"] = self._name
+        extra_option["tool_tag"] = "" if self._stage == MSCStage.COMPILE else self._name
         return self.codegen_func(
             self._byoc_mod,
             graphs,

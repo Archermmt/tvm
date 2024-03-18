@@ -110,27 +110,6 @@ class MSCDirectory(object):
     def __del__(self):
         self.clean_up()
 
-    def finalize(self):
-        """Finalize the directory"""
-
-        if not os.path.isdir(self._path):
-            return self._path
-
-        def _remove_empty(path: str):
-            sub_paths = [os.path.join(path, f) for f in os.listdir(path)]
-            for s_path in sub_paths:
-                if not os.path.isdir(s_path):
-                    continue
-                if len(os.listdir(s_path)) == 0:
-                    shutil.rmtree(s_path)
-                else:
-                    _remove_empty(s_path)
-            if len(os.listdir(path)) == 0:
-                shutil.rmtree(path)
-            return path
-
-        return _remove_empty(self._path)
-
     def clean_up(self):
         """Clean up the dir"""
 
@@ -214,7 +193,7 @@ class MSCDirectory(object):
             shutil.copy2(src_path, dst_path)
         else:
             if os.path.isdir(dst_path):
-                os.remove(dst_path)
+                shutil.rmtree(dst_path)
             shutil.copytree(src_path, dst_path)
         return dst_path
 
@@ -282,6 +261,27 @@ class MSCDirectory(object):
         if as_abs:
             return [os.path.join(self._path, f) for f in os.listdir(self._path)]
         return os.listdir(self._path)
+
+    def finalize(self):
+        """Finalize the directory"""
+
+        if not os.path.isdir(self._path):
+            return self._path
+
+        def _remove_empty(path: str):
+            sub_paths = [os.path.join(path, f) for f in os.listdir(path)]
+            for s_path in sub_paths:
+                if not os.path.isdir(s_path):
+                    continue
+                if len(os.listdir(s_path)) == 0:
+                    shutil.rmtree(s_path)
+                else:
+                    _remove_empty(s_path)
+            if len(os.listdir(path)) == 0:
+                shutil.rmtree(path)
+            return path
+
+        return _remove_empty(self._path)
 
     def destory(self):
         """Destory the dir."""
@@ -437,13 +437,15 @@ def to_abs_path(path: str, root_dir: MSCDirectory = None, keep_history: bool = T
     return root_dir.relpath(path, keep_history)
 
 
-def pack_folder(path: str, style="tar.gz"):
+def pack_folder(path: str, dst: str = None, style="tar.gz"):
     """Pack the folder
 
     Parameters
     ----------
     path: str
         The path of the folder.
+    dst: str
+        The pakced path.
     style: str
         The pack style.
 
@@ -453,9 +455,10 @@ def pack_folder(path: str, style="tar.gz"):
         The packed path.
     """
 
+    dst = dst or path + "." + style
     root = os.path.dirname(path)
     if style == "tar.gz":
-        cmd = "tar --exculde={0}.tar.gz -zcvf {0}.tar.gz {0} && rm -rf {0}".format(path)
+        cmd = "tar --exculde={0} -zcvf {0} {1} && rm -rf {1}".format(dst, path)
     else:
         raise NotImplementedError("Pack style {} is not supported".format(style))
     if root:
@@ -463,16 +466,53 @@ def pack_folder(path: str, style="tar.gz"):
             retcode = subprocess.call(cmd, shell=True)
     else:
         retcode = subprocess.call(cmd, shell=True)
-    assert retcode == 0, "Failed to pack the folder {}({}): {}".format(path, style, retcode)
-    return path + "." + style
+    assert retcode == 0, "Failed to pack the folder {}->{}({}): {}".format(
+        path, dst, style, retcode
+    )
+    return dst
+
+
+def unpack_folder(path: str, dst: str = None, style="tar.gz"):
+    """UnPack the folder
+
+    Parameters
+    ----------
+    path: str
+        The path of the folder.
+    dst: str
+        The pakced path.
+    style: str
+        The pack style.
+
+    Returns
+    -------
+    pack_path: str
+        The packed path.
+    """
+
+    dst = dst or path.split(".")[0]
+    root = os.path.dirname(path)
+    if style == "tar.gz":
+        cmd = "tar -zxvf {} {}".format(path, dst)
+    else:
+        raise NotImplementedError("Pack style {} is not supported".format(style))
+    if root:
+        with msc_dir(root):
+            retcode = subprocess.call(cmd, shell=True)
+    else:
+        retcode = subprocess.call(cmd, shell=True)
+    assert retcode == 0, "Failed to unpack the folder {}->{}({}): {}".format(
+        path, dst, style, retcode
+    )
+    return dst
 
 
 get_build_dir = partial(get_workspace_subdir, name="Build")
 get_cache_dir = partial(get_workspace_subdir, name="Cache")
 get_config_dir = partial(get_workspace_subdir, name="Config")
 get_dataset_dir = partial(get_workspace_subdir, name="Dataset")
-get_debug_dir = partial(get_workspace_subdir, name="Debug")
 get_gym_dir = partial(get_workspace_subdir, name="Gym")
+get_info_dir = partial(get_workspace_subdir, name="Info")
 get_output_dir = partial(get_workspace_subdir, name="Output")
 get_visual_dir = partial(get_workspace_subdir, name="Visual")
 get_weights_dir = partial(get_workspace_subdir, name="Weights")

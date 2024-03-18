@@ -163,7 +163,7 @@ def msg_block(title: str, msg: str, width: int = 100, symbol: str = "-"):
 
     if isinstance(msg, dict):
         msg = dump_dict(msg, "table:" + str(width))
-    return "{}\n{}".format(split_line(title, "-"), msg)
+    return "{}\n{}".format(split_line(title, symbol), msg)
 
 
 def current_stage():

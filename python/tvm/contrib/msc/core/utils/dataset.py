@@ -29,6 +29,23 @@ from .info import cast_array, is_array
 
 
 def format_datas(datas: Union[List[Any], Dict[str, Any]], names: List[str], style="dict") -> Any:
+    """Format datas to style format
+
+    Parameters
+    ----------
+    datas:
+        The source datas.
+    names: list<str>
+        The data names.
+    style: str
+        The style of format, dict|list.
+
+    Returns
+    -------
+    datas:
+        The formated datas.
+    """
+
     if isinstance(datas, (list, tuple, tvm.ir.container.Array)):
         assert len(datas) == len(names), "datas({}) mismatch with names {}".format(
             len(datas), names
@@ -187,6 +204,10 @@ class BaseDataLoader(object):
         """
 
         raise NotImplementedError("_data_info is not implemented for BaseDataLoader")
+
+    @property
+    def num_datas(self):
+        return self.info["num_datas"]
 
     @property
     def folder(self):
@@ -396,6 +417,12 @@ class BaseDataSaver(object):
         raise NotImplementedError("_save_batch is not implemented for BaseDataSaver")
 
     @property
+    def num_datas(self):
+        if self.is_finalized():
+            return self.info["num_datas"]
+        return self._current
+
+    @property
     def folder(self):
         return self._folder
 
@@ -456,7 +483,7 @@ class IODataSaver(BaseDataSaver):
         """Finalize the saver"""
 
         super().finalize()
-        if "inputs" not in self._info:
+        if any(n not in self._info["inputs"] for n in self._input_names):
             return
         with open(os.path.join(self._folder, "datas_info.txt"), "w") as f:
             for name in self._input_names:
@@ -520,7 +547,9 @@ def is_io_dataset(folder: str) -> bool:
     if not os.path.isfile(os.path.join(folder, "datas_info.json")):
         return False
     data_info = load_dict(os.path.join(folder, "datas_info.json"))
-    return "inputs" in data_info and "outputs" in data_info
+    if any(key not in data_info for key in ["inputs", "outputs", "num_datas"]):
+        return False
+    return data_info["num_datas"] > 0
 
 
 def is_simple_dataset(folder: str) -> bool:
@@ -529,4 +558,6 @@ def is_simple_dataset(folder: str) -> bool:
     if not os.path.isfile(os.path.join(folder, "datas_info.json")):
         return False
     data_info = load_dict(os.path.join(folder, "datas_info.json"))
-    return "datas" in data_info
+    if any(key not in data_info for key in ["datas", "num_datas"]):
+        return False
+    return data_info["num_datas"] > 0

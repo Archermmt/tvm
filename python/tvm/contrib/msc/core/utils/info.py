@@ -72,14 +72,11 @@ class MSCArray(object):
         """Get abstract describe of the data"""
 
         data = self._to_ndarray()
+        prefix = "[{},{}]".format(";".join([str(s) for s in data.shape]), data.dtype.name)
         if data.size < 10:
-            return ",".join([str(i) for i in data.flatten()])
-        return "[{},{}] Max {:g}, Min {:g}, Avg {:g}".format(
-            ";".join([str(s) for s in data.shape]),
-            data.dtype.name,
-            data.max(),
-            data.min(),
-            data.sum() / data.size,
+            return "{} {}".format(prefix, ",".join([str(i) for i in data.flatten()]))
+        return "{} Max {:g}, Min {:g}, Avg {:g}".format(
+            prefix, data.max(), data.min(), data.sum() / data.size
         )
 
     def _to_ndarray(self) -> np.ndarray:
@@ -345,8 +342,8 @@ def compare_arrays(
         else:
             if report_detail:
                 report["info"][mark] = {
-                    "gol": MSCArray(gol).abstract(),
-                    "data": MSCArray(data).abstract(),
+                    "src": MSCArray(gol).abstract(),
+                    "dst": MSCArray(data).abstract(),
                     "diff": diff.abstract(),
                 }
             else:
@@ -364,6 +361,10 @@ def compare_arrays(
             report["info"][name + "(fail)"] = "dtype mismatch [G]{} vs [D]{}".format(
                 gol.dtype, data.dtype
             )
+            continue
+        if gol.dtype.name in ("int32", "int64"):
+            passed = np.abs(gol - data), max() == 0
+            _add_report(name, gol, data, passed)
             continue
         try:
             np.testing.assert_allclose(gol, data, rtol=rtol, atol=atol, verbose=False)

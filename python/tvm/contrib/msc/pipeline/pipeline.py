@@ -310,6 +310,7 @@ class BasePipeline(object):
                         self._logger.info(self.pipe_mark(gym_mark + "Start search"))
                         knowledge = self._run_gym(tool_stage, config, knowledge, loader)
                         msc_utils.save_dict(knowledge, knowledge_file)
+                    knowledge = msc_utils.load_dict(knowledge)
             msc_utils.time_stamp(t_stage + ".apply", False)
             info, report = self._apply_tool(tool["tool_type"], knowledge, loader)
             self._record_stage(t_stage + ".apply", info, report)
@@ -422,7 +423,7 @@ class BasePipeline(object):
 
         raise NotImplementedError("_run_gym is not implemented in " + str(self.__class__))
 
-    def summary(self, err_msg=None, err_info: str = None) -> dict:
+    def summary(self, err_msg: str = None, err_info: str = None) -> dict:
         """Summary the pipeline.
 
         Parameters

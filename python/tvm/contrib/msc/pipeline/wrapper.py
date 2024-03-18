@@ -53,7 +53,7 @@ class BaseWrapper(object):
         self._workspace = msc_utils.msc_dir(workspace, keep_history=self._debug)
         log_path = self._workspace.relpath("MSC_LOG", keep_history=False)
         self._config["logger"] = msc_utils.create_file_logger(verbose, log_path)
-        self._pipeline = None
+        self._pipeline, self._report = None, None
         self.setup()
 
     def __str__(self):
@@ -93,8 +93,8 @@ class BaseWrapper(object):
             if profile:
                 config[MSCStage.OPTIMIZE]["profile"] = profile
         self._pipeline = self.pipe_cls(self._meta_model, config, self._plugins, run_compile=False)
-        report = self._pipeline.run_pipe()
-        if report["success"]:
+        self._report = self._pipeline.run_pipe()
+        if self._report["success"]:
             self._optimized_model = self._pipeline.get_runtime("runnable")
         return self
 
@@ -119,8 +119,8 @@ class BaseWrapper(object):
             pipeline = self.export(ckpt_path, dump=dump)
             pipeline["config"]["workspace"] = self._workspace.create_dir(workspace)
             self._pipeline = self.pipe_cls(**pipeline)
-            report = self._pipeline.run_pipe()
-            if report["success"]:
+            self._report = self._pipeline.run_pipe()
+            if self._report["success"]:
                 self._compiled_model = self._pipeline.get_runtime("runnable")
             if not self._debug:
                 shutil.rmtree(ckpt_path)
@@ -129,8 +129,8 @@ class BaseWrapper(object):
             config = msc_utils.copy_dict(self._config)
             config["workspace"] = self._workspace.create_dir(workspace)
             self._pipeline = self.pipe_cls(self._meta_model, config, self._plugins)
-            report = self._pipeline.run_pipe()
-            if report["success"]:
+            self._report = self._pipeline.run_pipe()
+            if self._report["success"]:
                 self._compiled_model = self._pipeline.get_runtime("runnable")
         return self
 
@@ -187,6 +187,10 @@ class BaseWrapper(object):
     def logger(self):
         return self._config["logger"]
 
+    @property
+    def report(self):
+        return self._report
+
     @classmethod
     def create_config(
         cls,
@@ -207,10 +211,10 @@ class BaseWrapper(object):
             The output names.
         baseline_type: str
             The baseline type.
-        compile_type: str
-            The compile type.
         optimize_type: str
             The optimize type.
+        compile_type: str
+            The compile type.
         kwargs: dict
             The config kwargs.
         """
@@ -236,7 +240,7 @@ class TorchWrapper(BaseWrapper):
             return outputs
         if isinstance(outputs, (tuple, list)):
             return [msc_utils.cast_array(o, MSCFramework.TORCH, self.device) for o in outputs]
-        return msc_utils.cast_array(outputs, MSCFramework.TORCH)
+        return msc_utils.cast_array(outputs, MSCFramework.TORCH, self.device)
 
     def parameters(self):
         framework = self._get_framework()

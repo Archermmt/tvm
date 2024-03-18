@@ -237,7 +237,10 @@ class BasePipeWorker(object):
                         outputs, _ = run_func(
                             self._model, inputs, input_names, self._config["outputs"]
                         )
-                    except:
+                    except Exception as exc:  # pylint: disable=broad-exception-caught
+                        if cnt == 0:
+                            msg = "Failed to test native by {}: {}".format(run_func, exc)
+                            self._logger.warning(self.worker_mark(msg))
                         outputs = None
                     cnt = saver.save_batch(inputs, outputs)
                 datas_info = saver.info
@@ -279,7 +282,9 @@ class BasePipeWorker(object):
                 latency = "{:.2f} ms @ {}".format(avg_time, self._device)
                 info["latency"] = latency + " (repeat {})".format(benchmark["repeat"])
                 report["profile"] = latency
-            except:
+            except Exception as exc:  # pylint: disable=broad-exception-caught
+                msg = "Failed to profile native by {}: {}".format(run_func, exc)
+                self._logger.warning(self.worker_mark(msg))
                 report["profile"] = "failed run native"
         return info, report
 
@@ -394,6 +399,7 @@ class BasePipeWorker(object):
 
         plan_file = self.get_tool_config(tool_type)["plan_file"]
         if knowledge:
+            self._logger.info("Plan by %d knowledge for %s".format(len(knowledge), tool_type))
             msc_utils.save_dict(knowledge, plan_file)
         else:
             self._runner.make_plan(tool_type, data_loader)

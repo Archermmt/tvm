@@ -183,5 +183,4 @@ def split_line(msg: str, symbol: str = "#", width: int = 100) -> str:
         The split line with message.
     """
 
-    space = int(width / 4)
-    return "\n{0}{1}{0}".format(symbol * space, msg.center(space * 2))
+    return "\n{0}{1}{0}".format(20 * symbol, msg.center(width - 40))

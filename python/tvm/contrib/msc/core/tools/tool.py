@@ -21,7 +21,7 @@ import os
 import copy
 import logging
 from itertools import product
-from typing import List, Iterable, Any, Tuple, Dict
+from typing import List, Iterable, Any, Tuple, Dict, Union
 import numpy as np
 
 import tvm
@@ -338,7 +338,13 @@ class BaseTool(object):
         self._verbose_step = verbose_step
         self._logger = logger or msc_utils.get_global_logger()
         title = self.tool_mark("APPLY_PLAN" if self._plan else "MAKE_PLAN")
-        self._logger.info(msc_utils.msg_block(title, self.setup(), width=0))
+        self._logger.info(msc_utils.msg_block(title, self.setup()))
+
+    def __str__(self):
+        msg = "forward[{}] {} graphs, {} weights".format(
+            self._forward_cnt, len(self._graphs), len(self._weights)
+        )
+        return self.tool_mark(msg)
 
     def setup(self) -> dict:
         """Setup the tool
@@ -758,8 +764,7 @@ class BaseTool(object):
             t_mark += "." + scope
         cached_tensor = self._get_processed(name, consumer, t_mark)
         if cached_tensor is not None:
-            if msc_utils.is_array(cached_tensor):
-                self.debug_tensors(name, consumer, t_mark, {"cached": cached_tensor})
+            self.debug_tensors(name, consumer, t_mark, {"cached": cached_tensor})
             return cached_tensor
         process = self._get_tensor_cache(name, consumer, "process")
         if process is None:
@@ -767,10 +772,20 @@ class BaseTool(object):
             self._save_tensor_cache(name, consumer, "process", process)
         if not process:
             return tensor
-        new_tensor = self._process_tensor(tensor, name, consumer, scope, strategys)
+        if isinstance(tensor, dict):
+            new_tensor = self._process_tensor(
+                msc_utils.copy_dict(tensor), name, consumer, scope, strategys
+            )
+        else:
+            new_tensor = self._process_tensor(tensor, name, consumer, scope, strategys)
         self._save_processed(name, consumer, new_tensor, t_mark)
         if msc_utils.is_array(tensor) and id(new_tensor) != id(tensor):
             tensors = {"pre": tensor, "post": new_tensor, "diff": tensor - new_tensor}
+            self.debug_tensors(name, consumer, t_mark, tensors)
+        elif isinstance(tensor, dict) and len(tensor.get("processed", [])) != len(
+            new_tensor.get("processed", [])
+        ):
+            tensors = {"pre": tensor, "post": new_tensor}
             self.debug_tensors(name, consumer, t_mark, tensors)
         return new_tensor
 
@@ -1080,10 +1095,18 @@ class BaseTool(object):
         """
 
         if self.on_debug(debug_level):
+
+            def _t_info(tensor):
+                if msc_utils.is_array(tensor):
+                    return msc_utils.inspect_array(tensor)
+                if isinstance(tensor, dict) and "processed" in tensor:
+                    return "{}({} processed)".format(
+                        self.find_tensor(name), len(tensor["processed"])
+                    )
+                return str(tensor)
+
             msg = "{}-{}({})".format(name, consumer, t_mark)
-            tensor_des = "\n  ".join(
-                ["{:6s}:{}".format(k, msc_utils.inspect_array(v)) for k, v in tensors.items()]
-            )
+            tensor_des = "\n  ".join(["{:6s}:{}".format(k, _t_info(v)) for k, v in tensors.items()])
             self._logger.debug("%s\n  %s", self.msg_mark(msg), tensor_des)
 
     def _infer_graph_id(self, kwargs: dict) -> int:
@@ -1142,7 +1165,7 @@ class BaseTool(object):
         Returns
         -------
         tensors: generator<MSCTensor>
-            The generator of nodes.
+            The generator of tensors.
         """
 
         for graph in self._graphs:
@@ -1155,7 +1178,7 @@ class BaseTool(object):
         Returns
         -------
         tensors: generator<MSCTensor>
-            The generator of nodes.
+            The generator of tensor ids.
         """
 
         for graph in self._graphs:
@@ -1165,13 +1188,13 @@ class BaseTool(object):
                 for weight in node.get_weights().values():
                     yield self.to_tensor_id(weight.name, node.name)
 
-    def find_tensor(self, name: str) -> MSCTensor:
-        """Find tensor by name.
+    def find_tensor(self, t_ref: Union[str, MSCTensor]) -> MSCTensor:
+        """Find tensor by tensor ref.
 
         Parameters
         ----------
-        name: string
-            The name of the tensor.
+        t_ref: string| MSCTensor
+            The name of the tensor or tensor.
 
         Returns
         -------
@@ -1179,18 +1202,19 @@ class BaseTool(object):
             The found tensor.
         """
 
+        t_name = t_ref.name if isinstance(t_ref, MSCTensor) else t_ref
         for g in self._graphs:
-            if g.has_tensor(name):
-                return g.find_tensor(name)
-        raise Exception("Can not find tensor {} from {} graphs".format(name, len(self._graphs)))
+            if g.has_tensor(t_name):
+                return g.find_tensor(t_name)
+        raise Exception("Can not find tensor {} from {} graphs".format(t_name, len(self._graphs)))
 
-    def find_producer(self, name: str) -> MSCJoint:
-        """Find producer by tensor_name .
+    def find_producer(self, t_ref: Union[str, MSCTensor]) -> MSCJoint:
+        """Find producer by tensor ref.
 
         Parameters
         ----------
-        name: string
-            The name of the tensor.
+        t_ref: string| MSCTensor
+            The name of the tensor or tensor.
 
         Returns
         -------
@@ -1198,20 +1222,21 @@ class BaseTool(object):
             The found prducer.
         """
 
+        t_name = t_ref.name if isinstance(t_ref, MSCTensor) else t_ref
         for g in self._graphs:
-            if g.has_tensor(name):
-                return g.find_producer(name)
+            if g.has_tensor(t_name):
+                return g.find_producer(t_name)
         raise Exception(
-            "Can not find producer of {} from {} graphs".format(name, len(self._graphs))
+            "Can not find producer of {} from {} graphs".format(t_name, len(self._graphs))
         )
 
-    def find_consumers(self, name: str) -> List[MSCJoint]:
-        """Find consumers by tensor_name.
+    def find_consumers(self, t_ref: Union[str, MSCTensor]) -> List[MSCJoint]:
+        """Find consumers by tensor ref.
 
         Parameters
         ----------
-        name: string
-            The name of the tensor.
+        t_ref: string| MSCTensor
+            The name of the tensor or tensor.
 
         Returns
         -------
@@ -1219,11 +1244,12 @@ class BaseTool(object):
             The found consumers.
         """
 
+        t_name = t_ref.name if isinstance(t_ref, MSCTensor) else t_ref
         for g in self._graphs:
-            if g.has_tensor(name):
-                return g.find_consumers(name)
+            if g.has_tensor(t_name):
+                return g.find_consumers(t_name)
         raise Exception(
-            "Can not find consumers of {} from {} graphs".format(name, len(self._graphs))
+            "Can not find consumers of {} from {} graphs".format(t_name, len(self._graphs))
         )
 
     def get_data(self, name: str) -> np.ndarray:
@@ -1512,6 +1538,7 @@ class WeightTool(BaseTool):
 
         for w_graph in self._weight_graphs:
             w_graph.visualize(visual_dir.relpath(w_graph.name + ".prototxt"))
+        super().visualize(visual_dir)
 
     def get_w_nodes(self) -> Iterable[WeightJoint]:
         """Get all the weight nodes in the weight_graphs.

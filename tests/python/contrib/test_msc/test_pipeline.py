@@ -115,6 +115,9 @@ def _check_pipeline(pipeline, expected_info, dynamic=False):
 def _test_from_torch(
     compile_type, expected_info, training=False, dynamic=False, atol=1e-1, rtol=1e-1
 ):
+    if dynamic and not hasattr(torch, "compile"):
+        return
+
     torch_model = _get_torch_model("resnet50", training)
     if torch_model:
         if torch.cuda.is_available():

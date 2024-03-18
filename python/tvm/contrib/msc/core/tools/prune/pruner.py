@@ -123,6 +123,7 @@ class BasePruner(WeightTool):
             The weights.
         """
 
+        self._unpruned_tensors = {}
         self._meta_weights = weights
         graphs, weights = super()._reset(graphs, weights)
         if self._plan and self._enabled:
