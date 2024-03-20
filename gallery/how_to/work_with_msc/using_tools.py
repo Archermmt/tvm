@@ -120,11 +120,6 @@ if __name__ == "__main__":
 
     # optimize the model with tool
     model.optimize()
-    path = model.export()
-    print("Export model to " + str(path))
-
-    raise Exception("stop here!!")
-
     acc = eval_model(model, testloader, max_iter=args.test_iter)
     print("Optimized acc: " + str(acc))
 

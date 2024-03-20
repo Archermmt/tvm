@@ -511,6 +511,8 @@ class BasePipeline(object):
             return self._plugins
 
         export = {
+            "logger": folder.copy(msc_utils.get_log_file(self._logger)),
+            "report": self._report,
             "info": self._export_info(stage, folder.create_dir("info")),
             "model": self._export_model(stage, folder.create_dir("model"), dump),
             "plugins": _export_plugins(folder.create_dir("plugins")),
@@ -661,11 +663,6 @@ class BasePipeline(object):
             The info.
         """
 
-        if stage in (MSCStage.OPTIMIZE, MSCStage.COMPILE):
-            return {
-                "logger": folder.copy(msc_utils.get_log_file(self._logger)),
-                "report": self._report,
-            }
         return {}
 
     def _get_loader(self, name: str = MSCStage.PREPARE) -> Any:

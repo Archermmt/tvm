@@ -280,7 +280,7 @@ class BasePipeWorker(object):
                     **benchmark,
                 )
                 latency = "{:.2f} ms @ {}".format(avg_time, self._device)
-                info["latency"] = latency + " (repeat {})".format(benchmark["repeat"])
+                info["latency"] = latency + " (X{})".format(benchmark["repeat"])
                 report["profile"] = latency
             except Exception as exc:  # pylint: disable=broad-exception-caught
                 msg = "Failed to profile native by {}: {}".format(run_func, exc)
@@ -409,8 +409,7 @@ class BasePipeWorker(object):
             )
         report = {}
         if os.path.isfile(plan_file):
-            plan_num = len(msc_utils.load_dict(plan_file))
-            report["plan"] = "{}({})".format(plan_file, format(plan_num))
+            report["plan_num"] = len(msc_utils.load_dict(plan_file))
         return {}, report
 
     def create_runner(
@@ -568,7 +567,7 @@ class BasePipeWorker(object):
                 runner.run(self._sample_inputs)
             avg_time = (time.time() - start) * 1000 / repeat
             latency = "{:.2f} ms @ {}".format(avg_time, runner.device)
-            info["latency"] = latency + " (repeat {})".format(repeat)
+            info["latency"] = latency + " (X{})".format(repeat)
             report += (", " if report else "") + latency
         return info, report
 
