@@ -256,6 +256,10 @@ class BaseDistiller(BaseTool):
     def tool_type(cls):
         return ToolType.DISTILLER
 
+    @classmethod
+    def exportable(cls):
+        return False
+
 
 @msc_utils.register_tool
 class DefaultDistiller(BaseDistiller):

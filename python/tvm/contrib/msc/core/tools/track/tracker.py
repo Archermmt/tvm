@@ -184,6 +184,10 @@ class BaseTracker(BaseTool):
     def tool_type(cls):
         return ToolType.TRACKER
 
+    @classmethod
+    def apply_once(cls):
+        return True
+
 
 @msc_utils.register_tool
 class DefaultTracker(BaseTracker):

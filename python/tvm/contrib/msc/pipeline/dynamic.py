@@ -37,9 +37,28 @@ class MSCDynamic(BasePipeline):
             The setup info.
         """
 
-        self._jit, self._worker_ctxs = None, {}
-        self._current_stage, self._jit_caches = None, {}
+        self._jit, self._jit_caches = None, {}
+        self._worker_ctxs = {}
         return super().setup()
+
+    def change_stage(self, stage: str, log_stage: bool = True) -> str:
+        """Change stage
+
+        Parameters
+        ----------
+        stage: str
+            The stage name.
+        log_stage: bool
+            Whether to log the stage.
+
+        Returns
+        -------
+        stage: str
+            The stage name.
+        """
+
+        self._jit_caches = {}
+        return super().change_stage(stage, log_stage)
 
     def _prepare(self, data_loader: Any) -> Tuple[dict, dict]:
         """Prepare datas for the pipeline.
@@ -78,7 +97,6 @@ class MSCDynamic(BasePipeline):
         self._jit.build()
         assert MSCStage.PREPARE in self._config["dataset"], "prepare dataset is needed"
         cnt, max_golden = 0, self._config["dataset"][MSCStage.PREPARE].get("max_golden", 5)
-        self._current_stage, self._jit_caches = MSCStage.PREPARE, {}
         for inputs in data_loader():
             if cnt >= max_golden > 0:
                 break
@@ -119,7 +137,6 @@ class MSCDynamic(BasePipeline):
             }
             with msc_utils.change_workspace(self._worker_ctxs[name]["workspace"]):
                 info[name], report[name] = self._worker_ctxs[name]["worker"].prepare()
-        self._jit_caches = {}
         return info, report
 
     def _parse(self) -> Tuple[dict, dict]:
@@ -252,7 +269,7 @@ class MSCDynamic(BasePipeline):
         """
 
         if dump:
-            model = self.jit_cls.dump_nativate(self._model, folder, **self._config[MSCStage.EXPORT])
+            model = self.jit_cls.dump_nativate(self._model, folder, self._config[MSCStage.EXPORT])
         else:
             model = self._model
         worker_models = {
@@ -282,10 +299,10 @@ class MSCDynamic(BasePipeline):
             with msc_utils.change_workspace(w_ctx["workspace"]):
                 configs[name] = w_ctx["worker"].export_tool(tool_type, folder.create_dir(name))
         assert tool_type in self._tools_config, "Can not find tool_type " + str(tool_type)
-        return msc_utils.update_dict(self._tools_config["tool_type"], {"worker_configs": configs})
+        return msc_utils.update_dict(self._tools_config[tool_type], {"worker_configs": configs})
 
-    def _export_files(self, stage: str, folder: msc_utils.MSCDirectory):
-        """Export the files of pipeline
+    def _export_info(self, stage: str, folder: msc_utils.MSCDirectory) -> dict:
+        """Export the info of pipeline
 
         Parameters
         ----------
@@ -293,12 +310,22 @@ class MSCDynamic(BasePipeline):
             The pipeline stage.
         folder: MSCDirectory
             The export folder.
+
+        Returns
+        -------
+        info: dict
+            The info.
         """
 
-        for name, w_ctx in self._worker_ctxs.items():
-            with msc_utils.change_workspace(w_ctx["workspace"]):
-                msc_utils.get_visual_dir().copy(stage, folder.create_dir("visualize").relpath(name))
-        super()._export_files(stage, folder)
+        info = super()._export_info(stage, folder)
+        if stage in (MSCStage.OPTIMIZE, MSCStage.COMPILE):
+            info["worker_infos"] = {}
+            for name, w_ctx in self._worker_ctxs.items():
+                with msc_utils.change_workspace(w_ctx["workspace"]):
+                    info["worker_infos"][name] = w_ctx["worker"].export_info(
+                        stage, folder.create_dir(name)
+                    )
+        return info
 
     def _destory(self):
         """Destory the pipeline"""
@@ -337,8 +364,8 @@ class MSCDynamic(BasePipeline):
             The msc format inputs.
         """
 
-        cache = self._jit_caches.setdefault(runner_name, {})
         if self._current_stage == MSCStage.PREPARE:
+            cache = self._jit_caches.setdefault(runner_name, {})
             cache["inputs"] = inputs
         self._pre_forward(runner_name, inputs)
 
@@ -373,8 +400,8 @@ class MSCDynamic(BasePipeline):
             The outputs.
         """
 
-        cache = self._jit_caches[runner_name]
         if self._current_stage == MSCStage.PREPARE:
+            cache = self._jit_caches[runner_name]
             assert "inputs" in cache, "Failed to record inputs"
             if "saver" not in cache:
                 golden = (

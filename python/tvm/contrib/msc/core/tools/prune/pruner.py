@@ -522,6 +522,10 @@ class BasePruner(WeightTool):
     def tool_type(cls):
         return ToolType.PRUNER
 
+    @classmethod
+    def exportable(cls):
+        return False
+
 
 @msc_utils.register_tool
 class DefaultPruner(BasePruner):

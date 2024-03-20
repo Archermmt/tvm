@@ -69,7 +69,7 @@ def time_stamp(stage: str, log_stage: bool = True, logger: logging.Logger = None
     stage: str
         The stage name.
     log_stage: bool
-        Whether to log the stage
+        Whether to log the stage.
     logger: logging.Logger
         The logger.
     """

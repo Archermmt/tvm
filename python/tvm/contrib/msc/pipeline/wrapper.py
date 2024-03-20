@@ -116,9 +116,11 @@ class BaseWrapper(object):
         if self._optimized_model:
             self.logger.info(msc_utils.split_line("Start compile checkpoint", "*"))
             ckpt_path = self._workspace.create_dir(ckpt_path).path
-            pipeline = self.export(ckpt_path, dump=dump)
-            pipeline["config"]["workspace"] = self._workspace.create_dir(workspace)
-            self._pipeline = self.pipe_cls(**pipeline)
+            export = self.export(ckpt_path, dump=dump)
+            export["config"]["workspace"] = self._workspace.create_dir(workspace)
+            self._pipeline = self.pipe_cls(
+                export["model"], export["config"], export["plugins"], root=ckpt_path
+            )
             self._report = self._pipeline.run_pipe()
             if self._report["success"]:
                 self._compiled_model = self._pipeline.get_runtime("runnable")

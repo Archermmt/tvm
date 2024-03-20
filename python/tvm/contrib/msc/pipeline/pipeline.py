@@ -18,16 +18,16 @@
 
 import os
 import json
-import logging
 from typing import Any, Union, List, Tuple
 import traceback
 import numpy as np
 
+from tvm.contrib.msc.core.tools import get_tool_cls, BaseTool
 from tvm.contrib.msc.core.utils.namespace import MSCFramework, MSCMap, MSCKey
 from tvm.contrib.msc.core.utils.message import MSCStage
+from tvm.contrib.msc.plugin.utils import export_plugins, load_plugins
 from tvm.contrib.msc.core import utils as msc_utils
 from tvm.contrib.msc.core import _ffi_api
-from tvm.contrib.msc.plugin.utils import export_plugins, load_plugins
 from .utils import support_tool, get_tool_stage
 from .worker import BasePipeWorker
 
@@ -100,7 +100,7 @@ class BasePipeline(object):
                 log_file = self._workspace.relpath("MSC_LOG", keep_history=False)
             self._logger = msc_utils.set_global_logger(self._verbose, log_file)
         self._plugins = load_plugins(plugins) if plugins else {}
-        msc_utils.time_stamp(MSCStage.SETUP)
+        self.change_stage(MSCStage.SETUP)
         self._logger.info(msc_utils.msg_block(self.pipe_mark("SETUP"), self.setup()))
 
     def setup(self) -> dict:
@@ -132,13 +132,11 @@ class BasePipeline(object):
             for name, plugin in self._plugins[self._model_type].get_ops_info().items():
                 _ffi_api.RegisterPlugin(name, msc_utils.dump_dict(plugin))
 
-        # init report
+        # status
+        self._current_stage = None
         self._report = {
             "success": False,
-            "info": {
-                "workspace": self._workspace.path,
-                "log_file": msc_utils.get_log_file(self._logger),
-            },
+            "info": {},
             "duration": {},
         }
         return {
@@ -176,10 +174,30 @@ class BasePipeline(object):
         self._workspace.finalize()
         return self._report
 
+    def change_stage(self, stage: str, log_stage: bool = True) -> str:
+        """Change stage
+
+        Parameters
+        ----------
+        stage: str
+            The stage name.
+        log_stage: bool
+            Whether to log the stage.
+
+        Returns
+        -------
+        stage: str
+            The stage name.
+        """
+
+        self._current_stage = stage
+        msc_utils.time_stamp(stage, log_stage)
+        return stage
+
     def prepare(self):
         """Prepare datas for the pipeline."""
 
-        msc_utils.time_stamp(MSCStage.PREPARE)
+        self.change_stage(MSCStage.PREPARE)
         info, report = self._prepare(self._get_loader(MSCStage.PREPARE))
         self._record_stage(MSCStage.PREPARE, info, report)
 
@@ -204,7 +222,7 @@ class BasePipeline(object):
     def parse(self):
         """Parse relax module for the pipeline."""
 
-        msc_utils.time_stamp(MSCStage.PARSE)
+        self.change_stage(MSCStage.PARSE)
         info, report = self._parse()
         self._record_stage(MSCStage.PARSE, info, report)
 
@@ -270,27 +288,30 @@ class BasePipeline(object):
             The report of stage.
         """
 
-        msc_utils.time_stamp(stage)
+        self.change_stage(stage)
         tools = []
         for tool in self._config.get("tools", []):
             run_type = tool.get("run_type", self._config[stage]["run_type"])
             if not support_tool(tool, stage, run_type):
                 continue
             tools.append(tool["tool_type"])
+            tool_cls, tool_stage = self.get_tool_cls(tool, run_type), get_tool_stage(
+                tool["tool_type"]
+            )
+            t_stage = self.change_stage(stage + "." + tool_stage)
             if self._tool_applied(tool["tool_type"]):
-                self._logger.info(self.pipe_mark("Skip applied tool " + str(tool["tool_type"])))
-                if tool.get("apply_once", False):
+                if tool_cls.apply_once():
+                    msg = "Remove apply once tool " + str(tool["tool_type"])
+                    self._logger.info(self.pipe_mark(msg))
                     tools = tools[:-1]
+                else:
+                    self._logger.info(self.pipe_mark("Apply planed tool " + str(tool["tool_type"])))
                 continue
-            tool_stage = get_tool_stage(tool["tool_type"])
-            t_stage = stage + "." + tool_stage
-            run_type = tool.get("run_type", self._config[stage]["run_type"])
-            msc_utils.time_stamp(t_stage)
-            msc_utils.time_stamp(t_stage + ".build", False)
+            self.change_stage(t_stage + ".build", False)
             info, report = self._create_runtime(
                 t_stage, tools, run_type=run_type, visualize=False, profile=False, use_cache=False
             )
-            self._record_stage(t_stage + ".build", info, report)
+            self._record_stage(t_stage, info, report)
             knowledge, loader = None, self._get_loader(tool_stage)
             if "gym_configs" in tool:
                 for idx, config in enumerate(tool["gym_configs"]):
@@ -305,20 +326,19 @@ class BasePipeline(object):
                         msg = "{}Load from {}".format(gym_mark, knowledge)
                         self._logger.info(self.pipe_mark(msg))
                     else:
-                        gym_stage = tool_stage + ".gym_{}".format(idx)
-                        msc_utils.time_stamp(gym_stage)
+                        self.change_stage(tool_stage + ".gym_{}".format(idx))
                         self._logger.info(self.pipe_mark(gym_mark + "Start search"))
                         knowledge = self._run_gym(tool_stage, config, knowledge, loader)
                         msc_utils.save_dict(knowledge, knowledge_file)
                     knowledge = msc_utils.load_dict(knowledge)
-            msc_utils.time_stamp(t_stage + ".apply", False)
+            self.change_stage(t_stage + ".apply", False)
             info, report = self._apply_tool(tool["tool_type"], knowledge, loader)
-            self._record_stage(t_stage + ".apply", info, report)
-            if tool.get("apply_once", False):
-                msg = "Ignore adding apply once tool " + str(tool["tool_type"])
-                self._logger.debug(self.pipe_mark(msg))
+            self._record_stage(t_stage, info, report)
+            if tool_cls.apply_once():
+                msg = "Remove apply once tool " + str(tool["tool_type"])
+                self._logger.info(self.pipe_mark(msg))
                 tools = tools[:-1]
-        msc_utils.time_stamp(stage + ".build", False)
+        self.change_stage(stage + ".build", False)
         info, report = self._create_runtime(stage, tools)
         self._record_stage(stage, info, report)
 
@@ -439,7 +459,7 @@ class BasePipeline(object):
             The report of the pipeline.
         """
 
-        msc_utils.time_stamp(MSCStage.SUMMARY, False)
+        self.change_stage(MSCStage.SUMMARY, False)
         if err_msg:
             self._report.update({"success": False, "err_msg": err_msg, "err_info": err_info})
         else:
@@ -481,49 +501,41 @@ class BasePipeline(object):
                 return val.replace(folder.path, MSCKey.ROOT_MARK)
             return val
 
-        model = self._export_model(stage, folder.create_dir("model"), dump)
+        def _export_plugins(folder: msc_utils.MSCDirectory):
+            if self._compiled:
+                if dump and self.compile_type in self._plugins:
+                    return self._plugins[self.compile_type].copy_libs(folder)
+                return self._plugins.get(self.compile_type)
+            if dump:
+                return export_plugins(self._plugins, folder)
+            return self._plugins
+
+        export = {
+            "info": self._export_info(stage, folder.create_dir("info")),
+            "model": self._export_model(stage, folder.create_dir("model"), dump),
+            "plugins": _export_plugins(folder.create_dir("plugins")),
+        }
         if self._compiled:
-            if self._plugins:
-                plugin = self._plugins[self.compile_type]
-                model["plugins"] = plugin.copy_libs(folder.create_dir("plugins"))
-            compiled = {"model": model}
             # save golden
-            num_golden = self._config[MSCStage.EXPORT].get("num_golden", 0)
+            num_golden = self._config[MSCStage.EXPORT].get("num_golden", 5)
             if num_golden > 0:
                 saver_options = {
                     "input_names": [i[0] for i in self._config["inputs"]],
                     "output_names": self._config["outputs"],
                 }
-                batch_cnt, compiled["golden"] = 0, folder.create_dir("golden").path
-                with msc_utils.IODataSaver(compiled["golden"], saver_options) as saver:
-                    for inputs in self._get_loader():
+                batch_cnt, export["golden"] = 0, folder.create_dir("golden").path
+                with msc_utils.IODataSaver(export["golden"], saver_options) as saver:
+                    for inputs in self._get_loader()():
                         if batch_cnt >= num_golden:
                             break
                         batch_cnt = saver.save_batch(inputs, self.get_runtime().run(inputs))
-            compiled = msc_utils.map_dict(compiled, _to_root_mark)
-            if not dump:
-                return compiled
-            with open(folder.relpath("compiled.json"), "w") as f:
-                f.write(json.dumps(compiled, indent=2))
         else:
-            if dump:
-                plugins = export_plugins(self._plugins, folder.create_dir("plugins"))
-            else:
-                plugins = self._plugins
-            pipeline = {
-                "model": model,
-                "config": self.export_config(folder, dump),
-                "plugins": plugins,
-                "root": folder.path,
-            }
-            pipeline = msc_utils.map_dict(pipeline, _to_root_mark)
-            if not dump:
-                return pipeline
-            with open(folder.relpath("pipeline.json"), "w") as f:
-                f.write(json.dumps(pipeline, indent=2))
-        # export files
-        if stage in (MSCStage.OPTIMIZE, MSCStage.COMPILE):
-            self._export_files(stage, folder)
+            export["config"] = self.export_config(folder, dump)
+        export = msc_utils.map_dict(export, _to_root_mark)
+        if not dump:
+            return export
+        with open(folder.relpath("export.json"), "w") as f:
+            f.write(json.dumps(export, indent=2))
         folder.finalize()
         if path.endswith(".tar.gz"):
             msc_utils.pack_folder(path.replace(".tar.gz", ""), "tar.gz")
@@ -584,7 +596,8 @@ class BasePipeline(object):
                 if not support_tool(tool, MSCStage.COMPILE, self._compile_type):
                     self._logger.info(self.pipe_mark(skip_msg + "(unsupported)"))
                     continue
-                if not tool.get("exportable", True):
+                tool_cls = self.get_tool_cls(tool, self._optimize_type)
+                if not tool_cls.exportable():
                     self._logger.info(self.pipe_mark(skip_msg + "(unexportable)"))
                     continue
                 config["tools"].append(self._export_tool(tool_type, folder))
@@ -632,8 +645,8 @@ class BasePipeline(object):
 
         raise NotImplementedError("_export_tool is not implemented in " + str(self.__class__))
 
-    def _export_files(self, stage: str, folder: msc_utils.MSCDirectory):
-        """Export the files of pipeline
+    def _export_info(self, stage: str, folder: msc_utils.MSCDirectory) -> dict:
+        """Export the info of pipeline
 
         Parameters
         ----------
@@ -641,13 +654,19 @@ class BasePipeline(object):
             The pipeline stage.
         folder: MSCDirectory
             The export folder.
+
+        Returns
+        -------
+        info: dict
+            The info.
         """
 
-        for log_h in self._logger.handlers:
-            if isinstance(log_h, logging.FileHandler):
-                folder.copy(log_h.baseFilename)
-        with open(folder.relpath("report.json"), "w") as f:
-            f.write(json.dumps(self._report, indent=2))
+        if stage in (MSCStage.OPTIMIZE, MSCStage.COMPILE):
+            return {
+                "logger": folder.copy(msc_utils.get_log_file(self._logger)),
+                "report": self._report,
+            }
+        return {}
 
     def _get_loader(self, name: str = MSCStage.PREPARE) -> Any:
         """Get the data loader"""
@@ -674,14 +693,17 @@ class BasePipeline(object):
         elif callable(source_loader):
             max_batch = config.get("max_batch", -1)
             load_kwargs = config.get("load_kwargs", {})
+            if max_batch == -1 and not load_kwargs:
+                loader, source_type = source_loader, "custom"
+            else:
 
-            def get_source():
-                for idx, inputs in enumerate(source_loader(**load_kwargs)):
-                    if idx >= max_batch > 0:
-                        break
-                    yield inputs
+                def get_source():
+                    for idx, inputs in enumerate(source_loader(**load_kwargs)):
+                        if idx >= max_batch > 0:
+                            break
+                        yield inputs
 
-            loader, source_type = get_source, "custom"
+                loader, source_type = get_source, "loaded_custom"
         else:
             raise TypeError(
                 "Unexpected source loader {}({})".format(source_loader, type(source_loader))
@@ -726,6 +748,24 @@ class BasePipeline(object):
         """Destroy the pipeline."""
 
         raise NotImplementedError("_destory is not implemented in " + str(self.__class__))
+
+    def get_tool_cls(self, tool: dict, framework: str) -> BaseTool:
+        """Get the tool class from tool config
+
+        Parameters
+        ----------
+        tool: dict
+            The tool config.
+        framework: str
+            The framework.
+
+        Returns
+        -------
+        tool_cls:
+            The tool class.
+        """
+
+        return get_tool_cls(framework, tool["tool_type"], tool["tool_config"])
 
     def get_runtime(self, ret_type: str = "runner") -> Any:
         """Get the runtime of pipeline

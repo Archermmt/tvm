@@ -166,7 +166,7 @@ class MSCDirectory(object):
         os.rename(src_path, dst_path)
         return dst_path
 
-    def copy(self, src_path: str, dst_path: str = None):
+    def copy(self, src_path: str, dst_path: str = None) -> str:
         """Copy a file to another folder
 
         Parameters
@@ -196,6 +196,22 @@ class MSCDirectory(object):
                 shutil.rmtree(dst_path)
             shutil.copytree(src_path, dst_path)
         return dst_path
+
+    def copy_to(self, dst_path: str):
+        """Copy dir to another folder
+
+        Parameters
+        ----------
+        dst_path: str
+            The target folder path.
+
+        Returns
+        -------
+        path: str
+            The abs file path.
+        """
+
+        return self.copy(self._path, dst_path)
 
     def create_dir(self, name: str, keep_history: bool = True, cleanup: bool = False) -> Any:
         """Add a dir under the folder

@@ -254,9 +254,7 @@ class TorchRunner(ModelRunner):
         cls,
         model: torch.nn.Module,
         folder: msc_utils.MSCDirectory,
-        mode: str = "fx",
-        inputs: list = None,
-        **kwargs,
+        dump_config: dict = None,
     ) -> str:
         """Dump the nativate model
 
@@ -266,12 +264,8 @@ class TorchRunner(ModelRunner):
             The runnable model.
         folder: MSCDirectory
             The export folder.
-        mode: str
-            The export mode.
-        inputs: list
-            The inputs info.
-        kwargs: dict
-            The kwargs.
+        dump_config: dict
+            The dump config.
 
         Returns
         -------
@@ -279,15 +273,17 @@ class TorchRunner(ModelRunner):
             The exported path
         """
 
+        mode = dump_config.get("mode", "fx")
         if mode == "fx":
             graph_model = torch.fx.symbolic_trace(model)
             exp_path = folder.create_dir("model")
             graph_model.to_folder(exp_path.path, "native_model")
             return exp_path.relpath("module.py") + ":native_model"
         if mode == "pt":
+            assert "inputs" in dump_config, "inputs are needed for torch.jit.trace"
             parameters = list(model.parameters())
             device = parameters[0].device if parameters else torch.device("cpu")
-            datas = [np.random.rand(i[1]).astype(i[2]) for i in inputs]
+            datas = [np.random.rand(i[1]).astype(i[2]) for i in dump_config["inputs"]]
             torch_datas = [torch.from_numpy(d).to(device) for d in datas]
             with torch.no_grad():
                 scriptde_model = torch.jit.trace(model, tuple(torch_datas)).eval()

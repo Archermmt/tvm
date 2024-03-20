@@ -516,7 +516,7 @@ class BaseRunner(object):
             The exported module
         """
 
-        raise NotImplementedError("export_module is not supported in BaseRunner")
+        raise NotImplementedError("export_module is not implemented for " + str(self.__class__))
 
     def export_runnable(self, folder: msc_utils.MSCDirectory) -> dict:
         """Export the runnable
@@ -532,7 +532,23 @@ class BaseRunner(object):
             The runnable info.
         """
 
-        raise NotImplementedError("export_runnable is not supported in BaseRunner")
+        raise NotImplementedError("export_runnable is not implemented for " + str(self.__class__))
+
+    def export_graphs(self, folder: msc_utils.MSCDirectory) -> dict:
+        """Export the graphs
+
+        Parameters
+        -------
+        folder: MSCDirectory
+            The export folder.
+
+        Returns
+        -------
+        info: dict
+            The graphs info.
+        """
+
+        raise NotImplementedError("export_graphs is not implemented for " + str(self.__class__))
 
     def train(self):
         """Change status to train"""
@@ -1013,6 +1029,66 @@ class BaseRunner(object):
         return model, "cpu", False
 
     @classmethod
+    def run_native(
+        cls,
+        model: Any,
+        inputs: Dict[str, np.ndarray],
+        input_names: List[str],
+        output_names: List[str],
+        warm_up: int = 10,
+        repeat: int = 0,
+    ) -> Tuple[Dict[str, np.ndarray], float]:
+        """Run the datas and get outputs
+
+        Parameters
+        -------
+        model:
+            The nativate model.
+        inputs: dict<str, data>
+            The inputs in dict.
+        input_names: list<str>
+            The input names.
+        output_names: list<str>
+            The outut names.
+        warm_up: int
+            The warm_up num for profile.
+        repeat: int
+            The repeat num for profile.
+
+        Returns
+        -------
+        outputs: dict<str, np.array>
+            The outputs in dict.
+        avg_time: float
+            The average time.
+        """
+
+        raise NotImplementedError("run_native is not implemented for " + str(cls))
+
+    @classmethod
+    def dump_nativate(
+        cls, model: Any, folder: msc_utils.MSCDirectory, dump_config: dict = None
+    ) -> str:
+        """Dump the nativate model
+
+        Parameters
+        -------
+        model:
+            The native model.
+        folder: MSCDirectory
+            The export folder.
+        dump_config: dict
+            The dump config.
+
+        Returns
+        -------
+        export_path: str
+            The exported path
+        """
+
+        raise NotImplementedError("dump_nativate is not implemented for " + str(cls))
+
+    @classmethod
     def update_config(cls, stage: str, config: dict, model: Any = None) -> dict:
         """Update the config for parse
 
@@ -1183,6 +1259,25 @@ class ModelRunner(BaseRunner):
             self._graphs[0], self.get_runtime_params(), build_folder=build_folder, use_alias=False
         )
         return module
+
+    def export_graphs(self, folder: msc_utils.MSCDirectory) -> dict:
+        """Export the graphs
+
+        Parameters
+        -------
+        folder: MSCDirectory
+            The export folder.
+
+        Returns
+        -------
+        info: dict
+            The graphs info.
+        """
+
+        graphs = {"main": folder.relpath(self._graphs[0].name + "_graph.json")}
+        with open(graphs["main"], "w") as f_graph:
+            f_graph.write(self._graphs[0].to_json())
+        return graphs
 
 
 class BYOCRunner(BaseRunner):
@@ -1423,6 +1518,31 @@ class BYOCRunner(BaseRunner):
             "model_type": self.framework,
             "abstract": self.model_info,
         }
+
+    def export_graphs(self, folder: msc_utils.MSCDirectory) -> dict:
+        """Export the graphs
+
+        Parameters
+        -------
+        folder: MSCDirectory
+            The export folder.
+
+        Returns
+        -------
+        info: dict
+            The graphs info.
+        """
+
+        graphs = {
+            "byoc_graph": folder.relpath(self._byoc_graph.name + "_graph.json"),
+            "sub_graphs": {g.name: folder.relpath(g.name + "_graph.json") for g in self._graphs},
+        }
+        with open(graphs["byoc_graph"], "w") as f:
+            f.write(self._byoc_graph.to_json())
+        for graph in self._graphs:
+            with open(graphs["sub_graphs"][graph.name], "w") as f:
+                f.write(graph.to_json())
+        return graphs
 
     @property
     def partition_func(self):

@@ -77,7 +77,7 @@ def save_dict(dict_obj: Any, path: str, indent: int = 2) -> str:
     return path
 
 
-def update_dict(src_dict: dict, new_dict: dict, soft_update: bool = True) -> dict:
+def update_dict(src_dict: dict, new_dict: dict, soft_update: bool = False) -> dict:
     """Update src_dict with new_dict.
 
     Parameters

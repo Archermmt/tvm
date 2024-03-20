@@ -18,8 +18,9 @@
 
 from typing import Any, List, Tuple
 
-from tvm.contrib.msc.core import utils as msc_utils
 from tvm.contrib.msc.core.gym.control import create_controller
+from tvm.contrib.msc.core.utils.message import MSCStage
+from tvm.contrib.msc.core import utils as msc_utils
 from .pipeline import BasePipeline
 from .worker import MSCPipeWorker
 
@@ -221,10 +222,10 @@ class MSCManager(BasePipeline):
 
         assert tool_type in self._tools_config, "Can not find tool_type " + str(tool_type)
         exp_config = {"tool_config": self._worker.export_tool(tool_type, folder)}
-        return msc_utils.update_dict(self._tools_config["tool_type"], exp_config)
+        return msc_utils.update_dict(self._tools_config[tool_type], exp_config)
 
-    def _export_files(self, stage: str, folder: msc_utils.MSCDirectory):
-        """Export the files of pipeline
+    def _export_info(self, stage: str, folder: msc_utils.MSCDirectory) -> dict:
+        """Export the info of pipeline
 
         Parameters
         ----------
@@ -232,10 +233,17 @@ class MSCManager(BasePipeline):
             The pipeline stage.
         folder: MSCDirectory
             The export folder.
+
+        Returns
+        -------
+        info: dict
+            The info.
         """
 
-        msc_utils.get_visual_dir().copy(stage, folder.relpath("visualize"))
-        super()._export_files(stage, folder)
+        info = super()._export_info(stage, folder)
+        if stage in (MSCStage.OPTIMIZE, MSCStage.COMPILE):
+            info.update(self._worker.export_info(stage, folder))
+        return info
 
     def _destory(self):
         """Destory the pipeline"""

@@ -780,12 +780,12 @@ class BaseTool(object):
             new_tensor = self._process_tensor(tensor, name, consumer, scope, strategys)
         self._save_processed(name, consumer, new_tensor, t_mark)
         if msc_utils.is_array(tensor) and id(new_tensor) != id(tensor):
-            tensors = {"pre": tensor, "post": new_tensor, "diff": tensor - new_tensor}
+            tensors = {"org": tensor, "new": new_tensor, "dif": tensor - new_tensor}
             self.debug_tensors(name, consumer, t_mark, tensors)
         elif isinstance(tensor, dict) and len(tensor.get("processed", [])) != len(
             new_tensor.get("processed", [])
         ):
-            tensors = {"pre": tensor, "post": new_tensor}
+            tensors = {"org": tensor, "new": new_tensor}
             self.debug_tensors(name, consumer, t_mark, tensors)
         return new_tensor
 
@@ -1414,6 +1414,14 @@ class BaseTool(object):
     @classmethod
     def tool_style(cls):
         return "base"
+
+    @classmethod
+    def apply_once(cls):
+        return False
+
+    @classmethod
+    def exportable(cls):
+        return True
 
 
 class WeightTool(BaseTool):

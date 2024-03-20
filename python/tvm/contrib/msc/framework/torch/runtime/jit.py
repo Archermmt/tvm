@@ -176,7 +176,7 @@ class TorchJIT(BaseJIT):
 
     @classmethod
     def dump_nativate(
-        cls, model: torch.nn.Module, folder: msc_utils.MSCDirectory, mode: str = "fx", **kwargs
+        cls, model: torch.nn.Module, folder: msc_utils.MSCDirectory, dump_config: dict = None
     ) -> str:
         """Dump the nativate model
 
@@ -186,10 +186,8 @@ class TorchJIT(BaseJIT):
             The runnable model.
         folder: MSCDirectory
             The export folder.
-        mode: str
-            The export mode.
-        kwargs: dict
-            The kwargs.
+        dump_config: dict
+            The dump config.
 
         Returns
         -------
@@ -197,8 +195,8 @@ class TorchJIT(BaseJIT):
             The exported path
         """
 
-        assert mode == "fx", "TorchJIT only support dump nativate as fx, get " + mode
-        return TorchRunner.dump_nativate(model, folder, mode, **kwargs)
+        assert dump_config.get("mode", "fx") == "fx", "TorchJIT only support dump nativate as fx"
+        return TorchRunner.dump_nativate(model, folder, dump_config)
 
     @classmethod
     def support_device(cls, device: str) -> bool:

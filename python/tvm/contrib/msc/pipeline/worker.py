@@ -407,7 +407,11 @@ class BasePipeWorker(object):
             self._runner.visualize(
                 msc_utils.get_visual_dir().create_dir(self._runner.stage.split(".")[0])
             )
-        return {}, {}
+        report = {}
+        if os.path.isfile(plan_file):
+            plan_num = len(msc_utils.load_dict(plan_file))
+            report["plan"] = "{}({})".format(plan_file, format(plan_num))
+        return {}, report
 
     def create_runner(
         self,
@@ -518,13 +522,20 @@ class BasePipeWorker(object):
             total, passed = 0, 0
             for idx, (inputs, outputs) in enumerate(loader):
                 results = runner.run(inputs)
-                iter_info = msc_utils.compare_arrays(
-                    outputs,
-                    results,
-                    atol=check_config.get("atol", 1e-2),
-                    rtol=check_config.get("rtol", 1e-2),
-                    report_detail=runner.debug_level >= 2,
-                )
+                if outputs:
+                    iter_info = msc_utils.compare_arrays(
+                        outputs,
+                        results,
+                        atol=check_config.get("atol", 1e-2),
+                        rtol=check_config.get("rtol", 1e-2),
+                        report_detail=runner.debug_level >= 2,
+                    )
+                else:
+                    iter_info = {
+                        "total": len(results),
+                        "passed": len(results),
+                        "info": {k: msc_utils.MSCArray(v).abstract() for k, v in results.items()},
+                    }
                 total += iter_info["total"]
                 passed += iter_info["passed"]
                 acc_info["iter_" + str(idx)] = iter_info["info"]
@@ -596,7 +607,7 @@ class BasePipeWorker(object):
         if not dump:
             return self._model
         dump_func = self._get_runner_cls(self._model_type).dump_nativate
-        return dump_func(self._model, folder, **self._config[MSCStage.EXPORT])
+        return dump_func(self._model, folder, self._config[MSCStage.EXPORT])
 
     def export_tool(self, tool_type: str, folder: msc_utils.MSCDirectory) -> dict:
         """Export the tool
@@ -617,6 +628,27 @@ class BasePipeWorker(object):
         run_tool = self._runner.get_tool(tool_type)
         assert tool_type in self._tools_config, "Can not find tool_type " + str(tool_type)
         return run_tool.export_config(self._tools_config[tool_type]["tool_config"], folder)
+
+    def export_info(self, stage: str, folder: msc_utils.MSCDirectory) -> dict:
+        """Export the info of worker
+
+        Parameters
+        ----------
+        stage: str
+            The pipeline stage.
+        folder: MSCDirectory
+            The export folder.
+
+        Returns
+        -------
+        info: dict
+            The info.
+        """
+
+        return {
+            "visualize": msc_utils.get_visual_dir().copy_to(folder.relpath("visualize")),
+            "graphs": self._runner.export_graphs(folder.create_dir("graphs")),
+        }
 
     def get_runnable(self, ret_type: str = "runner") -> Any:
         """Return object by type.
