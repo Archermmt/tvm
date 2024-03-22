@@ -273,6 +273,7 @@ class TorchRunner(ModelRunner):
             The exported path
         """
 
+        dump_config = dump_config or {}
         mode = dump_config.get("mode", "fx")
         if mode == "fx":
             graph_model = torch.fx.symbolic_trace(model)

@@ -21,7 +21,7 @@ import logging
 from typing import Any, List, Tuple, Union, Dict
 
 from tvm.contrib.msc.core import utils as msc_utils
-from tvm.contrib.msc.core.tools import BaseTool, ToolType, ToolScope, create_tool, remove_tools
+from tvm.contrib.msc.core.tools import ToolType
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from .runner import BaseRunner
 

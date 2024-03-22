@@ -531,7 +531,7 @@ class IODataSaver(BaseDataSaver):
         inputs = format_datas(inputs, self._input_names, style="dict")
         for name, data in inputs.items():
             self._save_data(self._current, name, data, "inputs")
-        if outputs:
+        if outputs is not None:
             outputs = format_datas(outputs, self._output_names, style="dict")
             for name, data in outputs.items():
                 self._save_data(self._current, name, data, "outputs")

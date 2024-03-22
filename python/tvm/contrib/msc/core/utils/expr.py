@@ -25,7 +25,7 @@ from tvm.relax import PyExprVisitor
 from tvm.contrib.msc.core import _ffi_api
 
 
-def legalize_expr_name(name: str, symbols: List[str] = None, dst="_") -> str:
+def legalize_expr_name(name: str, symbols: List[str] = None, dst: str = "_") -> str:
     """Legalize expr name
 
     Parameters

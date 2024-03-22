@@ -331,34 +331,36 @@ def compare_arrays(
     report = {"total": 0, "passed": 0, "info": {}}
 
     def _add_report(name: str, gol: Any, data: Any, passed: bool):
-        mark = name + "({})".format("pass" if passed else "fail")
         diff = MSCArray(gol - data)
         if passed:
             if report_detail:
-                report["info"][mark] = {"data": MSCArray(data).abstract(), "diff": diff.abstract()}
+                report["info"][name] = {
+                    "data": MSCArray(data).abstract(),
+                    "d_pass": diff.abstract(),
+                }
             else:
-                report["info"][mark] = "diff {}".format(diff.abstract())
+                report["info"][name] = "d_pass: {}".format(diff.abstract())
             report["passed"] += 1
         else:
             if report_detail:
-                report["info"][mark] = {
-                    "src": MSCArray(gol).abstract(),
-                    "dst": MSCArray(data).abstract(),
-                    "diff": diff.abstract(),
+                report["info"][name] = {
+                    "gold": MSCArray(gol).abstract(),
+                    "data": MSCArray(data).abstract(),
+                    "d_fail": diff.abstract(),
                 }
             else:
-                report["info"][mark] = "diff {}".format(diff.abstract())
+                report["info"][name] = "d_fail: {}".format(diff.abstract())
 
     for name, gol in golden.items():
         report["total"] += 1
         data = datas[name]
         if list(gol.shape) != list(data.shape):
-            report["info"][name + "(fail)"] = "shape mismatch [G]{} vs [D]{}".format(
+            report["info"][name] = "fail: shape mismatch [G]{} vs [D]{}".format(
                 gol.shape, data.shape
             )
             continue
         if gol.dtype != data.dtype:
-            report["info"][name + "(fail)"] = "dtype mismatch [G]{} vs [D]{}".format(
+            report["info"][name] = "fail: dtype mismatch [G]{} vs [D]{}".format(
                 gol.dtype, data.dtype
             )
             continue

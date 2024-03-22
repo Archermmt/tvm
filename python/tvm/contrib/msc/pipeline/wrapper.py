@@ -116,7 +116,7 @@ class BaseWrapper(object):
         if self._optimized_model:
             self.logger.info(msc_utils.split_line("Start compile checkpoint", "*"))
             ckpt_path = self._workspace.create_dir(ckpt_path).path
-            export = self.export(ckpt_path, dump=dump)
+            export = self.export(ckpt_path, dump=dump, keep_workspace=True)
             export["config"]["workspace"] = self._workspace.create_dir(workspace)
             self._pipeline = self.pipe_cls(
                 export["model"], export["config"], export["plugins"], root=ckpt_path
@@ -136,7 +136,9 @@ class BaseWrapper(object):
                 self._compiled_model = self._pipeline.get_runtime("runnable")
         return self
 
-    def export(self, path: str = "msc_export", dump: bool = True) -> Union[str, dict]:
+    def export(
+        self, path: str = "msc_export", dump: bool = True, keep_workspace: bool = False
+    ) -> Union[str, dict]:
         """Export compile pipeline
 
         Parameters
@@ -145,6 +147,8 @@ class BaseWrapper(object):
             The export path.
         dump: bool
             Whether to dump the info.
+        keep_workspace: bool
+            Whether to keep workspace.
 
         Returns
         -------
@@ -157,6 +161,8 @@ class BaseWrapper(object):
         exported = self._pipeline.export(path, dump=dump)
         if not self._debug:
             self._pipeline.destory()
+            if not keep_workspace:
+                self._workspace.destory()
         return exported
 
     def _get_model(self) -> Any:

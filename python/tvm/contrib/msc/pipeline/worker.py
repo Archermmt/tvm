@@ -14,12 +14,11 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-# pylint: disable=import-outside-toplevel
+# pylint: disable=import-outside-toplevel, unused-argument
 """tvm.contrib.msc.pipeline.worker"""
 
 import os
 import time
-import json
 import logging
 from typing import Any, List, Tuple
 
@@ -29,7 +28,7 @@ from tvm.contrib.msc.core.tools import ToolType
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core.utils.message import MSCStage
 from tvm.contrib.msc.core import utils as msc_utils
-from .utils import support_tool, get_tool_stage
+from .utils import support_tool, get_tool_stage, map_tools
 
 
 class BasePipeWorker(object):
@@ -92,7 +91,7 @@ class BasePipeWorker(object):
         """
 
         self._debug_levels = self.update_config()
-        self._tools_config = {t["tool_type"]: t for t in self._config.get("tools", [])}
+        self._tools_config = map_tools(self._config.get("tools", []))
         self._relax_mod, self._sample_inputs = None, None
         self._runner = None
 
@@ -239,7 +238,7 @@ class BasePipeWorker(object):
                         )
                     except Exception as exc:  # pylint: disable=broad-exception-caught
                         if cnt == 0:
-                            msg = "Failed to test native by {}: {}".format(run_func, exc)
+                            msg = "Failed to test native: {}".format(exc)
                             self._logger.warning(self.worker_mark(msg))
                         outputs = None
                     cnt = saver.save_batch(inputs, outputs)
@@ -283,7 +282,7 @@ class BasePipeWorker(object):
                 info["latency"] = latency + " (X{})".format(benchmark["repeat"])
                 report["profile"] = latency
             except Exception as exc:  # pylint: disable=broad-exception-caught
-                msg = "Failed to profile native by {}: {}".format(run_func, exc)
+                msg = "Failed to profile native: {}".format(exc)
                 self._logger.warning(self.worker_mark(msg))
                 report["profile"] = "failed run native"
         return info, report
@@ -399,7 +398,7 @@ class BasePipeWorker(object):
 
         plan_file = self.get_tool_config(tool_type)["plan_file"]
         if knowledge:
-            self._logger.info("Plan by %d knowledge for %s".format(len(knowledge), tool_type))
+            self._logger.info("Plan by %d knowledge for %s", len(knowledge), tool_type)
             msc_utils.save_dict(knowledge, plan_file)
         else:
             self._runner.make_plan(tool_type, data_loader)

@@ -673,8 +673,9 @@ class BaseRunner(object):
             plan = self.get_tool(tool_type).finalize()
         self._logger.debug("Made %d plan for %s", len(plan), tool_type)
         plan_file = self._tools_config[tool_type]["plan_file"]
-        with open(plan_file, "w") as f:
-            f.write(json.dumps(plan, indent=2))
+        if plan:
+            with open(plan_file, "w") as f:
+                f.write(json.dumps(plan, indent=2))
         return plan_file
 
     def _apply_hook(self, desc: str, hook_def: dict, *args, **kwargs) -> Any:
@@ -721,17 +722,22 @@ class BaseRunner(object):
         else:
             raise TypeError("Unexpecet codegen config " + str(codegen))
 
-    def visualize(self, visual_dir: msc_utils.MSCDirectory):
+    def visualize(self, visual_dir: msc_utils.MSCDirectory, export_graph: bool = False):
         """Visualize MSCGraphs
 
         Parameters
         -------
         visual_dir: MSCDirectory
             Visualize path for saving graph
+        export_graph: bool
+            Whether to export the graph
         """
 
         for graph in self._graphs:
             graph.visualize(visual_dir.relpath(graph.name + ".prototxt"))
+            if export_graph:
+                with open(visual_dir.relpath(graph.name + "_graph.json"), "w") as f_graph:
+                    f_graph.write(graph.to_json())
         for tool in self._tools.values():
             tool.visualize(visual_dir)
 
@@ -1296,17 +1302,22 @@ class BYOCRunner(BaseRunner):
         self._executable = None
         return super().setup()
 
-    def visualize(self, visual_dir: msc_utils.MSCDirectory):
+    def visualize(self, visual_dir: msc_utils.MSCDirectory, export_graph: bool = False):
         """Visualize MSCGraphs
 
         Parameters
         -------
         visual_dir: MSCDirectory
             Visualize path for saving graph
+        export_graph: bool
+            Whether to export the graph
         """
 
         super().visualize(visual_dir)
         self._byoc_graph.visualize(visual_dir.relpath(self._byoc_graph.name + ".prototxt"))
+        if export_graph:
+            with open(visual_dir.relpath(self._byoc_graph.name + "_graph.json"), "w") as f_graph:
+                f_graph.write(self._byoc_graph.to_json())
 
     def _translate(self, mod: tvm.IRModule) -> Tuple[List[MSCGraph], Dict[str, tvm.nd.array]]:
         """Translate IRModule to MSCgraphs

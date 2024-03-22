@@ -48,6 +48,25 @@ def get_tool_stage(tool_type: str) -> str:
     return tool_type
 
 
+def map_tools(tools: List[dict]) -> dict:
+    """Map tools from list
+
+    Parameters
+    ----------
+    tools: list<dict>
+        The tools config,
+
+    Returns
+    -------
+    tools: dict
+        The tools map.
+    """
+
+    tools_map = {t["tool_type"]: t for t in tools}
+    assert len(tools_map) == len(tools), "Duplicate tools: " + str([t["tool_type"] for t in tools])
+    return tools_map
+
+
 def support_tool(tool: dict, stage: str, run_type: str) -> bool:
     """Check if the tool is supported
 

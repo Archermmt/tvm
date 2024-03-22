@@ -61,6 +61,7 @@ class TorchJIT(BaseJIT):
             The jit model.
         """
 
+        # pylint: disable=unused-argument
         def _compile(graph_module: fx.GraphModule, example_inputs):
             graph_module = graph_module.train() if self._training else graph_module.eval()
             name = "jit_" + str(len(self._runner_ctxs))
@@ -195,6 +196,7 @@ class TorchJIT(BaseJIT):
             The exported path
         """
 
+        dump_config = dump_config or {}
         assert dump_config.get("mode", "fx") == "fx", "TorchJIT only support dump nativate as fx"
         return TorchRunner.dump_nativate(model, folder, dump_config)
 

@@ -14,6 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+# pylint: disable=unused-argument
 """tvm.contrib.msc.pipeline.pipeline"""
 
 import os
@@ -28,7 +29,7 @@ from tvm.contrib.msc.core.utils.message import MSCStage
 from tvm.contrib.msc.plugin.utils import export_plugins, load_plugins
 from tvm.contrib.msc.core import utils as msc_utils
 from tvm.contrib.msc.core import _ffi_api
-from .utils import support_tool, get_tool_stage
+from .utils import support_tool, get_tool_stage, map_tools
 from .worker import BasePipeWorker
 
 
@@ -123,7 +124,7 @@ class BasePipeline(object):
         self._optimized, self._compiled = False, False
 
         # map tools
-        self._tools_config = {t["tool_type"]: t for t in self._config.get("tools", [])}
+        self._tools_config = map_tools(self._config.get("tools", []))
 
         # register plugins
         if self._plugins:
