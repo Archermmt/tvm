@@ -182,6 +182,8 @@ class MSCDirectory(object):
             The abs file path.
         """
 
+        if not src_path:
+            return None
         if src_path != os.path.abspath(src_path):
             src_path = os.path.join(self.relpath(src_path))
         assert os.path.exists(src_path), "Source path {} not exist".format(src_path)
