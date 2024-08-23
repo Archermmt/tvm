@@ -87,7 +87,7 @@ def check_names(mod):
         NameChecker().check(func)
 
 
-def verify_model(torch_model, input_info, allow_incomplete=False):
+def verify_model(torch_model, input_info, allow_incomplete=False, **config):
     """Build model and verify results"""
 
     graph_model = fx.symbolic_trace(torch_model)
@@ -101,7 +101,7 @@ def verify_model(torch_model, input_info, allow_incomplete=False):
     golden = [g.detach().cpu().numpy() for g in golden]
     # partition module for tensorrt
     mod, graphs, weights = translate.partition_for_tensorrt(
-        mod, trans_config={"allow_incomplete": allow_incomplete}
+        mod, trans_config={"allow_incomplete": allow_incomplete, **config}
     )
     check_names(mod)
     output_folder = msc_utils.msc_dir()
@@ -191,6 +191,8 @@ def test_linear():
     input_info = [([1, 3, 10, 10], "float32")]
     verify_model(Dense1(), input_info)
     verify_model(Dense2(), input_info)
+    verify_model(Dense1(), input_info, linear_to_conv=True)
+    verify_model(Dense2(), input_info, linear_to_conv=True)
     verify_model(MatMul1(), [([10, 10], "float32"), ([10, 10], "float32")])
 
 

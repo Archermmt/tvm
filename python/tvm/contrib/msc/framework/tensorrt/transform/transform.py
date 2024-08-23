@@ -23,19 +23,25 @@ from tvm.contrib.msc.core.utils import MSCFramework
 from tvm.contrib.msc.core import utils as msc_utils
 
 
-def TransformTensorRT(config: dict = None) -> tvm.ir.transform.Pass:
+def TransformTensorRT(
+    version: list[int] = None, linear_to_conv: bool = False
+) -> tvm.ir.transform.Pass:
     """Transform the Function to fit TensorRT.
 
     Parameters
     ----------
-    config: list<int>
-        The tensorrt transform config.
+    version: list<int>
+        The tensorrt version.
+    linear_to_conv: bool
+        Whether to cast linear to conv2d
 
     Returns
     -------
     ret: tvm.ir.transform.Pass
     """
 
-    config = config or {}
-    config.setdefault("version", msc_utils.get_version(MSCFramework.TENSORRT))
+    config = {
+        "version": version or msc_utils.get_version(MSCFramework.TENSORRT),
+        "linear_to_conv": linear_to_conv,
+    }
     return relax_api.TransformTensorRT(msc_utils.dump_dict(config))  # type: ignore

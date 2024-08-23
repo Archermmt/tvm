@@ -176,13 +176,6 @@ class StringUtils {
    * \return The String.
    */
   TVM_DLL static const String ToString(const runtime::ObjectRef& obj);
-
-  /*!
-   * \brief Compare String arrays.
-   * \return Whether two array are same.
-   */
-  TVM_DLL static bool CompareArrays(const Array<String>& left, const Array<String>& right,
-                                    int size = -1);
 };
 
 /*!
@@ -239,6 +232,10 @@ class ArrayUtils {
     return new_array;
   }
 
+  /*!
+   * \brief Product elements in the arrays.
+   * \return The producted array
+   */
   template <typename T>
   TVM_DLL static const Array<Array<T>> Product(const Array<Array<T>>& arrays) {
     Array<Array<T>> p_arrays;
@@ -261,6 +258,24 @@ class ArrayUtils {
     }
     return p_arrays;
   }
+
+  /*!
+   * \brief Compare String arrays.
+   * \return Whether two array are same.
+   */
+  TVM_DLL static bool CompareArrays(const Array<String>& left, const Array<String>& right,
+                                    int size = -1);
+  /*!
+   * \brief Accumulate array.
+   * \return The accumulate result
+   */
+  TVM_DLL static PrimExpr Accumulate(const Array<PrimExpr>& array, int pos = -1);
+
+  /*!
+   * \brief Check if lhs array is broadcastable to rhs.
+   * \return broadcastable
+   */
+  TVM_DLL static bool Broadcastable(const Array<PrimExpr>& lhs, const Array<PrimExpr>& rhs);
 };
 
 /*!
@@ -378,6 +393,12 @@ class ExprUtils {
    * \return The shape.
    */
   TVM_DLL static const Array<PrimExpr> GetShape(const Expr& expr);
+
+  /*!
+   * \brief Get dtype of expr.
+   * \return The shape.
+   */
+  TVM_DLL static const DataType GetDataType(const Expr& expr);
 };
 
 }  // namespace msc

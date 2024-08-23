@@ -37,15 +37,15 @@ using namespace tvm::contrib::msc;
 
 struct TensorRTTransConfig {
   // Whether to cast linear to conv
-  bool cast_linear{true};
+  bool linear_to_conv{true};
   std::vector<size_t> version{0, 0, 0};
 
   void Load(dmlc::JSONReader* reader) {
     std::string key;
     reader->BeginObject();
     while (reader->NextObjectItem(&key)) {
-      if (key == "cast_linear") {
-        reader->Read(&cast_linear);
+      if (key == "linear_to_conv") {
+        reader->Read(&linear_to_conv);
       } else if (key == "version") {
         reader->Read(&version);
       } else {
@@ -69,35 +69,43 @@ using FRewriteTensorRT =
     runtime::TypedPackedFunc<Expr(BlockBuilder builder, const Var& var, const Call& src_call,
                                   const Map<Expr, Call>& new_calls, const String& config)>;
 
+const Array<PrimExpr> BroadcastShape(const Array<PrimExpr>& out_shape,
+                                     const Array<PrimExpr>& src_shape) {
+  size_t diff = out_shape.size() - src_shape.size();
+  Array<PrimExpr> leading_shape, tailing_shape;
+  for (size_t i = 0; i < diff; i++) {
+    leading_shape.push_back(Integer(1));
+  }
+  for (const auto& s : src_shape) {
+    tailing_shape.push_back(s);
+    leading_shape.push_back(s);
+  }
+  for (size_t i = 0; i < diff; i++) {
+    tailing_shape.push_back(Integer(1));
+  }
+  if (ArrayUtils::Broadcastable(tailing_shape, out_shape)) {
+    return tailing_shape;
+  }
+  ICHECK(ArrayUtils::Broadcastable(leading_shape, out_shape))
+      << "Only support elemwise ops with leading or tailing expand";
+  return leading_shape;
+};
+
 Expr RewriteElemwise(BlockBuilder builder, const Var& var, const Call& src_call,
                      const Map<Expr, Call>& new_calls, const String& config) {
   const auto& call = new_calls.count(src_call) ? new_calls[src_call] : src_call;
   const auto& shape_a = ExprUtils::GetShape(call->args[0]);
   const auto& shape_b = ExprUtils::GetShape(call->args[1]);
+  const auto& shape_out = ExprUtils::GetShape(var);
   static const Op& reshape_op = Op::Get("relax.reshape");
   if (shape_a.size() > shape_b.size()) {
-    Array<PrimExpr> exp_shape(shape_a.size(), Integer(1));
-    if (shape_b.size() == 1) {
-      exp_shape.Set(shape_a.size() - 1, shape_b[0]);
-    } else if (shape_b.size() == 0) {
-      LOG_DEBUG << "Expand scalar argument to " << exp_shape;
-    } else {
-      LOG_FATAL << "broadcast only support 1 dim and scalar, get " << shape_b;
-    }
+    const auto& exp_shape = BroadcastShape(shape_b, shape_out);
     const auto& expand_b =
         RewriteUtils::MakeCall(builder, ExprUtils::GetSpanName(call, "expand_b"), reshape_op,
                                {call->args[1], ShapeExpr(exp_shape)});
     return Call(call->op, {call->args[0], expand_b}, call->attrs, call->sinfo_args, call->span);
-  }
-  if (shape_a.size() < shape_b.size()) {
-    Array<PrimExpr> exp_shape(shape_b.size(), Integer(1));
-    if (shape_a.size() == 1) {
-      exp_shape.Set(shape_b.size() - 1, shape_a[0]);
-    } else if (shape_a.size() == 0) {
-      LOG_DEBUG << "Expand scalar argument to " << exp_shape;
-    } else {
-      LOG_FATAL << "broadcast only support 1 dim and scalar, get " << shape_a;
-    }
+  } else if (shape_a.size() < shape_b.size()) {
+    const auto& exp_shape = BroadcastShape(shape_a, shape_out);
     const auto& expand_a =
         RewriteUtils::MakeCall(builder, ExprUtils::GetSpanName(call, "expand_a"), reshape_op,
                                {call->args[0], ShapeExpr(exp_shape)});
@@ -666,14 +674,50 @@ Expr RewriteLayerNorm(BlockBuilder builder, const Var& var, const Call& src_call
 
 Expr RewriteMatmul(BlockBuilder builder, const Var& var, const Call& src_call,
                    const Map<Expr, Call>& new_calls, const String& config) {
+  const auto& trt_config = ParseConfig(config);
   const auto& call = new_calls.count(src_call) ? new_calls[src_call] : src_call;
   const auto& shape_a = ExprUtils::GetShape(call->args[0]);
   const auto& shape_b = ExprUtils::GetShape(call->args[1]);
   static const Op& reshape_op = Op::Get("relax.reshape");
+  if (call->args[1]->IsInstance<ConstantNode>() && shape_b.size() == 2 &&
+      trt_config.linear_to_conv) {
+    const auto& out_shape = ExprUtils::GetShape(var);
+    PrimExpr accumulate = ArrayUtils::Accumulate(shape_a, shape_a.size() - 1);
+    Array<PrimExpr> exp_shape{accumulate, shape_a[shape_a.size() - 1], Integer(1), Integer(1)};
+    const auto& exp_in = RewriteUtils::MakeCall(builder, ExprUtils::GetSpanName(call, "exp_in"),
+                                                reshape_op, {call->args[0], ShapeExpr(exp_shape)});
+    // transpose and expand weight to OIHW
+    static const Op& permute_dims_op = Op::Get("relax.permute_dims");
+    auto permute_attrs = make_object<PermuteDimsAttrs>();
+    Array<Integer> axes{Integer(1), Integer(0)};
+    permute_attrs->axes = axes;
+    const auto& trans_weight =
+        RewriteUtils::MakeCall(builder, ExprUtils::GetSpanName(call, "trans_weight"),
+                               permute_dims_op, {call->args[1]}, Attrs(permute_attrs));
+    Array<PrimExpr> weight_shape{shape_b[1], shape_b[0], Integer(1), Integer(1)};
+    const auto& exp_weight =
+        RewriteUtils::MakeCall(builder, ExprUtils::GetSpanName(call, "exp_weight"), reshape_op,
+                               {trans_weight, ShapeExpr(weight_shape)});
+    // to conv2d
+    static const Op& conv2d_op = Op::Get("relax.nn.conv2d");
+    auto conv_attrs = make_object<Conv2DAttrs>();
+    conv_attrs->strides = Array<IntImm>{Integer(1), Integer(1)};
+    conv_attrs->padding = Array<IntImm>{Integer(0), Integer(0), Integer(0), Integer(0)};
+    conv_attrs->dilation = Array<IntImm>{Integer(1), Integer(1)};
+    conv_attrs->groups = 1;
+    conv_attrs->data_layout = "NCHW";
+    conv_attrs->kernel_layout = "OIHW";
+    conv_attrs->out_layout = "NCHW";
+    conv_attrs->out_dtype = ExprUtils::GetDataType(var);
+    const auto& conv2d = RewriteUtils::MakeCall(builder, ExprUtils::GetSpanName(call, "conv2d"),
+                                                conv2d_op, {exp_in, exp_weight}, Attrs(conv_attrs));
+    return Call(reshape_op, {conv2d, ShapeExpr(out_shape)}, Attrs(), call->sinfo_args, call->span);
+  }
   if (shape_a.size() > shape_b.size()) {
     Array<PrimExpr> exp_shape(shape_a.size(), Integer(1));
-    for (size_t i = shape_b.size(); i < shape_a.size(); i++) {
-      exp_shape.Set(i, shape_b[i - shape_b.size()]);
+    size_t diff = shape_a.size() - shape_b.size();
+    for (size_t i = diff; i < shape_a.size(); i++) {
+      exp_shape.Set(i, shape_b[i - diff]);
     }
     const auto& expand_b =
         RewriteUtils::MakeCall(builder, ExprUtils::GetSpanName(call, "expand_b"), reshape_op,
@@ -682,8 +726,9 @@ Expr RewriteMatmul(BlockBuilder builder, const Var& var, const Call& src_call,
   }
   if (shape_a.size() < shape_b.size()) {
     Array<PrimExpr> exp_shape(shape_b.size(), Integer(1));
-    for (size_t i = shape_a.size(); i < shape_b.size(); i++) {
-      exp_shape.Set(i, shape_a[i - shape_a.size()]);
+    size_t diff = shape_b.size() - shape_a.size();
+    for (size_t i = diff; i < shape_b.size(); i++) {
+      exp_shape.Set(i, shape_a[i - diff]);
     }
     const auto& expand_a =
         RewriteUtils::MakeCall(builder, ExprUtils::GetSpanName(call, "expand_a"), reshape_op,

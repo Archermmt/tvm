@@ -290,7 +290,7 @@ const String StringUtils::ToString(const runtime::ObjectRef& obj) {
   return obj_string;
 }
 
-bool StringUtils::CompareArrays(const Array<String>& left, const Array<String>& right, int size) {
+bool ArrayUtils::CompareArrays(const Array<String>& left, const Array<String>& right, int size) {
   if (left.size() == right.size() && left.size() == 0) {
     return true;
   }
@@ -309,6 +309,39 @@ bool StringUtils::CompareArrays(const Array<String>& left, const Array<String>& 
     if (left[i] != right[i]) {
       return false;
     }
+  }
+  return true;
+}
+
+PrimExpr ArrayUtils::Accumulate(const Array<PrimExpr>& array, int pos) {
+  if (pos == -1) {
+    pos = static_cast<int>(array.size());
+  }
+  PrimExpr accumulate = Integer(1);
+  for (size_t i = 0; i < pos; i++) {
+    accumulate = accumulate * array[i];
+  }
+  return accumulate;
+}
+
+bool ArrayUtils::Broadcastable(const Array<PrimExpr>& lhs, const Array<PrimExpr>& rhs) {
+  if (lhs.size() != rhs.size()) {
+    return false;
+  }
+  for (size_t i = 0; i < lhs.size(); i++) {
+    const auto& lp = lhs[i];
+    const auto& rp = rhs[i];
+    if (lp->IsInstance<tvm::tir::VarNode>() && rp->IsInstance<tvm::tir::VarNode>()) {
+      continue;
+    }
+    if (lp->IsInstance<IntImmNode>() && rp->IsInstance<IntImmNode>() &&
+        Downcast<Integer>(lp)->value == Downcast<Integer>(rp)->value) {
+      continue;
+    }
+    if (lp->IsInstance<IntImmNode>() && Downcast<Integer>(lp)->value == 1) {
+      continue;
+    }
+    return false;
   }
   return true;
 }
@@ -476,6 +509,10 @@ const Array<PrimExpr> ExprUtils::GetShape(const Expr& expr) {
   const auto& shape_opt = Downcast<relax::TensorStructInfo>(relax::GetStructInfo(expr))->GetShape();
   ICHECK(shape_opt.defined()) << "Shape is not defined for " << expr;
   return shape_opt.value();
+}
+
+const DataType ExprUtils::GetDataType(const Expr& expr) {
+  return Downcast<relax::TensorStructInfo>(relax::GetStructInfo(expr))->dtype;
 }
 
 TVM_REGISTER_GLOBAL("msc.core.SpanGetAttr").set_body_typed(SpanUtils::GetAttr);
