@@ -876,5 +876,22 @@ def test_max():
     verify_model(Max(), [([256, 256], "float32"), ([256, 256], "float32")])
 
 
+@requires_tensorrt
+def test_gelu():
+    """test tensorrt translator for gelu"""
+
+    class Gelu1(Module):
+        def forward(self, data):
+            return torch.nn.functional.gelu(data)
+
+    class Gelu2(Module):
+        def forward(self, data):
+            return torch.nn.functional.gelu(data, approximate="tanh")
+
+    input_info = [([1, 3, 10, 10], "float32")]
+    verify_model(Gelu1(), input_info)
+    verify_model(Gelu2(), input_info)
+
+
 if __name__ == "__main__":
     tvm.testing.main()

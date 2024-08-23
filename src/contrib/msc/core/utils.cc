@@ -280,6 +280,8 @@ const String StringUtils::ToString(const runtime::ObjectRef& obj) {
     }
   } else if (const auto* n = obj.as<relax::PrimValueNode>()) {
     obj_string = ToString(n->value);
+  } else if (const auto* n = obj.as<relax::TupleNode>()) {
+    obj_string = ToString(n->fields);
   } else {
     std::ostringstream obj_des;
     obj_des << obj;
@@ -370,6 +372,14 @@ const Array<String> ExprUtils::GetInputTypes(const String& optype, size_t inputs
   } else if (optype == "full" && as_relax) {
     input_types.push_back("shape");
     input_types.push_back("input");
+  } else if (optype == "strided_slice") {
+    input_types.push_back("input");
+    if (inputs_num > 1) {
+      input_types.push_back("axes");
+      input_types.push_back("begin");
+      input_types.push_back("end");
+      input_types.push_back("strides");
+    }
   } else if (optype == "triu") {
     input_types.push_back("input");
     input_types.push_back("k");
@@ -452,6 +462,20 @@ const Array<String> ExprUtils::GetInputTypes(const RelaxCall& call) {
 const Array<String> ExprUtils::GetInputTypes(const RelayCall& call) {
   const String& optype = StringUtils::Replace(Downcast<Op>(call->op)->name, "relay.", "");
   return GetInputTypes(optype, call->args.size(), false);
+}
+
+const String ExprUtils::GetSpanName(const Expr& expr, const String& suffix) {
+  const auto& name = SpanUtils::GetAttr(expr->span, msc_attr::kName);
+  if (suffix.size() > 0) {
+    return name + "_" + suffix;
+  }
+  return name;
+}
+
+const Array<PrimExpr> ExprUtils::GetShape(const Expr& expr) {
+  const auto& shape_opt = Downcast<relax::TensorStructInfo>(relax::GetStructInfo(expr))->GetShape();
+  ICHECK(shape_opt.defined()) << "Shape is not defined for " << expr;
+  return shape_opt.value();
 }
 
 TVM_REGISTER_GLOBAL("msc.core.SpanGetAttr").set_body_typed(SpanUtils::GetAttr);

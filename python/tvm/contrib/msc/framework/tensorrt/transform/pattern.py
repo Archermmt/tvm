@@ -328,7 +328,7 @@ def get_patterns(target) -> List[Pattern]:
         "image.resize2d": ["input", "input"],
         "matmul": ["input", "input"],
         "permute_dims": ["input"],
-        "strided_slice": ["input"],
+        "strided_slice": ["input", "input", "input", "input", "input"],
     }
     activation_ops = ["nn.relu", "nn.softmax", "sigmoid", "tanh"]
     reduce_ops = ["max", "min", "mean", "sum"]

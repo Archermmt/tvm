@@ -26,6 +26,7 @@
 
 #include <tvm/ir/source_map.h>
 #include <tvm/relax/expr.h>
+#include <tvm/relax/struct_info.h>
 #include <tvm/relay/expr.h>
 
 #include <string>
@@ -365,6 +366,18 @@ class ExprUtils {
   TVM_DLL static const T GetScalar(const relay::Constant& constant, size_t i = 0) {
     return GetScalar<T>(constant->data, i);
   }
+
+  /*!
+   * \brief Get name in span.
+   * \return The name.
+   */
+  TVM_DLL static const String GetSpanName(const Expr& expr, const String& suffix = "");
+
+  /*!
+   * \brief Get shape of expr.
+   * \return The shape.
+   */
+  TVM_DLL static const Array<PrimExpr> GetShape(const Expr& expr);
 };
 
 }  // namespace msc
