@@ -136,7 +136,7 @@ def _check_expr(expr: relax.Expr, dtypes: Tuple[str] = None) -> bool:
         return True
     if isinstance(expr, relax.Tuple):
         return all(_check_expr(field) for field in expr.fields)
-    dtypes = dtypes or ("float32", "float16", "int32", "bool")
+    dtypes = dtypes or ("float32", "float16", "int64", "int32", "bool")
 
     def _check(sinfo):
         if not sinfo.shape or sinfo.dtype not in dtypes:
@@ -226,8 +226,7 @@ def _reshape_check(context: PatternCheckContext) -> bool:
         Whether the pattern is correct.
     """
 
-    dtypes = ("float32", "float16", "int32")
-    if any(not _check_expr(context.annotated_expr[key], dtypes) for key in ["input_0", "out"]):
+    if any(not _check_expr(context.annotated_expr[key]) for key in ["input_0", "out"]):
         return False
     return True
 
@@ -333,6 +332,7 @@ def get_patterns(target) -> List[Pattern]:
         "nn.avg_pool2d": ["input"],
         "nn.conv2d": ["input", "constant"],
         "nn.max_pool2d": ["input"],
+        "astype": ["input"],
         "concat": ["input"],
         "clip": ["input", "input", "input"],
         "image.resize2d": ["input", "input"],

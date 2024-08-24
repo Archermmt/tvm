@@ -167,6 +167,7 @@ Expr RewriteArgmaxmin(BlockBuilder builder, const Var& var, const Call& src_call
   }
   topk_attrs->largest = call->op == Op::Get("relax.argmax");
   topk_attrs->ret_type = "both";
+  topk_attrs->dtype = out_dtype;
   // change to topk
   const auto& topk = RewriteUtils::MakeCall(builder, ExprUtils::GetSpanName(call, "topk"), topk_op,
                                             {call->args[0]}, Attrs(topk_attrs));
