@@ -43,7 +43,7 @@ Var RewriteUtils::MakeCall(BlockBuilder builder, const String& name, Expr op, Ar
 Expr RewriteUtils::MakeConstant(BlockBuilder builder, const String& name, double value,
                                 const DataType& dtype, size_t ndim) {
   const auto& data = support::FloatImmToNDArray(FloatImm(dtype, value));
-  Span span = SpanUtils::SetAttr(Span(), msc_attr::kName, name);
+  Span span = SpanUtils::CreateWithAttr(msc_attr::kName, name);
   const auto& constant = Constant(data, NullOpt, span);
   if (ndim == 0) {
     return constant;

@@ -136,12 +136,22 @@ def _check_expr(expr: relax.Expr, dtypes: Tuple[str] = None) -> bool:
         return True
     if isinstance(expr, relax.Tuple):
         return all(_check_expr(field) for field in expr.fields)
-    if any(i < 0 for i in expr.struct_info.shape.values):
-        return False
-    dtypes = dtypes or ("float32", "float16")
-    if expr.struct_info.dtype not in dtypes:
-        return False
-    return True
+    dtypes = dtypes or ("float32", "float16", "int32", "bool")
+
+    def _check(sinfo):
+        if not sinfo.shape or sinfo.dtype not in dtypes:
+            return False
+        unknown_dim = 0
+        for s in sinfo.shape.values:
+            if isinstance(s, (tvm.tir.Var, tvm.tir.Any)):
+                unknown_dim += 1
+            elif isinstance(s, tvm.tir.IntImm) and s < 0:
+                unknown_dim += 1
+        return unknown_dim <= 1
+
+    if isinstance(expr.struct_info, relax.TupleStructInfo):
+        return all(_check(s) for s in expr.struct_info.fields)
+    return _check(expr.struct_info)
 
 
 def _basic_check(context: PatternCheckContext) -> bool:
@@ -329,10 +339,11 @@ def get_patterns(target) -> List[Pattern]:
         "matmul": ["input", "input"],
         "permute_dims": ["input"],
         "strided_slice": ["input", "input", "input", "input", "input"],
+        "topk": ["input"],
     }
     activation_ops = ["nn.relu", "nn.softmax", "sigmoid", "tanh"]
     reduce_ops = ["max", "min", "mean", "sum"]
-    unary_ops = ["cos", "exp", "negative", "round", "sin", "square", "sqrt", "tan"]
+    unary_ops = ["cos", "erf", "exp", "negative", "round", "sin", "square", "sqrt", "tan"]
     elemwise_ops = [
         "add",
         "divide",

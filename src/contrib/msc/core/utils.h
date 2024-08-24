@@ -300,6 +300,12 @@ class SpanUtils {
    * \return The Attrs Map.
    */
   TVM_DLL static const Map<String, String> GetAttrs(const Span& span);
+
+  /*!
+   * \brief Create a span with <key>value</key>.
+   * \return The created Span.
+   */
+  TVM_DLL static const Span CreateWithAttr(const String& key, const String& value);
 };
 
 /*!

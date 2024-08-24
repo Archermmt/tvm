@@ -314,11 +314,9 @@ bool ArrayUtils::CompareArrays(const Array<String>& left, const Array<String>& r
 }
 
 PrimExpr ArrayUtils::Accumulate(const Array<PrimExpr>& array, int pos) {
-  if (pos == -1) {
-    pos = static_cast<int>(array.size());
-  }
+  size_t t_pos = pos < 0 ? array.size() + pos + 1 : pos;
   PrimExpr accumulate = Integer(1);
-  for (size_t i = 0; i < pos; i++) {
+  for (size_t i = 0; i < t_pos; i++) {
     accumulate = accumulate * array[i];
   }
   return accumulate;
@@ -386,6 +384,10 @@ const Map<String, String> SpanUtils::GetAttrs(const Span& span) {
     attrs.Set(key, GetAttr(span, key));
   }
   return attrs;
+}
+
+const Span SpanUtils::CreateWithAttr(const String& key, const String& value) {
+  return SetAttr(Span(), key, value);
 }
 
 const Array<String> ExprUtils::GetInputTypes(const String& optype, size_t inputs_num,
@@ -521,7 +523,7 @@ TVM_REGISTER_GLOBAL("msc.core.SpanGetAttrs").set_body_typed(SpanUtils::GetAttrs)
 
 TVM_REGISTER_GLOBAL("msc.core.SpanCreateWithAttr")
     .set_body_typed([](const String& key, const String& value) -> Span {
-      return SpanUtils::SetAttr(Span(), key, value);
+      return SpanUtils::CreateWithAttr(key, value);
     });
 
 TVM_REGISTER_GLOBAL("msc.core.SpanSetAttr")

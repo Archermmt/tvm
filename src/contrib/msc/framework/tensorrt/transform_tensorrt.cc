@@ -22,6 +22,7 @@
  * \brief Pass for transform the function to tensorrt.
  */
 
+#include <tvm/relax/attrs/sorting.h>
 #include <tvm/relax/expr.h>
 #include <tvm/relax/expr_functor.h>
 #include <tvm/relax/transform.h>
@@ -69,8 +70,8 @@ using FRewriteTensorRT =
     runtime::TypedPackedFunc<Expr(BlockBuilder builder, const Var& var, const Call& src_call,
                                   const Map<Expr, Call>& new_calls, const String& config)>;
 
-const Array<PrimExpr> BroadcastShape(const Array<PrimExpr>& out_shape,
-                                     const Array<PrimExpr>& src_shape) {
+const Array<PrimExpr> BroadcastShape(const Array<PrimExpr>& src_shape,
+                                     const Array<PrimExpr>& out_shape) {
   size_t diff = out_shape.size() - src_shape.size();
   Array<PrimExpr> leading_shape, tailing_shape;
   for (size_t i = 0; i < diff; i++) {
@@ -154,39 +155,38 @@ Expr RewriteAdd(BlockBuilder builder, const Var& var, const Call& src_call,
 Expr RewriteArgmaxmin(BlockBuilder builder, const Var& var, const Call& src_call,
                       const Map<Expr, Call>& new_calls, const String& config) {
   const auto& call = new_calls.count(src_call) ? new_calls[src_call] : src_call;
-  const auto& out_dtype = Downcast<TensorStructInfo>(GetStructInfo(var))->dtype;
+  const auto& out_dtype = ExprUtils::GetDataType(var);
   const auto* src_attrs = src_call->attrs.as<ArgmaxArgminAttrs>();
-  Expr raw_var;
+  ICHECK(out_dtype == DataType::Int(32) || out_dtype == DataType::Int(64))
+      << "Unexpected out dtype " << out_dtype;
+  static const Op& topk_op = Op::Get("relax.topk");
+  auto topk_attrs = make_object<TopKAttrs>();
+  topk_attrs->k = 1;
+  if (src_attrs->axis.defined()) {
+    topk_attrs->axis = src_attrs->axis.value()->value;
+  }
+  topk_attrs->largest = call->op == Op::Get("relax.argmax");
+  topk_attrs->ret_type = "both";
+  // change to topk
+  const auto& topk = RewriteUtils::MakeCall(builder, ExprUtils::GetSpanName(call, "topk"), topk_op,
+                                            {call->args[0]}, Attrs(topk_attrs));
+  const auto& get_name = ExprUtils::GetSpanName(call, ".1");
+  const auto& get_item =
+      TupleGetItem(topk, 1, SpanUtils::CreateWithAttr(msc_attr::kName, get_name));
   if (src_attrs->keepdims) {
-    raw_var = RewriteUtils::ReEmit(builder, ExprUtils::GetSpanName(call, "raw"), call);
-  } else {
-    auto new_attrs = make_object<ArgmaxArgminAttrs>();
-    new_attrs->axis = src_attrs->axis;
-    new_attrs->keepdims = true;
-    raw_var = RewriteUtils::MakeCall(builder, ExprUtils::GetSpanName(call, "keepdims"), call->op,
-                                     {call->args[0]}, Attrs(new_attrs));
+    return get_item;
   }
-  static const Op& astype_op = Op::Get("relax.astype");
-  auto cast_to_attrs = make_object<AstypeAttrs>();
-  cast_to_attrs->dtype = DataType::Int(32);
-  Expr res = RewriteUtils::MakeCall(builder, ExprUtils::GetSpanName(call, "cast_to"), astype_op,
-                                    {raw_var}, Attrs(cast_to_attrs));
-  // reshape back
-  if (!src_attrs->keepdims) {
-    const auto& output_shape = ExprUtils::GetShape(var);
-    static const Op& reshape_op = Op::Get("relax.reshape");
-    res = RewriteUtils::MakeCall(builder, ExprUtils::GetSpanName(call, "reshape"), reshape_op,
-                                 {res, ShapeExpr(output_shape)});
-  }
-  auto cast_from_attrs = make_object<AstypeAttrs>();
-  cast_from_attrs->dtype = out_dtype;
-  return Call(astype_op, {res}, Attrs(cast_from_attrs), call->sinfo_args, call->span);
+  const auto& get_item_var = builder->Emit(get_item, get_name);
+  static const Op& reshape_op = Op::Get("relax.reshape");
+  const auto& output_shape = ExprUtils::GetShape(var);
+  return Call(reshape_op, {get_item_var, ShapeExpr(output_shape)}, Attrs(), call->sinfo_args,
+              call->span);
 }
 
 Expr RewriteAttention(BlockBuilder builder, const Var& var, const Call& src_call,
                       const Map<Expr, Call>& new_calls, const String& config) {
   const auto& call = new_calls.count(src_call) ? new_calls[src_call] : src_call;
-  const auto& in_dtype = Downcast<TensorStructInfo>(GetStructInfo(call->args[0]))->dtype;
+  const auto& in_dtype = ExprUtils::GetDataType(call->args[0]);
   const auto* src_attrs = src_call->attrs.as<AttentionAttrs>();
 
   // define dims
@@ -329,7 +329,7 @@ Expr RewriteBatchNorm(BlockBuilder builder, const Var& var, const Call& src_call
                       const Map<Expr, Call>& new_calls, const String& config) {
   const auto& call = new_calls.count(src_call) ? new_calls[src_call] : src_call;
   const auto& input_shape = ExprUtils::GetShape(call->args[0]);
-  const auto& in_dtype = Downcast<TensorStructInfo>(GetStructInfo(call->args[0]))->dtype;
+  const auto& in_dtype = ExprUtils::GetDataType(call->args[0]);
   const auto* src_attrs = src_call->attrs.as<BatchNormAttrs>();
   // define expand shape
   Array<PrimExpr> exp_shape(input_shape.size(), Integer(1));
@@ -449,7 +449,7 @@ Expr RewriteGelu(BlockBuilder builder, const Var& var, const Call& src_call,
   // 0.5 * x * (1 + erf(sqrt(0.5) * x))
   const auto& call = new_calls.count(src_call) ? new_calls[src_call] : src_call;
   size_t in_dim = ExprUtils::GetShape(call->args[0]).size();
-  const auto& in_dtype = Downcast<TensorStructInfo>(GetStructInfo(call->args[0]))->dtype;
+  const auto& in_dtype = ExprUtils::GetDataType(call->args[0]);
   // create ops
   static const Op& add_op = Op::Get("relax.add");
   static const Op& multiply_op = Op::Get("relax.multiply");
@@ -477,7 +477,7 @@ Expr RewriteGeluTanh(BlockBuilder builder, const Var& var, const Call& src_call,
   // 0.5 * x * (1 + tanh(sqrt(2/pi) * (0.044715F * pow(x, 3) + x)))
   const auto& call = new_calls.count(src_call) ? new_calls[src_call] : src_call;
   size_t in_dim = ExprUtils::GetShape(call->args[0]).size();
-  const auto& in_dtype = Downcast<TensorStructInfo>(GetStructInfo(call->args[0]))->dtype;
+  const auto& in_dtype = ExprUtils::GetDataType(call->args[0]);
 
   // create ops
   static const Op& add_op = Op::Get("relax.add");
@@ -517,7 +517,7 @@ Expr RewriteGroupNorm(BlockBuilder builder, const Var& var, const Call& src_call
                       const Map<Expr, Call>& new_calls, const String& config) {
   const auto& call = new_calls.count(src_call) ? new_calls[src_call] : src_call;
   const auto& input_shape = ExprUtils::GetShape(call->args[0]);
-  const auto& in_dtype = Downcast<TensorStructInfo>(GetStructInfo(call->args[0]))->dtype;
+  const auto& in_dtype = ExprUtils::GetDataType(call->args[0]);
   const auto* src_attrs = src_call->attrs.as<GroupNormAttrs>();
   Array<PrimExpr> group_shape = input_shape;
   Array<PrimExpr> exp_shape(input_shape.size(), Integer(1));
@@ -599,7 +599,7 @@ Expr RewriteLayerNorm(BlockBuilder builder, const Var& var, const Call& src_call
                       const Map<Expr, Call>& new_calls, const String& config) {
   const auto& call = new_calls.count(src_call) ? new_calls[src_call] : src_call;
   const auto& input_shape = ExprUtils::GetShape(call->args[0]);
-  const auto& in_dtype = Downcast<TensorStructInfo>(GetStructInfo(call->args[0]))->dtype;
+  const auto& in_dtype = ExprUtils::GetDataType(call->args[0]);
   const auto* src_attrs = src_call->attrs.as<LayerNormAttrs>();
   Array<PrimExpr> exp_shape(input_shape.size(), Integer(1));
   for (const auto& a : src_attrs->axes) {
@@ -742,7 +742,7 @@ Expr RewriteRsqrt(BlockBuilder builder, const Var& var, const Call& src_call,
                   const Map<Expr, Call>& new_calls, const String& config) {
   const auto& call = new_calls.count(src_call) ? new_calls[src_call] : src_call;
   const auto& input_shape = ExprUtils::GetShape(call->args[0]);
-  const auto& in_dtype = Downcast<TensorStructInfo>(GetStructInfo(call->args[0]))->dtype;
+  const auto& in_dtype = ExprUtils::GetDataType(call->args[0]);
   // create 1 constant
   const auto& one = RewriteUtils::MakeConstant(builder, ExprUtils::GetSpanName(call, "eps"), 1,
                                                in_dtype, input_shape.size());
