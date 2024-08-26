@@ -94,7 +94,7 @@ std::tuple<std::vector<size_t>, std::vector<size_t>> InferReshapeAxes(
       return std::make_tuple(std::vector<size_t>(), std::vector<size_t>());
     }
     if (out_dist >= in_dist) {
-      for (size_t i = 0; i < out_dist - in_dist; i++) {
+      for (size_t i = 0; i < static_cast<size_t>(out_dist - in_dist); i++) {
         if (batch_dim >= 0 && (out_start + i) == static_cast<size_t>(batch_dim)) {
           expand_axes.push_back(out_start + i + 1);
         } else {
@@ -102,7 +102,7 @@ std::tuple<std::vector<size_t>, std::vector<size_t>> InferReshapeAxes(
         }
       }
     } else {
-      for (size_t i = 0; i < in_dist - out_dist; i++) {
+      for (size_t i = 0; i < static_cast<size_t>(in_dist - out_dist); i++) {
         if (batch_dim >= 0 && (in_start + i) == static_cast<size_t>(batch_dim)) {
           reduce_axes.push_back(in_start + i + 1);
         } else {

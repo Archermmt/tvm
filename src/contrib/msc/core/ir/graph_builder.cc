@@ -138,6 +138,29 @@ const MSCGraph RelaxGraphBuilder::Build(const relax::Function& func) {
   // Add input nodes and record inputs;
   Array<String> input_names, output_names;
   std::set<String> added_inputs;
+  // Add prims
+  for (const auto& p : func->params) {
+    if (!p->struct_info_.defined()) {
+      continue;
+    }
+    if (p->struct_info_.value()->IsInstance<relax::TensorStructInfoNode>()) {
+      const auto& shape = ExprUtils::GetShape(p);
+      for (size_t i = 0; i < shape.size(); i++) {
+        if (shape[i]->IsInstance<tvm::tir::VarNode>()) {
+          Map<String, String> attrs;
+          attrs.Set("producer", p->name_hint() + ":0");
+          attrs.Set("dim", std::to_string(i));
+          const auto& prim = MSCPrim(prims_.size(), p->name_hint() + "_dim" + std::to_string(i),
+                                     "shape", Array<BaseJoint>(), attrs);
+          prims_.push_back(prim);
+          prim_map_.Set(shape[i], prim);
+        }
+      }
+    } else {
+      LOG_FATAL << "Unexpected func param " << p << "(" << p->GetTypeKey() << ")";
+    }
+  }
+
   for (const auto& p : func->params) {
     if (expr_tensor_map_.count(p)) {
       continue;
@@ -552,6 +575,153 @@ void RelaxGraphBuilder::VisitBindingBlock(const relax::BindingBlock& block) {
   block_stack_.pop_back();
 }
 
+const MSCPrim RelaxGraphBuilder::AddPrim(const PrimExpr& prim, const Map<String, String>& attrs) {
+  String name;
+  Map<String, String> prim_attrs;
+  Array<BaseJoint> parents;
+  for (const auto& pair : attrs) {
+    prim_attrs.Set(pair.first, pair.second);
+  }
+
+  // scalar
+  if (expr->IsInstance<IntImmNode>()) {
+    prim_attrs.Set("value", StringUtils::ToString(expr));
+    return CreatePrimNode(expr, "", "Int", parents, prim_attrs);
+  }
+  // binary
+  if (expr->IsInstance<tvm::tir::AddNode>()) {
+    return AddPrimBinary(Downcast<tvm::tir::Add>(expr));
+  }
+  if (expr->IsInstance<tvm::tir::SubNode>()) {
+    return AddPrimBinary(Downcast<tvm::tir::Sub>(expr));
+  }
+  if (expr->IsInstance<tvm::tir::MulNode>()) {
+    return AddPrimBinary(Downcast<tvm::tir::Mul>(expr));
+  }
+  if (expr->IsInstance<tvm::tir::DivNode>()) {
+    return AddPrimBinary(Downcast<tvm::tir::Div>(expr));
+  }
+  if (expr->IsInstance<tvm::tir::ModNode>()) {
+    return AddPrimBinary(Downcast<tvm::tir::Mod>(expr));
+  }
+  if (expr->IsInstance<tvm::tir::FloorDivNode>()) {
+    return AddPrimBinary(Downcast<tvm::tir::FloorDiv>(expr));
+  }
+  if (expr->IsInstance<tvm::tir::FloorModNode>()) {
+    return AddPrimBinary(Downcast<tvm::tir::FloorMod>(expr));
+  }
+  if (expr->IsInstance<tvm::tir::MaxNode>()) {
+    return AddPrimBinary(Downcast<tvm::tir::Max>(expr));
+  }
+  if (expr->IsInstance<tvm::tir::MinNode>()) {
+    return AddPrimBinary(Downcast<tvm::tir::Min>(expr));
+  }
+  // compare
+  if (expr->IsInstance<tvm::tir::EQNode>()) {
+    return AddPrimBinary(Downcast<tvm::tir::EQ>(expr));
+  }
+  if (expr->IsInstance<tvm::tir::NENode>()) {
+    return AddPrimBinary(Downcast<tvm::tir::NE>(expr));
+  }
+  if (expr->IsInstance<tvm::tir::LTNode>()) {
+    return AddPrimBinary(Downcast<tvm::tir::LT>(expr));
+  }
+  if (expr->IsInstance<tvm::tir::LENode>()) {
+    return AddPrimBinary(Downcast<tvm::tir::LE>(expr));
+  }
+  if (expr->IsInstance<tvm::tir::GTNode>()) {
+    return AddPrimBinary(Downcast<tvm::tir::GT>(expr));
+  }
+  if (expr->IsInstance<tvm::tir::GENode>()) {
+    return AddPrimBinary(Downcast<tvm::tir::GE>(expr));
+  }
+
+  // call
+  if (const auto* c_node = expr.as<tvm::tir::CallNode>()) {
+    for (const auto& a : c_node->args) {
+      parents.push_back(AddPrimArg(a));
+    }
+    String call_op;
+    if (const auto* op_node = c_node->op.as<OpNode>()) {
+      call_op = StringUtils::Replace(op_node->name, "tir.", "");
+    } else {
+      call_op = "prim";
+    }
+    return CreatePrimNode(expr, "", call_op, parents, prim_attrs);
+  }
+
+  if (const auto* v_node = expr.as<tvm::tir::VarNode>()) {
+    name = v_node->name_hint;
+  }
+  ICHECK(manipulate.size() > 0) << "manipulate should be given for PrimNode";
+  return CreatePrimNode(expr, name, manipulate, parents, prim_attrs);
+}
+
+const PrimJoint RelaxGraphBuilder::CreatePrimNode(const PrimExpr& expr, const String& name,
+                                                  const String& manipulate,
+                                                  const Array<BaseJoint>& parents,
+                                                  const Map<String, String>& attrs) {
+  PrimJoint match;
+  for (const auto& p : prim_nodes_) {
+    if (p->manipulate != manipulate) {
+      continue;
+    }
+    if (p->attrs.size() != attrs.size()) {
+      continue;
+    }
+    bool attrs_match = true;
+    for (const auto& pair : attrs) {
+      if (!p->attrs.count(pair.first) || p->attrs[pair.first] != pair.second) {
+        attrs_match = false;
+        break;
+      }
+    }
+    if (!attrs_match) {
+      continue;
+    }
+    if (p->parents.size() != parents.size()) {
+      continue;
+    }
+    bool parents_match = true;
+    for (size_t i = 0; i < parents.size(); i++) {
+      if (p->ParentAt(i)->name != parents[i]->name) {
+        parents_match = false;
+        break;
+      }
+    }
+    if (!parents_match) {
+      continue;
+    }
+    match = p;
+    break;
+  }
+  if (match.defined()) {
+    expr_prim_map_.Set(expr, match);
+    return match;
+  }
+  String prim_name = name;
+  if (prim_name.size() == 0) {
+    prim_name = StringUtils::Upper(manipulate) + "_" + std::to_string(prim_nodes_.size());
+  }
+  const auto& node = PrimJoint(prim_nodes_.size(), prim_name, manipulate, parents, attrs);
+  prim_nodes_.push_back(node);
+  expr_prim_map_.Set(expr, node);
+  return node;
+}
+
+const PrimJoint RelaxGraphBuilder::AddPrimArg(const PrimExpr& arg) {
+  if (expr_prim_map_.count(arg)) {
+    return expr_prim_map_[arg];
+  }
+  return AddPrimNode(arg);
+}
+
+template <typename T>
+const PrimJoint RelaxGraphBuilder::AddPrimBinary(const T& expr) {
+  const auto& manipulate = StringUtils::Replace(expr->GetTypeKey(), "tir.", "");
+  return CreatePrimNode(expr, "", manipulate, {AddPrimArg(expr->a), AddPrimArg(expr->b)});
+}
+
 void RelaxGraphBuilder::VisitExpr_(const relax::ConstantNode* op) {
   AddNode(GetRef<relax::Constant>(op));
 }
@@ -647,6 +817,13 @@ const std::tuple<String, String, String> RelaxGraphBuilder::ParseFunc(const rela
     layout = layout_opt.value();
   }
   return std::make_tuple(node_name, optype, layout);
+}
+
+void RelaxGraphBuilder::VisitPrimExpr(const PrimExpr& prim) {
+  RelaxExprVisitor::VisitPrimExpr(prim);
+  if (!prim->IsInstance<IntImmNode>() && !prim_map_.count(prim)) {
+    AddPrim(prim);
+  }
 }
 
 Array<Expr> RelaxGraphBuilder::GetPluginInputs(const relax::Expr& expr) {

@@ -114,7 +114,7 @@ class BasePipeWorker(object):
             def _cast_shape(shape):
                 return [tvm.tir.Var(s, "int64") if isinstance(s, str) else s for s in shape]
 
-            return [inp[0], _cast_shape(inp[1])] + inp[2:]
+            return [inp[0], _cast_shape(inp[1])] + list(inp[2:])
 
         if "inputs" in self._config:
             self._config["inputs"] = [_cast_input(i) for i in self._config["inputs"]]

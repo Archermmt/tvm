@@ -265,6 +265,10 @@ class RelaxGraphBuilder : public RelaxExprVisitor {
   const MSCJoint AddNode(const Expr& expr, const Optional<Expr>& binding_var = NullOpt,
                          const String& name = "");
 
+  /*! \brief Create and add MSCPrim from prim*/
+  const MSCPrim AddPrim(const PrimExpr& prim,
+                        const Map<String, String>& attrs = Map<String, String>());
+
   void VisitBindingBlock(const relax::BindingBlock& block) final;
 
   void VisitExpr_(const relax::ConstantNode* op) final;
@@ -285,6 +289,8 @@ class RelaxGraphBuilder : public RelaxExprVisitor {
   void VisitBinding_(const relax::VarBindingNode* binding, const relax::DataflowVarNode* val) final;
 
   void VisitBinding_(const relax::VarBindingNode* binding, const relax::FunctionNode* val) final;
+
+  void VisitPrimExpr(const PrimExpr& prim) final;
 
  private:
   /*! \brief Get the node_name, optype, layout for func*/
@@ -309,6 +315,9 @@ class RelaxGraphBuilder : public RelaxExprVisitor {
   // BYOC maps
   Map<Expr, relax::Function> target_funcs_;
   Map<Expr, Expr> func_params_;
+  // prims
+  Array<MSCPrim> prims_;
+  Map<PrimExpr, MSCPrim> prim_map_;
 };
 
 class RelaxWeightsExtractor : public RelaxExprVisitor {

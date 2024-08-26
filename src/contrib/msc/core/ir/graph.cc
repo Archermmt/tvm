@@ -498,6 +498,76 @@ const std::pair<MSCJoint, size_t> MSCJointNode::ProducerAndIdxOf(const MSCTensor
   return ProducerAndIdxOf(input->name);
 }
 
+MSCPrim::MSCPrim(int index, const String& name, const String& op, const Array<BaseJoint>& parents,
+                 const Map<String, String>& attrs) {
+  ObjectPtr<MSCPrimNode> n = make_object<MSCPrimNode>();
+  n->index = index;
+  n->name = std::move(name);
+  n->op = std::move(op);
+  n->attrs = std::move(attrs);
+  for (const auto& p : parents) {
+    n->parents.push_back(p);
+  }
+  data_ = std::move(n);
+}
+
+MSCPrim::MSCPrim(const JsonMSCPrim& j_prim, const Map<String, BaseJoint>& prims) {
+  ObjectPtr<MSCPrimNode> n = make_object<MSCPrimNode>();
+  n->FromJson(j_prim, prims);
+  data_ = std::move(n);
+}
+
+MSCPrim::MSCPrim(const std::string& json_str, const Map<String, BaseJoint>& prims) {
+  ObjectPtr<MSCPrimNode> n = make_object<MSCPrimNode>();
+  n->FromJson(json_str, prims);
+  data_ = std::move(n);
+}
+
+const JsonMSCPrim MSCPrimNode::ToJson() const {
+  JsonMSCPrim j_prim;
+  j_prim.index = index;
+  j_prim.name = name;
+  j_prim.op = op;
+  for (const auto& pair : attrs) {
+    j_prim.attrs[pair.first] = pair.second;
+  }
+  for (const auto& p : parents) {
+    j_prim.parents.push_back(Downcast<BaseJoint>(p)->name);
+  }
+  return j_prim;
+}
+
+void MSCPrimNode::FromJson(const JsonMSCPrim& j_prim, const Map<String, BaseJoint>& prims) {
+  index = j_prim.index;
+  name = j_prim.name;
+  op = j_prim.op;
+  for (const auto& pair : j_prim.attrs) {
+    attrs.Set(pair.first, pair.second);
+  }
+  for (const auto& p_name : j_prim.parents) {
+    ICHECK(prims.count(p_name)) << "Can not find parent " << p_name;
+    parents.push_back(prims[p_name]);
+  }
+}
+
+void MSCPrimNode::FromJson(const std::string& json_str, const Map<String, BaseJoint>& prims) {
+  std::istringstream is(json_str);
+  dmlc::JSONReader reader(&is);
+  JsonMSCPrim j_prim;
+  reader.Read(&j_prim);
+  FromJson(j_prim, prims);
+}
+
+const MSCPrim MSCPrimNode::ParentAt(int index) const {
+  size_t v_index = CommonUtils::GetIndex(index, parents.size());
+  return Downcast<MSCPrim>(parents[v_index]);
+}
+
+const MSCPrim MSCPrimNode::ChildAt(int index) const {
+  size_t v_index = CommonUtils::GetIndex(index, children.size());
+  return Downcast<MSCPrim>(children[v_index]);
+}
+
 WeightJoint::WeightJoint(int index, const String& name, const String& shared_ref,
                          const String& weight_type, const MSCTensor& weight,
                          const Array<BaseJoint> parents, const Map<String, String>& attrs,

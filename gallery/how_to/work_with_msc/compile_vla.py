@@ -109,7 +109,7 @@ if __name__ == "__main__":
             graph_module.eval(), get_config(example_inputs, args.v_target), workspace=workspace
         )
         model.compile()
-        return wrap_forward(model=model)
+        return partial(wrap_forward, model=model)
 
     def _capture_projector(graph_module: fx.GraphModule, example_inputs):
         workspace = msc_utils.msc_dir("msc_workspace").create_dir("projector").path
@@ -117,7 +117,7 @@ if __name__ == "__main__":
             graph_module.eval(), get_config(example_inputs, args.v_target), workspace=workspace
         )
         model.compile()
-        return wrap_forward(model=model)
+        return partial(wrap_forward, model=model)
 
     def _capture_language(graph_module: fx.GraphModule, example_inputs):
         print("[TMINFO] _capture_language {}".format(graph_module))
@@ -126,7 +126,7 @@ if __name__ == "__main__":
             graph_module.eval(), get_config(example_inputs, args.l_target), workspace=workspace
         )
         model.compile()
-        return wrap_forward(model=model)
+        return partial(wrap_forward, model=model)
 
     dynamo.reset()
     vla.vision_backbone = torch.compile(vla.vision_backbone, backend=_capture_vision, dynamic=False)
