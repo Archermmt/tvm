@@ -28,6 +28,7 @@ import argparse
 import requests
 from io import BytesIO
 from PIL import Image
+from functools import partial
 from transformers import AutoModelForVision2Seq, AutoProcessor
 import torch
 from torch import fx
@@ -38,7 +39,7 @@ from tvm.contrib.msc.core.utils.message import MSCStage
 from tvm.contrib.msc.core import utils as msc_utils
 
 parser = argparse.ArgumentParser(description="MSC compile vla example")
-parser.add_argument("--model", type=str, default="openvla", help="The model path")
+parser.add_argument("--model", type=str, default="openvla-7b", help="The model path")
 parser.add_argument(
     "--image",
     type=str,
@@ -54,16 +55,16 @@ parser.add_argument(
 parser.add_argument(
     "--verbose", type=str, default="info", help="The verbose level, info|debug:1,2,3|critical"
 )
+parser.add_argument(
+    "--device", type=str, default="cpu", help="The device for baseline and compile check cuda|cpu"
+)
+parser.add_argument(
+    "--dtype", type=str, default="float32", help="The datatype for baseline and compile"
+)
 args = parser.parse_args()
 
 
 def get_config(example_inputs, compile_type):
-    for idx, i in enumerate(example_inputs):
-        if isinstance(i, torch.Tensor):
-            print("{} th tensor input({},{})".format(idx, i.shape, i.dtype))
-        else:
-            print("{} th input {}({})".format(idx, i, type(i)))
-
     inputs, datas = [], {}
     for i in example_inputs:
         if not isinstance(i, torch.Tensor):
@@ -78,42 +79,63 @@ def get_config(example_inputs, compile_type):
         compile_type=compile_type,
         dataset={MSCStage.PREPARE: {"loader": datas}},
         verbose=args.verbose,
+        skip_config={
+            MSCStage.BASELINE: "check",
+            MSCStage.OPTIMIZE: "stage",
+            MSCStage.COMPILE: "check",
+        },
+        run_config={"all": {"device": args.device}},
     )
+
+
+def wrap_forward(*inputs, model=None):
+    t_inputs = [i.to(torch.device(args.device)) for i in inputs if isinstance(i, torch.Tensor)]
+    outputs = model(*t_inputs)
+    if isinstance(outputs, torch.Tensor):
+        outputs = [outputs]
+    return [o.to(torch.device("cpu")) for o in outputs]
 
 
 if __name__ == "__main__":
     # Load Processor & VLA
     processor = AutoProcessor.from_pretrained(args.model, trust_remote_code=True)
-    print("processor " + str(processor))
     vla = AutoModelForVision2Seq.from_pretrained(
         args.model, attn_implementation="sdpa", torch_dtype=torch.float32, trust_remote_code=True
     )
-    print("vla " + str(vla))
 
     def _capture_vision(graph_module: fx.GraphModule, example_inputs):
-        print("[TMINFO] _capture_vision: {}".format(graph_module))
-        model = TorchWrapper(graph_module, get_config(example_inputs, args.v_target))
-        return graph_module.forward
+        workspace = msc_utils.msc_dir("msc_workspace").create_dir("vision").path
+        model = TorchWrapper(
+            graph_module.eval(), get_config(example_inputs, args.v_target), workspace=workspace
+        )
+        model.compile()
+        return wrap_forward(model=model)
 
     def _capture_projector(graph_module: fx.GraphModule, example_inputs):
-        print("[TMINFO] _capture_projector {}".format(graph_module))
-        model = TorchWrapper(graph_module, get_config(example_inputs, args.v_target))
-        return graph_module.forward
+        workspace = msc_utils.msc_dir("msc_workspace").create_dir("projector").path
+        model = TorchWrapper(
+            graph_module.eval(), get_config(example_inputs, args.v_target), workspace=workspace
+        )
+        model.compile()
+        return wrap_forward(model=model)
 
     def _capture_language(graph_module: fx.GraphModule, example_inputs):
         print("[TMINFO] _capture_language {}".format(graph_module))
-        model = TorchWrapper(graph_module, get_config(example_inputs, args.l_target))
-        return graph_module.forward
+        workspace = msc_utils.msc_dir("msc_workspace").create_dir("language").path
+        model = TorchWrapper(
+            graph_module.eval(), get_config(example_inputs, args.l_target), workspace=workspace
+        )
+        model.compile()
+        return wrap_forward(model=model)
 
     dynamo.reset()
     vla.vision_backbone = torch.compile(vla.vision_backbone, backend=_capture_vision, dynamic=False)
-    # vla.projector = torch.compile(vla.projector, backend=_capture_projector, dynamic=False)
-    # vla.language_model = torch.compile(vla.language_model, backend=_capture_language, dynamic=False)
+    vla.projector = torch.compile(vla.projector, backend=_capture_projector, dynamic=False)
+    # vla.language_model = torch.compile(vla.language_model, backend=_capture_language, dynamic=True)
 
     # test with image
     response = requests.get(args.image)
     image = Image.open(BytesIO(response.content))
-    print("image " + str(image))
 
     prompt = "In: What action should the robot take to place the bottle?\nOut:"
     inputs = processor(prompt, image)

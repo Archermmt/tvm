@@ -497,13 +497,13 @@ def test_embedding():
 
     expected1 = {
         "inputs": [{"name": "inp_0", "shape": [4], "dtype": "int64", "layout": "A"}],
-        "outputs": [{"name": "take", "shape": [4, 3], "dtype": "float32", "layout": "NA"}],
+        "outputs": [{"name": "take", "shape": [4, 3], "dtype": "float32", "layout": "AB"}],
         "nodes": {"total": 2, "input": 1, "msc.embedding": 1},
     }
 
     expected2 = {
         "inputs": [{"name": "inp_0", "shape": [4, 5], "dtype": "int64", "layout": "AB"}],
-        "outputs": [{"name": "take", "shape": [4, 5, 3], "dtype": "float32", "layout": "CNB"}],
+        "outputs": [{"name": "take", "shape": [4, 5, 3], "dtype": "float32", "layout": "CBA"}],
         "nodes": {"total": 2, "input": 1, "msc.embedding": 1},
     }
 
@@ -1016,7 +1016,7 @@ def test_squeeze():
             return data.squeeze(1)
 
     expected1 = {
-        "inputs": [{"name": "inp_0", "shape": [3, 1, 4, 1], "dtype": "float32", "layout": "ANBC"}],
+        "inputs": [{"name": "inp_0", "shape": [3, 1, 4, 1], "dtype": "float32", "layout": "ADBC"}],
         "outputs": [{"name": "squeeze", "shape": [3, 4, 1], "dtype": "float32", "layout": "ABC"}],
         "nodes": {"total": 2, "input": 1, "squeeze": 1},
     }
@@ -1026,7 +1026,7 @@ def test_squeeze():
             return data.squeeze()
 
     expected2 = {
-        "inputs": [{"name": "inp_0", "shape": [3, 1, 4, 1], "dtype": "float32", "layout": "ANBC"}],
+        "inputs": [{"name": "inp_0", "shape": [3, 1, 4, 1], "dtype": "float32", "layout": "ACBD"}],
         "outputs": [{"name": "squeeze", "shape": [3, 4], "dtype": "float32", "layout": "AB"}],
         "nodes": {"total": 2, "input": 1, "squeeze": 1},
     }
@@ -1123,7 +1123,7 @@ def test_getitem():
     expected2 = {
         "inputs": [{"name": "inp_0", "shape": [8, 16], "dtype": "float32", "layout": "AB"}],
         "outputs": [
-            {"name": "reshape", "shape": [8, 1, 1, 16, 1], "dtype": "float32", "layout": "ANCHB"}
+            {"name": "reshape", "shape": [8, 1, 1, 16, 1], "dtype": "float32", "layout": "CDAEB"}
         ],
         "nodes": {"total": 3, "input": 1, "strided_slice": 1, "reshape": 1},
     }
@@ -1613,7 +1613,7 @@ def test_reduce():
             return torch.sum(x, (2, 1))
 
     expected = {
-        "inputs": [{"name": "inp_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": "ANCB"}],
+        "inputs": [{"name": "inp_0", "shape": [1, 2, 3, 4], "dtype": "float32", "layout": "ACDB"}],
         "outputs": [{"name": "sum", "shape": [1, 4], "dtype": "float32", "layout": "AB"}],
         "nodes": {"total": 2, "input": 1, "sum": 1},
     }
@@ -1930,7 +1930,7 @@ def test_mean():
             return data.mean(-1)
 
     expected1 = {
-        "inputs": [{"name": "inp_0", "shape": [256, 256], "dtype": "float32", "layout": "AN"}],
+        "inputs": [{"name": "inp_0", "shape": [256, 256], "dtype": "float32", "layout": "AB"}],
         "outputs": [{"name": "mean", "shape": [256], "dtype": "float32", "layout": "A"}],
         "nodes": {"total": 2, "input": 1, "mean": 1},
     }

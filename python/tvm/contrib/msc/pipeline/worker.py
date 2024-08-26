@@ -109,6 +109,15 @@ class BasePipeWorker(object):
             MSCStage.PARSE, self._config, self._model
         )
 
+        # update dynamic inputs
+        def _cast_input(inp):
+            def _cast_shape(shape):
+                return [tvm.tir.Var(s, "int64") if isinstance(s, str) else s for s in shape]
+
+            return [inp[0], _cast_shape(inp[1])] + inp[2:]
+
+        if "inputs" in self._config:
+            self._config["inputs"] = [_cast_input(i) for i in self._config["inputs"]]
         # update runner config
         for stage in [MSCStage.BASELINE, MSCStage.OPTIMIZE, MSCStage.COMPILE]:
             if stage not in self._config:
