@@ -35,13 +35,14 @@ namespace contrib {
 namespace msc {
 
 MSCTensor::MSCTensor(const String& name, const DataType& dtype, const String& layout,
-                     const Array<Integer>& shape, const String& alias) {
+                     const Array<Integer>& shape, const String& alias, const Array<String>& prims) {
   ObjectPtr<MSCTensorNode> n = make_object<MSCTensorNode>();
   n->name = std::move(name);
   n->alias = std::move(alias);
   n->dtype = std::move(dtype);
   n->shape = std::move(shape);
   n->layout = tvm::tir::Layout(layout);
+  n->prims = prims;
   data_ = std::move(n);
 }
 
@@ -68,6 +69,9 @@ const JsonMSCTensor MSCTensorNode::ToJson() const {
   for (const auto& s : shape) {
     j_tensor.shape.push_back(s->value);
   }
+  for (const auto& p : prims) {
+    j_tensor.prims.push_back(p);
+  }
   return j_tensor;
 }
 
@@ -80,6 +84,9 @@ void MSCTensorNode::FromJson(const JsonMSCTensor& j_tensor) {
   }
   for (const auto& s : j_tensor.shape) {
     shape.push_back(s);
+  }
+  for (const auto& p : j_tensor.prims) {
+    prims.push_back(p);
   }
 }
 
@@ -101,6 +108,17 @@ const Integer MSCTensorNode::DimAt(int index) const {
 const Integer MSCTensorNode::DimAt(const String& axis) const {
   auto index = layout.IndexOf(tvm::tir::LayoutAxis::Get(axis));
   return DimAt(index);
+}
+
+const String MSCTensorNode::PrimAt(int index) const {
+  if (prims.size() == 0) {
+    return "";
+  }
+  return prims[CommonUtils::GetIndex(index, Ndim())];
+}
+
+const String MSCTensorNode::PrimAt(const String& axis) const {
+  return PrimAt(layout.IndexOf(tvm::tir::LayoutAxis::Get(axis)));
 }
 
 int32_t MSCTensorNode::LayoutOf(const String& axis) const {
@@ -498,12 +516,12 @@ const std::pair<MSCJoint, size_t> MSCJointNode::ProducerAndIdxOf(const MSCTensor
   return ProducerAndIdxOf(input->name);
 }
 
-MSCPrim::MSCPrim(int index, const String& name, const String& op, const Array<BaseJoint>& parents,
-                 const Map<String, String>& attrs) {
+MSCPrim::MSCPrim(int index, const String& name, const String& optype,
+                 const Array<BaseJoint>& parents, const Map<String, String>& attrs) {
   ObjectPtr<MSCPrimNode> n = make_object<MSCPrimNode>();
   n->index = index;
   n->name = std::move(name);
-  n->op = std::move(op);
+  n->optype = std::move(optype);
   n->attrs = std::move(attrs);
   for (const auto& p : parents) {
     n->parents.push_back(p);
@@ -527,7 +545,7 @@ const JsonMSCPrim MSCPrimNode::ToJson() const {
   JsonMSCPrim j_prim;
   j_prim.index = index;
   j_prim.name = name;
-  j_prim.op = op;
+  j_prim.optype = optype;
   for (const auto& pair : attrs) {
     j_prim.attrs[pair.first] = pair.second;
   }
@@ -540,7 +558,7 @@ const JsonMSCPrim MSCPrimNode::ToJson() const {
 void MSCPrimNode::FromJson(const JsonMSCPrim& j_prim, const Map<String, BaseJoint>& prims) {
   index = j_prim.index;
   name = j_prim.name;
-  op = j_prim.op;
+  optype = j_prim.optype;
   for (const auto& pair : j_prim.attrs) {
     attrs.Set(pair.first, pair.second);
   }
@@ -657,7 +675,8 @@ const bool BaseGraphNode::HasNode(const String& name) const {
 }
 
 MSCGraph::MSCGraph(const String& name, const Array<MSCJoint>& nodes,
-                   const Array<String>& input_names, const Array<String>& output_names) {
+                   const Array<String>& input_names, const Array<String>& output_names,
+                   const Array<MSCPrim>& prims) {
   ObjectPtr<MSCGraphNode> n = make_object<MSCGraphNode>();
   n->name = std::move(name);
   for (const auto& node : nodes) {
@@ -666,6 +685,10 @@ MSCGraph::MSCGraph(const String& name, const Array<MSCJoint>& nodes,
   }
   n->input_names = std::move(input_names);
   n->output_names = std::move(output_names);
+  for (const auto& prim : prims) {
+    n->prim_names.push_back(prim->name);
+    n->prims.Set(prim->name, prim);
+  }
   n->AnalysisGraph();
   data_ = std::move(n);
 }
@@ -695,6 +718,10 @@ const JsonMSCGraph MSCGraphNode::ToJson() const {
     const auto& node = FindNode(n);
     j_graph.nodes.push_back(node->ToJson());
   }
+  for (const auto& n : prim_names) {
+    const auto& prim = FindPrim(n);
+    j_graph.prims.push_back(prim->ToJson());
+  }
   return j_graph;
 }
 
@@ -715,6 +742,16 @@ void MSCGraphNode::FromJson(const JsonMSCGraph& j_graph) {
     }
     node_names.push_back(node->name);
     nodes.Set(node->name, node);
+  }
+  Map<String, BaseJoint> loaded_prims;
+  for (const auto& n : j_graph.prims) {
+    const auto& prim = MSCPrim(n, loaded_prims);
+    loaded_prims.Set(prim->name, prim);
+    for (const auto& p : prim->parents) {
+      Downcast<BaseJoint>(p)->AddChild(prim);
+    }
+    prim_names.push_back(prim->name);
+    prims.Set(prim->name, prim);
   }
   AnalysisGraph();
 }
@@ -765,6 +802,11 @@ const String MSCGraphNode::ToPrototxt() const {
 const MSCJoint MSCGraphNode::FindNode(const String& name) const {
   ICHECK(nodes.count(name)) << "Can not find node " << name;
   return Downcast<MSCJoint>(nodes[name]);
+}
+
+const MSCPrim MSCGraphNode::FindPrim(const String& name) const {
+  ICHECK(prims.count(name)) << "Can not find prim " << name;
+  return prims[name];
 }
 
 const MSCTensor MSCGraphNode::InputAt(int index) const {
@@ -1225,7 +1267,11 @@ MSCGraph PruneWeights(const MSCGraph& graph, const Map<String, MSCTensor>& prune
       Downcast<BaseJoint>(p)->AddChild(new_node);
     }
   }
-  return MSCGraph(graph->name, nodes, graph->input_names, graph->output_names);
+  Array<MSCPrim> prims;
+  for (const auto& name : graph->prim_names) {
+    prims.push_back(graph->FindPrim(name));
+  }
+  return MSCGraph(graph->name, nodes, graph->input_names, graph->output_names, prims);
 }
 
 TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable)
@@ -1238,7 +1284,9 @@ TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable)
       }
       p->stream << "<";
       for (size_t i = 0; i < tensor->Ndim(); i++) {
-        p->stream << tensor->shape[i]->value << (i == tensor->Ndim() - 1 ? "|" : ",");
+        const auto& prim = tensor->PrimAt(i);
+        p->stream << (prim.size() > 0 ? prim : StringUtils::ToString(tensor->shape[i]))
+                  << (i == tensor->Ndim() - 1 ? "|" : ",");
       }
       p->stream << tensor->dtype;
       if (tensor->layout.defined()) {
@@ -1247,8 +1295,8 @@ TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable)
       p->stream << ">";
     });
 
-#define MSC_NODE_BASE_HEAD(Stream, Joint)                                                \
-  Stream << "ID_" << Joint->index << " " << Joint->name;                                 \
+#define MSC_NODE_BASE_HEAD(Stream, Joint, Type)                                          \
+  Stream << Type << "_" << Joint->index << " " << Joint->name;                           \
   if (Joint->shared_ref.size() > 0) {                                                    \
     Stream << "(M: " << Joint->shared_ref << ")";                                        \
   }                                                                                      \
@@ -1270,7 +1318,7 @@ TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable)
     .set_dispatch<MSCJointNode>([](const ObjectRef& node, ReprPrinter* p) {
       auto* joint = static_cast<const MSCJointNode*>(node.get());
       p->PrintIndent();
-      MSC_NODE_BASE_HEAD(p->stream, joint);
+      MSC_NODE_BASE_HEAD(p->stream, joint, "N");
       if (joint->inputs.size() > 0) {
         p->stream << "  IN: ";
         for (size_t i = 0; i < joint->inputs.size(); i++) {
@@ -1305,10 +1353,25 @@ TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable)
     });
 
 TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable)
+    .set_dispatch<MSCPrimNode>([](const ObjectRef& node, ReprPrinter* p) {
+      auto* prim = static_cast<const MSCPrimNode*>(node.get());
+      p->PrintIndent();
+      MSC_NODE_BASE_HEAD(p->stream, prim, "P");
+      p->stream << "  OPTYPE: " << prim->optype;
+      if (prim->attrs.size() > 0) {
+        p->stream << "\n  ATTRS: ";
+        for (const auto& pair : prim->attrs) {
+          p->stream << pair.first << "=" << pair.second << " ";
+        }
+      }
+      p->stream << "\n";
+    });
+
+TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable)
     .set_dispatch<WeightJointNode>([](const ObjectRef& node, ReprPrinter* p) {
       auto* joint = static_cast<const WeightJointNode*>(node.get());
       p->PrintIndent();
-      MSC_NODE_BASE_HEAD(p->stream, joint);
+      MSC_NODE_BASE_HEAD(p->stream, joint, "W");
       if (joint->friends.size() > 0) {
         p->stream << "  FRIENDS: ";
         for (size_t i = 0; i < joint->friends.size(); i++) {
@@ -1349,6 +1412,9 @@ TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable)
       for (size_t i = 0; i < graph->output_names.size(); i++) {
         p->stream << graph->output_names[i] << (i == graph->output_names.size() - 1 ? ">\n" : ",");
       }
+      for (const auto& n : graph->prim_names) {
+        p->stream << graph->FindPrim(n) << "\n";
+      }
       for (const auto& n : graph->node_names) {
         p->stream << graph->FindNode(n) << "\n";
       }
@@ -1358,6 +1424,8 @@ TVM_REGISTER_NODE_TYPE(MSCTensorNode);
 
 TVM_REGISTER_NODE_TYPE(MSCJointNode);
 
+TVM_REGISTER_NODE_TYPE(MSCPrimNode);
+
 TVM_REGISTER_NODE_TYPE(WeightJointNode);
 
 TVM_REGISTER_NODE_TYPE(MSCGraphNode);
@@ -1366,8 +1434,9 @@ TVM_REGISTER_NODE_TYPE(WeightGraphNode);
 
 TVM_REGISTER_GLOBAL("msc.core.MSCTensor")
     .set_body_typed([](const String& name, const DataType& dtype, const String& layout,
-                       const Array<Integer>& shape, const String& alias) -> MSCTensor {
-      return MSCTensor(name, dtype, layout, shape, alias);
+                       const Array<Integer>& shape, const String& alias,
+                       const Array<String>& prims) -> MSCTensor {
+      return MSCTensor(name, dtype, layout, shape, alias, prims);
     });
 
 TVM_REGISTER_GLOBAL("msc.core.MSCTensorToJson")
@@ -1396,6 +1465,16 @@ TVM_REGISTER_GLOBAL("msc.core.MSCJoint")
                       weights);
     });
 
+TVM_REGISTER_GLOBAL("msc.core.MSCPrim")
+    .set_body_typed([](Integer index, const String& name, const String& optype,
+                       const Map<String, String>& attrs, const Array<MSCPrim>& parents) -> MSCPrim {
+      Array<BaseJoint> b_parents;
+      for (const auto& p : parents) {
+        b_parents.push_back(p);
+      }
+      return MSCPrim(index->value, name, optype, b_parents, attrs);
+    });
+
 TVM_REGISTER_GLOBAL("msc.core.WeightJoint")
     .set_body_typed([](Integer index, const String& name, const String& shared_ref,
                        const String& weight_type, const MSCTensor& weight,
@@ -1419,9 +1498,9 @@ TVM_REGISTER_GLOBAL("msc.core.WeightJointSetAttr")
 
 TVM_REGISTER_GLOBAL("msc.core.MSCGraph")
     .set_body_typed([](const String& name, const Array<MSCJoint>& nodes,
-                       const Array<String>& input_names,
-                       const Array<String>& output_names) -> MSCGraph {
-      return MSCGraph(name, nodes, input_names, output_names);
+                       const Array<String>& input_names, const Array<String>& output_names,
+                       const Array<MSCPrim>& prims) -> MSCGraph {
+      return MSCGraph(name, nodes, input_names, output_names, prims);
     });
 
 TVM_REGISTER_GLOBAL("msc.core.WeightGraph")
@@ -1439,6 +1518,11 @@ TVM_REGISTER_GLOBAL("msc.core.MSCGraphHasNode")
 TVM_REGISTER_GLOBAL("msc.core.MSCGraphFindNode")
     .set_body_typed([](const MSCGraph& graph, const String& name) -> MSCJoint {
       return graph->FindNode(name);
+    });
+
+TVM_REGISTER_GLOBAL("msc.core.MSCGraphFindPrim")
+    .set_body_typed([](const MSCGraph& graph, const String& name) -> MSCPrim {
+      return graph->FindPrim(name);
     });
 
 TVM_REGISTER_GLOBAL("msc.core.MSCGraphHasTensor")

@@ -187,11 +187,22 @@ void RelaxCodeGen::CodeGenInference() {
   }
 }
 
+const String RelaxCodeGen::DescribePrim(const MSCPrim& prim) {
+  if (prim->optype == "shape") {
+    const auto& producer = graph()->FindNode(prim->GetTypeAttr<std::string>("producer"));
+    int out_idx = prim->GetTypeAttr<int>("out_idx");
+    const auto& dim = prim->GetTypeAttr<std::string>("dim");
+    const auto& des = IdxOutputBase(producer, out_idx) + ".struct_info.shape[" + dim + "]";
+    return "int(" + des + ")";
+  }
+  return PyCodeGen<RelaxCodeGenConfig, RelaxCodeGenHelper>::DescribePrim(prim);
+}
+
 const Array<Doc> RelaxCodeGen::GetOpCodes(const MSCJoint& node) {
   const auto& ops_map = GetRelaxOpCodes();
   auto it = ops_map->find(GetOpType(node));
   ICHECK(it != ops_map->end()) << "Unsupported relax op(" << node->optype << "): " << node;
-  it->second->Config(node, config());
+  it->second->Config(node, config(), prims());
   try {
     return it->second->GetDocs();
   } catch (runtime::InternalError& err) {

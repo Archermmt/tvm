@@ -266,8 +266,11 @@ class RelaxGraphBuilder : public RelaxExprVisitor {
                          const String& name = "");
 
   /*! \brief Create and add MSCPrim from prim*/
-  const MSCPrim AddPrim(const PrimExpr& prim,
-                        const Map<String, String>& attrs = Map<String, String>());
+  const MSCPrim AddPrim(const PrimExpr& prim);
+
+  const MSCPrim MatchOrCreatePrim(const PrimExpr& prim, const String& op = "",
+                                  const Array<BaseJoint>& parents = Array<BaseJoint>(),
+                                  const Map<String, String>& attrs = Map<String, String>());
 
   void VisitBindingBlock(const relax::BindingBlock& block) final;
 

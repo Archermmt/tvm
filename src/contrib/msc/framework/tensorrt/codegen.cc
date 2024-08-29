@@ -544,7 +544,7 @@ const Array<Doc> TensorRTCodeGen::GetOpCodes(const MSCJoint& node) {
   const auto& ops_map = GetTensorRTOpCodes();
   auto it = ops_map->find(GetOpType(node));
   ICHECK(it != ops_map->end()) << "Unsupported tensorrt op(" << node->optype << "): " << node;
-  it->second->Config(node, config());
+  it->second->Config(node, config(), prims());
   try {
     return it->second->GetDocs();
   } catch (runtime::InternalError& err) {

@@ -142,7 +142,7 @@ const Array<Doc> TorchCodeGen::GetOpCodes(const MSCJoint& node) {
   const auto& ops_map = GetTorchOpCodes();
   auto it = ops_map->find(GetOpType(node));
   ICHECK(it != ops_map->end()) << "Unsupported torch op(" << node->optype << "): " << node;
-  it->second->Config(node, config(), is_init_);
+  it->second->Config(node, config(), is_init_, prims());
   try {
     return it->second->GetDocs();
   } catch (runtime::InternalError& err) {
