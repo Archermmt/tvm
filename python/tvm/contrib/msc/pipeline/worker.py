@@ -23,7 +23,6 @@ import logging
 from typing import Any, List, Tuple
 
 import tvm
-from tvm.contrib.msc.core.frontend import normalize_inputs
 from tvm.contrib.msc.core.runtime import BaseRunner
 from tvm.contrib.msc.core.tools import ToolType
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
@@ -109,8 +108,7 @@ class BasePipeWorker(object):
         self._config = self._get_runner_cls(self._model_type).update_config(
             MSCStage.PARSE, self._config, self._model
         )
-        if "inputs" in self._config:
-            self._config["inputs"] = normalize_inputs(self._config["inputs"])
+
         # update runner config
         for stage in [MSCStage.BASELINE, MSCStage.OPTIMIZE, MSCStage.COMPILE]:
             if stage not in self._config:

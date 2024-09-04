@@ -125,7 +125,7 @@ def _test_from_torch(
         config = _get_config(
             MSCFramework.TORCH,
             compile_type,
-            inputs=[["input_0", [1, 3, 224, 224], "float32"]],
+            inputs=[["input_0", ["bz" if dynamic else 1, 3, 224, 224], "float32"]],
             outputs=["output"],
             dynamic=dynamic,
             atol=atol,

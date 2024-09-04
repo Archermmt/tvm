@@ -22,9 +22,8 @@ import numpy as np
 import torch
 import tvm
 from tvm.relax.frontend.torch import from_fx
-
 from tvm.contrib.msc.core.ir.graph import MSCGraph
-from tvm.contrib.msc.core.frontend import from_relax
+from tvm.contrib.msc.core.frontend import from_relax, normalize_inputs
 from tvm.contrib.msc.core.codegen import relay_to_relax
 
 
@@ -103,6 +102,7 @@ def from_torch(
         The weights from the IRModule.
     """
 
+    input_info = normalize_inputs(input_info)
     if via_relax:
         graph_model, params = torch.fx.symbolic_trace(model), None
         with torch.no_grad():

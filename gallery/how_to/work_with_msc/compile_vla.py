@@ -103,6 +103,7 @@ if __name__ == "__main__":
         args.model, attn_implementation="sdpa", torch_dtype=torch.float32, trust_remote_code=True
     )
 
+    """
     def _capture_vision(graph_module: fx.GraphModule, example_inputs):
         workspace = msc_utils.msc_dir("msc_workspace").create_dir("vision").path
         model = TorchWrapper(
@@ -132,6 +133,7 @@ if __name__ == "__main__":
     vla.vision_backbone = torch.compile(vla.vision_backbone, backend=_capture_vision, dynamic=False)
     vla.projector = torch.compile(vla.projector, backend=_capture_projector, dynamic=False)
     # vla.language_model = torch.compile(vla.language_model, backend=_capture_language, dynamic=True)
+    """
 
     # test with image
     response = requests.get(args.image)

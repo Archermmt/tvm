@@ -55,7 +55,7 @@ def normalize_inputs(inputs: List[tuple]) -> List[tuple]:
             for dim in info:
                 if isinstance(dim, int):
                     dims.append(dim)
-                elif d in recorded_vars:
+                elif dim in recorded_vars:
                     dims.append(recorded_vars[dim])
                 elif isinstance(dim, str):
                     recorded_vars[dim] = tvm.tir.Var(dim, "int64")
@@ -66,7 +66,7 @@ def normalize_inputs(inputs: List[tuple]) -> List[tuple]:
 
         return [_normalize(i) for i in inp]
 
-    return [_normalize_input(i) for i in inputs]
+    return [_normalize_input(inp) for inp in inputs]
 
 
 def normalize_weights(

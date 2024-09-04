@@ -84,7 +84,7 @@ def get_config(calib_loader, train_loader):
         tools.append((ToolType.DISTILLER, config))
         dataset[MSCStage.DISTILL] = {"loader": train_loader}
     return TorchWrapper.create_config(
-        inputs=[("input", [args.test_batch, 3, 32, 32], "float32")],
+        inputs=[("input", ["bz", 3, 32, 32], "float32")],
         outputs=["output"],
         compile_type=args.compile_type,
         dataset=dataset,

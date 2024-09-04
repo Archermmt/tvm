@@ -640,6 +640,14 @@ class TorchFXImporter:
             dim = None
         return self.block_builder.emit(relax.op.squeeze(x, dim))
 
+    def _repeat(self, node: fx.node.Node) -> relax.Var:
+        import torch  # type: ignore
+
+        args = self.retrieve_args(node)
+        if isinstance(args[1], (torch.Size, tuple, list)):
+            return self.block_builder.emit(relax.op.tile(args[0], tuple(args[1])))
+        return self.block_builder.emit(relax.op.tile(args[0], args[1:]))
+
     def _tile(self, node: fx.node.Node) -> relax.Var:
         import torch  # type: ignore
 
@@ -1306,7 +1314,10 @@ class TorchFXImporter:
             return shape
         assert len(node.args) == 2
         idx = node.args[1]
-        return self.shape_of(x)[idx].value
+        dim = self.shape_of(x)[idx]
+        if isinstance(dim, tvm.tir.Var):
+            return dim
+        return dim.value
 
     def _getattr(self, node: fx.node.Node) -> relax.Var:
         if isinstance(self.env[node.args[0]], relax.Expr):
@@ -1484,6 +1495,7 @@ class TorchFXImporter:
             "expand": self._expand,
             "flatten": self._flatten,
             "permute": self._permute,
+            "repeat": self._repeat,
             "reshape": self._reshape,
             "split": self._split,
             "tile": self._tile,
