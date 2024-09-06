@@ -15,25 +15,17 @@
     specific language governing permissions and limitations
     under the License.
 
-How To Guides
-=============
+.. _tensor-ir:
 
-These user-focused "how to" guides are designed to help you find answers to
-specific questions, like "How do I compile a model?" or "How to I optimize a
-schedule with tesor expressions?"
+TensorIR
+========
+TensorIR is one of the core abstraction in Apache TVM Unity stack, which is used to
+represent and optimize the primitive tensor functions.
 
 .. toctree::
-   :maxdepth: 1
+    :maxdepth: 2
 
-   compile_models/index
-   deploy/index
-   work_with_relay/index
-   work_with_schedules/index
-   optimize_operators/index
-   tune_with_autotvm/index
-   tune_with_autoscheduler/index
-   work_with_microtvm/index
-   extend_tvm/index
-   profile/index
-   ../errors
-   ../faq
+    abstraction
+    learning
+    tutorials/creation
+    tutorials/transformation

@@ -36,21 +36,25 @@ driving its costs down.
    install/index
    get_started/tutorials/quick_start
    get_started/tutorials/ir_module
-   contribute/index
 
 .. toctree::
    :maxdepth: 1
-   :caption: User Guide
+   :caption: How To
 
-   tutorial/index
-   how_to/index
+   how_to/tutorials/e2e_opt_model
+   how_to/tutorials/customize_opt
+   how_to/tutorials/optimize_llm
+   how_to/tutorials/cross_compilation_and_rpc
+   how_to/dev/index
+
+.. The Deep Dive content is comprehensive
+.. we maintain a ``maxdepth`` of 2 to display more information on the main page.
 
 .. toctree::
-   :maxdepth: 1
-   :caption: Developer Guide
+   :maxdepth: 2
+   :caption: Deep Dive
 
-   dev/tutorial/index
-   dev/how_to/how_to.rst
+   deep_dive/tensor_ir/index
 
 .. toctree::
    :maxdepth: 1
@@ -63,6 +67,10 @@ driving its costs down.
    :maxdepth: 1
    :caption: Legacy
 
+   tutorial/index
+   how_to/legacy_index
+   dev/tutorial/index
+   dev/how_to/how_to.rst
    reference/langref/index
    arch/index
    topic/microtvm/index
@@ -72,6 +80,7 @@ driving its costs down.
    :maxdepth: 1
    :caption: About
 
+   contribute/index
    reference/publications
    reference/security
 

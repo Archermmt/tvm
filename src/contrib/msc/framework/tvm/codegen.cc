@@ -192,8 +192,7 @@ const String RelaxCodeGen::DescribePrim(const MSCPrim& prim) {
     const auto& producer = graph()->FindNode(prim->GetTypeAttr<std::string>("producer"));
     int out_idx = prim->GetTypeAttr<int>("out_idx");
     const auto& dim = prim->GetTypeAttr<std::string>("dim");
-    const auto& des = IdxOutputBase(producer, out_idx) + ".struct_info.shape[" + dim + "]";
-    return "int(" + des + ")";
+    return IdxOutputBase(producer, out_idx) + ".struct_info.shape[" + dim + "]";
   }
   return PyCodeGen<RelaxCodeGenConfig, RelaxCodeGenHelper>::DescribePrim(prim);
 }
@@ -215,6 +214,7 @@ TVM_REGISTER_GLOBAL("msc.framework.tvm.GetRelaxSources")
     .set_body_typed([](const MSCGraph& graph, const String& codegen_config,
                        const String& print_config) -> Map<String, String> {
       RelaxCodeGen codegen = RelaxCodeGen(graph, codegen_config);
+      codegen.Init();
       return codegen.GetSources(print_config);
     });
 

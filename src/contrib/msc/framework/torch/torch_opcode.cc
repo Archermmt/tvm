@@ -305,8 +305,8 @@ class TorchEmbeddingCodeGen : public TorchOpCode {
   void CodeGenInit() final {
     const auto& weight = node()->WeightAt("weight");
     stack_.op_call()
-        .call_arg(weight->DimAt("W"), "num_embeddings")
-        .call_arg(weight->DimAt("E"), "embedding_dim");
+        .call_arg(weight->DimAt(0), "num_embeddings")
+        .call_arg(weight->DimAt(1), "embedding_dim");
   }
 };
 

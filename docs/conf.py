@@ -423,6 +423,8 @@ examples_dirs = [
     tvm_path.joinpath("vta", "tutorials"),
     # New tutorial structure under docs folder
     tvm_path.joinpath("docs", "get_started", "tutorials"),
+    tvm_path.joinpath("docs", "how_to", "tutorials"),
+    tvm_path.joinpath("docs", "deep_dive", "tensor_ir", "tutorials"),
 ]
 
 gallery_dirs = [
@@ -440,6 +442,8 @@ gallery_dirs = [
     "topic/vta/tutorials",
     # New tutorial structure under docs folder
     "get_started/tutorials/",
+    "how_to/tutorials/",
+    "deep_dive/tensor_ir/tutorials/",
 ]
 
 
@@ -486,7 +490,6 @@ within_subsection_order = {
     "work_with_schedules": [
         "schedule_primitives.py",
         "reduction.py",
-        "intrin_math.py",
         "scan.py",
         "extern_op.py",
         "tensorize.py",

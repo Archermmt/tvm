@@ -57,6 +57,12 @@ const String CodeGenUtils::IdxWeight(const MSCJoint& node, const String& wtype,
 const Array<String> CodeGenUtils::GetPrims(const MSCTensor& tensor,
                                            const Map<String, String>& prims) {
   Array<String> dims;
+  if (tensor->prims.size() == 0) {
+    for (size_t i = 0; i < tensor->Ndim(); i++) {
+      dims.push_back(StringUtils::ToString(tensor->DimAt(i)));
+    }
+    return dims;
+  }
   for (size_t i = 0; i < tensor->Ndim(); i++) {
     const auto& prim = tensor->PrimAt(i);
     dims.push_back(prims.count(prim) ? prims[prim] : prim);

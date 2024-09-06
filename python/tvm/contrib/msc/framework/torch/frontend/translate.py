@@ -102,8 +102,8 @@ def from_torch(
         The weights from the IRModule.
     """
 
-    input_info = normalize_inputs(input_info)
     if via_relax:
+        input_info = normalize_inputs(input_info)
         graph_model, params = torch.fx.symbolic_trace(model), None
         with torch.no_grad():
             relax_mod = from_fx(graph_model, input_info, custom_convert_map=custom_convert_map)

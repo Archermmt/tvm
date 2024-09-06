@@ -154,6 +154,7 @@ TVM_REGISTER_GLOBAL("msc.framework.tensorflow.GetTensorflowSources")
     .set_body_typed([](const MSCGraph& graph, const String& codegen_config,
                        const String& print_config) -> Map<String, String> {
       TensorflowCodeGen codegen = TensorflowCodeGen(graph, codegen_config);
+      codegen.Init();
       return codegen.GetSources(print_config);
     });
 

@@ -19,6 +19,7 @@ import torch
 import torch.nn.functional as F
 from torch import fx
 from torch.nn import Module
+import torchvision
 
 import tvm
 from tvm import relax
@@ -47,6 +48,15 @@ def test_conv1d():
 
         def forward(self, input):
             return self.conv(input)
+
+    class Conv1D1Func(Module):
+        def __init__(self):
+            super().__init__()
+            self.weight = torch.randn(size=[6, 3, 7])
+            self.bias = torch.randn(size=[6])
+
+        def forward(self, input):
+            return torch.nn.functional.conv1d(input, self.weight, self.bias)
 
     @tvm.script.ir_module
     class expected1:
@@ -113,6 +123,10 @@ def test_conv1d():
     binding = {"w1": model.conv.weight.detach().numpy(), "w2": model.conv.bias.detach().numpy()}
     verify_model(model, input_info, binding, expected1)
 
+    model = Conv1D1Func()
+    binding = {"w1": model.weight.detach().numpy(), "w2": model.bias.detach().numpy()}
+    verify_model(model, input_info, binding, expected1)
+
     model = Conv1D2()
     binding = {"w1": model.conv.weight.detach().numpy()}
     verify_model(model, input_info, binding, expected2)
@@ -126,6 +140,15 @@ def test_conv1d_transpose():
 
         def forward(self, input):
             return self.conv(input)
+
+    class ConvTranspose1d1Func(Module):
+        def __init__(self):
+            super().__init__()
+            self.weight = torch.randn(size=[6, 6, 3])
+            self.bias = torch.randn(size=[6])
+
+        def forward(self, input):
+            return torch.nn.functional.conv_transpose1d(input, self.weight, self.bias)
 
     @tvm.script.ir_module
     class expected1:
@@ -190,6 +213,10 @@ def test_conv1d_transpose():
 
     model = ConvTranspose1d1()
     binding = {"w1": model.conv.weight.detach().numpy(), "w2": model.conv.bias.detach().numpy()}
+    verify_model(model, input_info, binding, expected1)
+
+    model = ConvTranspose1d1Func()
+    binding = {"w1": model.weight.detach().numpy(), "w2": model.bias.detach().numpy()}
     verify_model(model, input_info, binding, expected1)
 
     model = ConvTranspose1d2()
@@ -298,6 +325,15 @@ def test_conv2d_transpose():
         def forward(self, input):
             return self.conv(input)
 
+    class ConvTranspose2d1Func(Module):
+        def __init__(self):
+            super().__init__()
+            self.weight = torch.randn(size=[3, 3, 7, 7])
+            self.bias = torch.randn(size=[3])
+
+        def forward(self, input):
+            return torch.nn.functional.conv_transpose2d(input, self.weight, self.bias)
+
     @tvm.script.ir_module
     class expected1:
         @R.function
@@ -363,6 +399,10 @@ def test_conv2d_transpose():
     binding = {"w1": model.conv.weight.detach().numpy(), "w2": model.conv.bias.detach().numpy()}
     verify_model(model, input_info, binding, expected1)
 
+    model = ConvTranspose2d1Func()
+    binding = {"w1": model.weight.detach().numpy(), "w2": model.bias.detach().numpy()}
+    verify_model(model, input_info, binding, expected1)
+
     model = ConvTranspose2d2()
     binding = {"w1": model.conv.weight.detach().numpy()}
     verify_model(model, input_info, binding, expected2)
@@ -376,6 +416,15 @@ def test_conv3d():
 
         def forward(self, input):
             return self.conv(input)
+
+    class Conv3D1Func(Module):
+        def __init__(self):
+            super().__init__()
+            self.weight = torch.randn(size=[6, 3, 7, 7, 7])
+            self.bias = torch.randn(size=[6])
+
+        def forward(self, input):
+            return torch.nn.functional.conv3d(input, self.weight, self.bias)
 
     @tvm.script.ir_module
     class expected1:
@@ -440,6 +489,10 @@ def test_conv3d():
 
     model = Conv3D1()
     binding = {"w1": model.conv.weight.detach().numpy(), "w2": model.conv.bias.detach().numpy()}
+    verify_model(model, input_info, binding, expected1)
+
+    model = Conv3D1Func()
+    binding = {"w1": model.weight.detach().numpy(), "w2": model.bias.detach().numpy()}
     verify_model(model, input_info, binding, expected1)
 
     model = Conv3D2()
@@ -1158,6 +1211,37 @@ def test_dropout():
 
     verify_model(Dropout1(), input_info, {}, expected1)
     verify_model(Dropout2(), input_info, {}, expected1)
+
+
+def test_stochastic_depth():
+    input_info = [([1, 3, 10, 10], "float32")]
+
+    class StochasticDepth1(Module):
+        def __init__(self):
+            super().__init__()
+            self.stochastic_depth = torchvision.ops.StochasticDepth(0.5, mode="row")
+
+        def forward(self, x):
+            return self.stochastic_depth(x)
+
+    class StochasticDepth2(Module):
+        def forward(self, x):
+            return torchvision.ops.stochastic_depth(x, 0.5, mode="row", training=False)
+
+    @tvm.script.ir_module
+    class expected1:
+        @R.function
+        def main(
+            input_1: R.Tensor((1, 3, 10, 10), dtype="float32")
+        ) -> R.Tensor((1, 3, 10, 10), dtype="float32"):
+            # block 0
+            with R.dataflow():
+                gv: R.Tensor((1, 3, 10, 10), dtype="float32") = input_1
+                R.output(gv)
+            return gv
+
+    verify_model(StochasticDepth1(), input_info, {}, expected1)
+    verify_model(StochasticDepth2(), input_info, {}, expected1)
 
 
 def test_layernorm():

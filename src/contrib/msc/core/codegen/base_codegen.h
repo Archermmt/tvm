@@ -158,9 +158,12 @@ class BaseCodeGen {
     while (!scopes_.empty()) {
       scopes_.pop();
     }
+  }
+
+  virtual void Init() {
     // define prims
-    for (const auto& p_name : graph_->prim_names) {
-      prims_.Set(p_name, DescribePrim(graph_->FindPrim(p_name)));
+    for (const auto& p_name : this->graph()->prim_names) {
+      prims_.Set(p_name, this->DescribePrim(this->graph()->FindPrim(p_name)));
     }
   }
 

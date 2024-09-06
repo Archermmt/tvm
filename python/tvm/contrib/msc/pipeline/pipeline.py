@@ -676,8 +676,12 @@ class BasePipeline(object):
             max_batch = config.get("max_batch", 5)
 
             def get_random():
+                def _to_data(inp):
+                    shape = [1 if isinstance(d, str) else d for d in inp[1]]
+                    return np.random.rand(*shape).astype(inp[2])
+
                 for _ in range(max_batch):
-                    yield {i[0]: np.random.rand(*i[1]).astype(i[2]) for i in self._config["inputs"]}
+                    yield {i[0]: _to_data(i) for i in self._config["inputs"]}
 
             loader, source_type = get_random, "random"
         elif isinstance(source_loader, dict):

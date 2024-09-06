@@ -37,7 +37,7 @@ def _get_config(model_type, compile_type, inputs, outputs, dynamic=False, atol=1
 
     path = "test_pipe_{}_{}_{}".format(model_type, compile_type, "dynamic" if dynamic else "static")
     return {
-        "workspace": msc_utils.msc_dir(path),
+        "workspace": msc_utils.msc_dir(path, keep_history=False),
         "verbose": "critical",
         "model_type": model_type,
         "inputs": inputs,
@@ -125,7 +125,7 @@ def _test_from_torch(
         config = _get_config(
             MSCFramework.TORCH,
             compile_type,
-            inputs=[["input_0", ["bz" if dynamic else 1, 3, 224, 224], "float32"]],
+            inputs=[["input_0", [1, 3, 224, 224], "float32"]],
             outputs=["output"],
             dynamic=dynamic,
             atol=atol,
@@ -161,7 +161,7 @@ def test_tvm_pipeline(dynamic):
         "inputs": [
             {"name": "input_0", "shape": [1, 3, 224, 224], "dtype": "float32", "layout": "NCHW"}
         ],
-        "outputs": [{"name": "output", "shape": [1, 1000], "dtype": "float32", "layout": "NC"}],
+        "outputs": [{"name": "output", "shape": [1, 1000], "dtype": "float32", "layout": "NW"}],
         "nodes": {
             "total": 229,
             "input": 1,
@@ -217,7 +217,7 @@ def test_torch_pipeline(dynamic):
         "inputs": [
             {"name": "input_0", "shape": [1, 3, 224, 224], "dtype": "float32", "layout": "NCHW"}
         ],
-        "outputs": [{"name": "output", "shape": [1, 1000], "dtype": "float32", "layout": "NC"}],
+        "outputs": [{"name": "output", "shape": [1, 1000], "dtype": "float32", "layout": "NW"}],
         "nodes": {
             "total": 229,
             "input": 1,
