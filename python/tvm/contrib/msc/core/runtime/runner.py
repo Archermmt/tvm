@@ -54,6 +54,8 @@ class BaseRunner(object):
         The config for build runnable.
     device: str
         The device to build runnable.
+    dtype: str
+        The date type for the model.
     training: bool
         Whether compile model to trainable.
     stage: str
@@ -76,6 +78,7 @@ class BaseRunner(object):
         generate_config: Optional[Dict[str, str]] = None,
         build_config: Optional[Dict[str, str]] = None,
         device: str = "cpu",
+        dtype: str = "float32",
         training: bool = False,
         stage: str = "default",
         plugin: Any = None,
@@ -95,6 +98,7 @@ class BaseRunner(object):
         self._generate_config = msc_utils.copy_dict(generate_config)
         self._build_config = msc_utils.copy_dict(build_config)
         self._device = device if self.support_device(device) else "cpu"
+        self._dtype = dtype
         self._stage = stage
         self._plugin = plugin
         self._name = name
@@ -127,6 +131,7 @@ class BaseRunner(object):
             "generate_config": self._generate_config,
             "build_config": self._build_config,
             "device": self._device,
+            "dtype": self._dtype,
             "name": self._name,
             "debug_level": self._debug_level,
         }
@@ -271,8 +276,8 @@ class BaseRunner(object):
         if not self._runnable:
             self._runnable = self.build_runnable()
             build_msg += "Build "
-        build_msg += "runnable({}, {}) on {}".format(
-            self.framework, "train" if self._training else "eval", self._device
+        build_msg += "runnable({}, {}, {}) on {}".format(
+            self.framework, "train" if self._training else "eval", self._dtype, self._device
         )
         self._logger.info(self.runner_mark(build_msg))
         return self._runnable
