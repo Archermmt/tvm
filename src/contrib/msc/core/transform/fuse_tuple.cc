@@ -133,6 +133,10 @@ class TupleFuser : public ExprMutator {
     Array<Var> params;
     Map<Expr, Var> added_params;
     for (size_t i = 0; i < inputs.size(); i++) {
+      if (inputs[i]->IsInstance<ConstantNode>()) {
+        func_inputs.push_back(inputs[i]);
+        continue;
+      }
       if (!added_params.count(inputs[i])) {
         const auto& name = String("param_" + std::to_string(i));
         const auto& var = Var(std::move(name), GetStructInfo(inputs[i]));
@@ -145,11 +149,15 @@ class TupleFuser : public ExprMutator {
 
     Expr out_expr;
     String func_name;
+    Span expr_span = expr->span;
+    if (!expr_span.defined()) {
+      expr_span = SpanUtils::CreateWithAttr(msc_attr::kName, "tuple_test");
+    }
     if (expr->IsInstance<TupleNode>()) {
-      out_expr = Tuple(func_inputs, expr->span);
+      out_expr = Tuple(func_inputs, expr_span);
       func_name = "tuple";
     } else if (const auto* g_node = expr.as<TupleGetItemNode>()) {
-      out_expr = TupleGetItem(func_inputs[0], g_node->index, expr->span);
+      out_expr = TupleGetItem(func_inputs[0], g_node->index, expr_span);
       func_name = "get_item";
     } else {
       LOG_FATAL << "Unexpceted expr " << expr;
@@ -163,7 +171,7 @@ class TupleFuser : public ExprMutator {
     Map<String, ObjectRef> func_attrs;
     func_attrs.Set(attr::kPrimitive, Integer(1));
     func_attrs.Set(attr::kComposite, target_ + func_name);
-    func_attrs.Set(msc_attr::kUnique, SpanUtils::GetAttr(expr->span, msc_attr::kName));
+    func_attrs.Set(msc_attr::kUnique, SpanUtils::GetAttr(expr_span, msc_attr::kName));
 
     Function function = Function(/*params=*/params,            //
                                  /*body=*/body,                //

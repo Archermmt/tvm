@@ -893,5 +893,28 @@ def test_gelu():
     verify_model(Gelu2(), input_info)
 
 
+def test_concat():
+    """test tensorrt translator for concat"""
+
+    class Concat1(Module):
+        def forward(self, data, data1, data2):
+            return torch.cat((data, data1, data2), dim=1)
+
+    class Concat2(Module):
+        def forward(self, data):
+            const1 = torch.ones((1, 3, 10, 10), dtype=torch.float32)
+            const2 = torch.ones((1, 3, 10, 10), dtype=torch.float32)
+            return torch.cat((data, const1, const2), axis=1)
+
+    input_info = [
+        ([1, 3, 10, 10], "float32"),
+        ([1, 3, 10, 10], "float32"),
+        ([1, 3, 10, 10], "float32"),
+    ]
+    # verify_model(Concat1(), input_info)
+    verify_model(Concat2(), [([1, 3, 10, 10], "float32")])
+
+
 if __name__ == "__main__":
-    tvm.testing.main()
+    # tvm.testing.main()
+    test_concat()
