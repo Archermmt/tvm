@@ -119,7 +119,7 @@ def set_global_logger(level: Union[str, int] = logging.INFO, path: str = None) -
     """
 
     logger = create_file_logger(level, path)
-    MSCMap.set(MSCKey.GLOBALE_LOGGER, logger)
+    MSCMap.set(MSCKey.GLOBAL_LOGGER, logger)
     return logger
 
 
@@ -132,9 +132,9 @@ def get_global_logger() -> logging.Logger:
         The logger.
     """
 
-    if not MSCMap.get(MSCKey.GLOBALE_LOGGER):
-        MSCMap.set(MSCKey.GLOBALE_LOGGER, IOLogger())
-    return MSCMap.get(MSCKey.GLOBALE_LOGGER)
+    if not MSCMap.get(MSCKey.GLOBAL_LOGGER):
+        MSCMap.set(MSCKey.GLOBAL_LOGGER, IOLogger())
+    return MSCMap.get(MSCKey.GLOBAL_LOGGER)
 
 
 def get_log_file(logger: logging.Logger) -> str:
@@ -160,7 +160,7 @@ def get_log_file(logger: logging.Logger) -> str:
 def remove_loggers():
     """Remove the logger handlers"""
 
-    logger = MSCMap.get(MSCKey.GLOBALE_LOGGER)
+    logger = MSCMap.get(MSCKey.GLOBAL_LOGGER)
     if logger:
         logger.handlers.clear()
 

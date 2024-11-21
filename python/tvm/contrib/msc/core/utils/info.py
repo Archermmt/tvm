@@ -123,7 +123,7 @@ class MSCArray(object):
             return tvm.nd.array(self._cast_data(), device=self.get_device(device))
         return self._meta_data
 
-    def cast(self, framework: str, device: str = "cpu") -> Any:
+    def cast(self, framework: str = MSCFramework.MSC, device: str = "cpu") -> Any:
         """Cast array like object to array like object
 
         Parameters

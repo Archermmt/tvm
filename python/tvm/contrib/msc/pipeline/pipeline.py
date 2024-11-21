@@ -92,7 +92,7 @@ class BasePipeline(object):
             self._workspace = msc_utils.set_workspace("msc_workspace", use_cache)
         if "logger" in self._config:
             self._logger = self._config.pop("logger")
-            MSCMap.set(MSCKey.GLOBALE_LOGGER, self._logger)
+            MSCMap.set(MSCKey.GLOBAL_LOGGER, self._logger)
         else:
             if "log_file" in self._config:
                 log_file = self._config.pop("log_file")

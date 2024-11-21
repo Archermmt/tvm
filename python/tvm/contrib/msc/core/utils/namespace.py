@@ -57,7 +57,7 @@ class MSCKey:
 
     WORKSPACE = "workspace"
     VERBOSE = "verbose"
-    GLOBALE_LOGGER = "global_logger"
+    GLOBAL_LOGGER = "global_logger"
     MSC_STAGE = "msc_stage"
     TIME_STAMPS = "time_stamps"
 
@@ -69,6 +69,9 @@ class MSCKey:
     FUSED_CNT = "fused_cnt"
     ROOT_MARK = "$<root>"
 
+    GLOBAL_TRACER = "tracer"
+    TRACE_PARSERS = "trace_parsers"
+
 
 class MSCFramework:
     """Framework type for the MSC"""
@@ -78,3 +81,4 @@ class MSCFramework:
     TORCH = "torch"
     TENSORFLOW = "tensorflow"
     TENSORRT = "tensorrt"
+    NUMPY = "numpy"
