@@ -81,4 +81,3 @@ class MSCFramework:
     TORCH = "torch"
     TENSORFLOW = "tensorflow"
     TENSORRT = "tensorrt"
-    NUMPY = "numpy"

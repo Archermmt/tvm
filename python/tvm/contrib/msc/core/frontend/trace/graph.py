@@ -96,6 +96,36 @@ class TracedTensor(object):
         node = trace_node("truediv", [self, other], [output])
         return node.output_at(0)
 
+    def __pow__(self, other):
+        output = self._data.__pow__(self.to_data(other))
+        node = trace_node("pow", [self, other], [output])
+        return node.output_at(0)
+
+    def __eq__(self, other):
+        output = self._data.__eq__(self.to_data(other))
+        node = trace_node("eq", [self, other], [output])
+        return node.output_at(0)
+
+    def __le__(self, other):
+        output = self._data.__le__(self.to_data(other))
+        node = trace_node("le", [self, other], [output])
+        return node.output_at(0)
+
+    def __lt__(self, other):
+        output = self._data.__lt__(self.to_data(other))
+        node = trace_node("lt", [self, other], [output])
+        return node.output_at(0)
+
+    def __ge__(self, other):
+        output = self._data.__ge__(self.to_data(other))
+        node = trace_node("ge", [self, other], [output])
+        return node.output_at(0)
+
+    def __gt__(self, other):
+        output = self._data.__gt__(self.to_data(other))
+        node = trace_node("gt", [self, other], [output])
+        return node.output_at(0)
+
     def set_alias(self, alias: str):
         """Set alias for the tensor
 
@@ -209,16 +239,16 @@ class TracedNode(object):
         name: str,
         scope: str,
         optype: str,
-        attrs: Dict[str, Any],
         inputs: List[Tuple["TracedNode", int]],
         outputs: List[TracedTensor],
+        attrs: Dict[str, Any] = None,
         meta: Any = None,
     ):
         self._index = index
         self._name = name
         self._scope = scope
         self._optype = optype
-        self._attrs = attrs
+        self._attrs = attrs or {}
         self._inputs = []
         self._outputs = outputs
         self._parents = []
@@ -360,6 +390,43 @@ class TracedNode(object):
 
         return self._outputs
 
+    def get_attr(self, key: str, default: Any = None) -> Any:
+        """Get the attr by key
+
+        Parameters
+        ----------
+        key: str
+            The attr key.
+        default:
+            The default value.
+
+        Returns
+        -------
+        attr:
+            The attr value.
+        """
+
+        return self._attrs.get(key, default)
+
+    def infer_framework(self) -> str:
+        """Inference the framework of node
+
+        Returns
+        -------
+        framework: str
+            The framework of the node.
+        """
+
+        framework = None
+        for i in self.get_inputs() + self.get_outputs():
+            if not i.framework:
+                continue
+            if not framework:
+                framework = i.framework
+            assert framework == i.framework, "Find different frameworks of inputs: " + str(self)
+        assert framework, "Can not infer framework of " + str(self)
+        return framework
+
     @property
     def name(self):
         return self._name
@@ -462,7 +529,24 @@ class TracedGraph(object):
                 v_inputs.append((self.find_node(p_name), int(o_idx)))
             else:
                 c_attrs = {"scalar": i_data} if isinstance(i_data, (int, float)) else None
-                c_node = self.add_node("constant", [], [i_data], attrs=c_attrs)
+                kwargs = {"obj": i_data}
+                for i in inputs:
+                    if msc_utils.is_array(i):
+                        i_array = msc_utils.MSCArray(i_data)
+                        kwargs.update(
+                            {
+                                "dtype": i_array.cast().dtype.name,
+                                "device": i_array.device,
+                                "framework": i_array.framework,
+                            }
+                        )
+                        break
+                    elif isinstance(i, TracedTensor):
+                        kwargs.update(
+                            {"dtype": i.dtype, "device": i.device, "framework": i.framework}
+                        )
+                        break
+                c_node = self.add_node("constant", [], [kwargs], attrs=c_attrs)
                 v_inputs.append((c_node, 0))
         name = name or "node_" + str(len(self._nodes))
         for idx, o_data in enumerate(outputs):
@@ -471,7 +555,7 @@ class TracedGraph(object):
             o_data["name"] = "{}:{}".format(name, idx)
             v_outputs.append(TracedTensor.to_tensor(**o_data))
         node = TracedNode(
-            len(self._nodes), name, self._current_scope, optype, attrs, v_inputs, v_outputs, meta
+            len(self._nodes), name, self._current_scope, optype, v_inputs, v_outputs, attrs, meta
         )
         self._nodes[name] = node
         self._node_names.append(name)

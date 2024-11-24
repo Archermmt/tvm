@@ -20,8 +20,12 @@ import logging
 from functools import wraps
 
 import tvm
-from .graph import *
+from tvm import relax
+from tvm.contrib.msc.core.frontend import normalize_inputs
+from tvm.contrib.msc.core.utils.message import MSCStage, MSCMap, MSCKey
 from .utils import set_global_tracer, get_global_tracer
+from .msc_trace_parser import *
+from .graph import *
 
 
 class Tracer(object):
@@ -29,8 +33,10 @@ class Tracer(object):
 
     Parameters
     ----------
-    tag: str
-        The tag for trace.
+    dataset: str
+        The dataset folder.
+    workspace: str
+        The workspace
     use_cache: bool
         Whether to use cache for trace.
     inputs: list<tuple>
@@ -39,42 +45,49 @@ class Tracer(object):
         The output names.
     scopes: dict
         The config for each scope.
-    debug_level: int
-        The debug level.
+    verbose: str
+        The verbose level.
     logger: logging.Logger
         The logger.
     """
 
     def __init__(
         self,
-        dataset: str = "traced_datas",
+        dataset: str = "trace_datas",
+        workspace: str = "trace_workspace",
         use_cache: bool = False,
         inputs: List[tuple] = None,
         outputs: List[str] = None,
         scopes: Dict[str, dict] = None,
-        debug_level: int = 0,
+        verbose: str = "info",
         logger: logging.Logger = None,
     ):
-        self._dataset, self._savers = msc_utils.msc_dir(dataset), {}
+        self._dataset = msc_utils.msc_dir(dataset, keep_history=use_cache)
+        self._workspace = msc_utils.msc_dir(workspace, keep_history=use_cache)
         self._use_cache = use_cache
         self._inputs = inputs or []
         self._outputs = outputs or []
         self._scopes = scopes or {}
-        self._debug_level = debug_level
-        self._logger = logger or msc_utils.get_global_logger()
-        self._parsers = {}
-        self._graph = None
+        self._verbose = verbose
+        self._logger = logger
+        if not self._logger:
+            self._logger = msc_utils.create_file_logger(
+                verbose, self._workspace.relpath("TRACER_LOG")
+            )
         self._logger.info(msc_utils.msg_block(self.mark("SETUP"), self.setup()))
 
     def setup(self) -> dict:
         """Setup the tracer"""
 
+        self._graph = None
+        self._savers = {}
+        self._parsers = {}
         return {
             "dataset": self._dataset,
             "inputs": self._inputs,
             "outputs": self._outputs,
             "scopes": self._scopes,
-            "debug_level": self._debug_level,
+            "verbose": self._verbose,
             "use_cache": self._use_cache,
         }
 
@@ -152,26 +165,48 @@ class Tracer(object):
 
         Returns
         -------
-        models: list<dict>
-            The model configs for msc.
+        groups: list<dict>
+            The group configs for msc.
         """
 
-        print("has graph " + str(self._graph))
+        datas_info = {}
         for name, saver in self._savers.items():
             saver.finalize()
-            self._logger.info(msc_utils.msg_block(self.mark("Datas({})".format(name)), saver.info))
+            datas_info[name] = saver.info
         info = self._graph.group_up()
-        model_configs = {k: v for k, v in info.items() if k in ["inputs", "outputs"]}
-        model_configs["groups"] = [
+        g_info = msc_utils.copy_dict(info)
+
+        def _node_des(n_name):
+            node = self._graph.find_node(n_name)
+            inputs = node.get_inputs()
+            des = "{}({})".format(n_name, node.optype)
+            if inputs:
+                des = ";".join([i.name for i in inputs]) + " -> " + des
+            return des
+
+        for g in g_info["groups"]:
+            g["nodes"] = [_node_des(n) for n in g["nodes"]]
+        self._logger.info(msc_utils.msg_block(self.mark("Datas"), datas_info))
+        self._logger.info(msc_utils.msg_block(self.mark("Groups"), g_info))
+        group_configs = {k: v for k, v in info.items() if k in ["inputs", "outputs"]}
+        group_configs["groups"] = [
             {
                 "name": g["name"],
                 "inputs": g["inputs"],
                 "outputs": g["outputs"],
-                "model": self._dump_group(g),
+                "group": self._dump_group(g),
             }
             for g in info["groups"]
         ]
-        return model_configs
+        if not self._use_cache:
+            self._workspace.destory()
+        return group_configs
+
+    def destory(self):
+        """Clean up the tracer"""
+
+        self._dataset.destory()
+        self._workspace.destory()
 
     def _save_datas(self, group: dict):
         """Save datas for groups
@@ -192,7 +227,7 @@ class Tracer(object):
         saver.save_batch(in_datas, out_datas)
 
     def _dump_group(self, group: dict) -> dict:
-        """Dump model info
+        """Dump group info
 
         Parameters
         ----------
@@ -201,8 +236,8 @@ class Tracer(object):
 
         Returns
         -------
-        model: dict
-            The model info.
+        group: dict
+            The group info.
         """
 
         s_config = self._scopes.get(group["name"], {})
@@ -218,22 +253,45 @@ class Tracer(object):
             outputs = [self._graph.find_tensor(o).name for o in group["outputs"]]
         model, model_ref = None, s_config.get("model_ref")
         if model_ref is None:
-            model = self._parse_model(group)
+            model, model_type = self._parse_model(group, inputs), MSCFramework.TVM
         elif isinstance(model_ref, int):
             node = self._graph.find_node(group["nodes"][model_ref])
             assert node.optype == "model" and node.meta, "Can not get model from node " + str(node)
-            model = node.meta
+            model, model_type = node.meta, node.infer_framework()
         else:
             raise Exception("Unexpected model_ref " + str(model_ref))
-        return {"inputs": inputs, "outputs": outputs, "model": model}
+        saver = self._savers.get(group["name"])
+        assert saver, "Can not find saver for {}, please trace before dump".format(group["name"])
+        flavor = s_config.get("flavor", MSCFramework.MSC)
+        if flavor == MSCFramework.MSC:
+            return {
+                "model": model,
+                "config": {
+                    "verbose": self._verbose,
+                    "workspace": "{}_workspace".format(group["name"]),
+                    "inputs": inputs,
+                    "outputs": outputs,
+                    "model_type": model_type,
+                    "dataset": {MSCStage.PREPARE: {"loader": saver.folder}},
+                },
+            }
+        return {
+            "inputs": inputs,
+            "outputs": outputs,
+            "model_type": model_type,
+            "dataset": saver.folder,
+            "model": model,
+        }
 
-    def _parse_model(self, group: dict) -> tvm.IRModule:
+    def _parse_model(self, group: dict, inputs: List[tuple]) -> tvm.IRModule:
         """Parse the model from nodes
 
         Parameters
         ----------
         group: dict
             The group info.
+        inputs: list
+            The inputs info.
 
         Returns
         -------
@@ -241,7 +299,51 @@ class Tracer(object):
             The parsed module.
         """
 
-        return None
+        s_config = self._scopes.get(group["name"], {})
+        self.env = {}
+        m_inputs, inputs = [], normalize_inputs(inputs)
+        for idx, i_info in enumerate(inputs):
+            if len(i_info) == 3:
+                i_info = {"shape": i_info[1], "dtype": i_info[2]}
+            elif len(i_info) == 2:
+                i_info = {"shape": i_info[0], "dtype": i_info[1]}
+            elif len(i_info) == 1:
+                i_info = {"shape": i_info[0], "dtype": "float32"}
+            else:
+                raise Exception("Unexpected i_info " + str(i_info))
+            var = relax.Var(
+                "inp_" + str(idx), relax.TensorStructInfo(i_info["shape"], i_info["dtype"])
+            )
+            m_inputs.append(var)
+            self.env[group["inputs"][idx]] = var
+
+        self.block_builder = relax.BlockBuilder()
+        with self.block_builder.function(name="main", params=m_inputs, attrs=s_config.get("attrs")):
+            for n_name in group["nodes"]:
+                node = self._graph.find_node(n_name)
+                framework = node.infer_framework()
+                if framework not in self._parsers:
+                    parser = msc_utils.get_registered_trace_parser(framework)
+                    assert parser, "Can not find parser for " + str(framework)
+                    self._parsers[framework] = parser(
+                        self, s_config, verbose=self._verbose, logger=self._logger
+                    )
+                result = self._parsers[framework].convert(node)
+                outputs = node.get_outputs()
+                if len(outputs) == 1 and not node.get_attr("multi_outputs", False):
+                    self.env[outputs[0].name] = result
+                else:
+                    for idx, out in enumerate(outputs):
+                        self.env[out.name] = result[idx]
+            m_outputs = []
+            for o in group["outputs"]:
+                assert o in self.env, "Missing output {} in env".format(o)
+                m_outputs.append(self.env[o])
+            if len(m_outputs) == 1:
+                self.block_builder.emit_func_output(m_outputs[0])
+            else:
+                self.block_builder.emit_func_output(relax.Tuple(m_outputs))
+        return self.block_builder.get()
 
     def mark(self, msg: Any) -> str:
         """Mark the message with tracer info
@@ -320,3 +422,21 @@ def dump_traced() -> List[dict]:
     tracer = get_global_tracer()
     assert tracer, "Missing tracer for dump"
     return tracer.dump()
+
+
+def enable_trace_numpy():
+    """Enable tracing numpy"""
+
+    raise NotImplementedError("enable_trace_numpy is not implmented")
+
+
+def enable_trace_pil():
+    """Enable tracing PIL"""
+
+    raise NotImplementedError("enable_trace_pil is not implmented")
+
+
+def enable_trace_opencv():
+    """Enable tracing OpenCV"""
+
+    raise NotImplementedError("enable_trace_opencv is not implmented")

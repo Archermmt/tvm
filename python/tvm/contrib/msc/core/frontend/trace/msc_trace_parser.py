@@ -14,36 +14,15 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""tvm.contrib.msc.core.frontend.trace.numpy_parser"""
+"""tvm.contrib.msc.core.frontend.trace.msc_trace_parser"""
 
-from tvm.contrib.msc.core.utils.namespace import MSCFramework, MSCMap, MSCKey
+from tvm.contrib.msc.core.utils.namespace import MSCFramework
+from tvm.contrib.msc.core import utils as msc_utils
+from .base_trace_parser import BaseTraceParser
 
 
-class TraceParser(object):
-    """Parser for tracing"""
-
-    def __init__(self):
-        self._convert_map = self.setup()
-
-    def setup(self):
-        """Setup the tracer"""
-
-        return {}
-
+@msc_utils.register_trace_parser
+class MSCTraceParser(BaseTraceParser):
     @classmethod
     def framework(cls):
         return MSCFramework.MSC
-
-
-class NumpyTraceParser(TraceParser):
-    @classmethod
-    def framework(cls):
-        return MSCFramework.NUMPY
-
-
-def enable_trace_numpy():
-    """Enable tracing numpy"""
-
-    parsers = MSCMap.get(MSCKey.TRACE_PARSERS, {})
-    parsers[MSCFramework.NUMPY] = NumpyTraceParser()
-    MSCMap.set(MSCKey.TRACE_PARSERS, parsers)
