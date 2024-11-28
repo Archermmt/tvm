@@ -34,6 +34,7 @@ class MSCRegistery:
     GYM_METHODS = "gym_agents_method"
     RUNNER_HOOKS = "runner_hooks"
     TRACE_PARSERS = "trace_parsers"
+    TRACE_FUNCS = "trace_funcs"
 
     @classmethod
     def register(cls, key: str, value: Any):
@@ -414,9 +415,9 @@ def register_trace_parser(parser: Any):
 
     for key in ["framework"]:
         assert hasattr(parser, key), "{} should be given to register parser".format(key)
-    parsers_classes = MSCRegistery.get(MSCRegistery.TRACE_PARSERS, {})
-    parsers_classes[parser.framework()] = parser
-    MSCRegistery.register(MSCRegistery.TRACE_PARSERS, parsers_classes)
+    parser_classes = MSCRegistery.get(MSCRegistery.TRACE_PARSERS, {})
+    parser_classes[parser.framework()] = parser
+    MSCRegistery.register(MSCRegistery.TRACE_PARSERS, parser_classes)
     return parser
 
 
@@ -434,5 +435,5 @@ def get_registered_trace_parser(framework: str) -> Any:
         The registered parser class.
     """
 
-    parsers_classes = MSCRegistery.get(MSCRegistery.TRACE_PARSERS, {})
-    return parsers_classes.get(framework)
+    parser_classes = MSCRegistery.get(MSCRegistery.TRACE_PARSERS, {})
+    return parser_classes.get(framework)

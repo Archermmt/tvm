@@ -85,7 +85,7 @@ class BasePipeline(object):
         for stage in [MSCStage.PREPARE, MSCStage.PARSE, MSCStage.EXPORT]:
             self._config.setdefault(stage, {})
         self._verbose = self._config.get("verbose", "info")
-        use_cache = self._config.get("use_cache", True)
+        use_cache = self._config.get("use_cache", False)
         if "workspace" in self._config:
             self._workspace = msc_utils.set_workspace(self._config.pop("workspace"), use_cache)
         else:

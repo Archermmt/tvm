@@ -331,7 +331,8 @@ def compare_arrays(
     report = {"total": 0, "passed": 0, "info": {}}
 
     def _add_report(name: str, gol: Any, data: Any, passed: bool):
-        diff = MSCArray(gol - data)
+        diff = gol.astype("float32") - data.astype("float32")
+        diff = MSCArray(diff.astype(gol.dtype))
         if passed:
             if report_detail:
                 report["info"][name] = {
@@ -365,7 +366,11 @@ def compare_arrays(
             )
             continue
         if gol.dtype.name in ("int32", "int64"):
-            passed = np.abs(gol - data), max() == 0
+            passed = np.abs(gol - data).max() == 0
+            _add_report(name, gol, data, passed)
+            continue
+        if gol.dtype.name == "bool":
+            passed = (gol != data).max() == 0
             _add_report(name, gol, data, passed)
             continue
         try:

@@ -106,6 +106,11 @@ class TracedTensor(object):
         node = trace_node("eq", [self, other], [output])
         return node.output_at(0)
 
+    def __ne__(self, other):
+        output = self._data.__ne__(self.to_data(other))
+        node = trace_node("ne", [self, other], [output])
+        return node.output_at(0)
+
     def __le__(self, other):
         output = self._data.__le__(self.to_data(other))
         node = trace_node("le", [self, other], [output])
@@ -124,6 +129,29 @@ class TracedTensor(object):
     def __gt__(self, other):
         output = self._data.__gt__(self.to_data(other))
         node = trace_node("gt", [self, other], [output])
+        return node.output_at(0)
+
+    def _get_slice(self, slice_obj):
+        inputs = []
+        if isinstance(slice_obj, tuple):
+            v_slice = tuple([self.to_data(s) for s in slice_obj])
+            inputs.extend(k for k in slice_obj if isinstance(k, TracedTensor))
+        else:
+            v_slice = self.to_data(slice_obj)
+            if isinstance(slice_obj, TracedTensor):
+                inputs.append(slice_obj)
+        return v_slice, inputs
+
+    def __getitem__(self, key):
+        v_key, inputs = self._get_slice(key)
+        output = self._data.__getitem__(v_key)
+        node = trace_node("getitem", [self] + inputs, [output], attrs={"slice": key})
+        return node.output_at(0)
+
+    def __setitem__(self, key, value):
+        v_key, inputs = self._get_slice(key)
+        self._data.__setitem__(v_key, self.to_data(value))
+        node = trace_node("setitem", [self, value] + inputs, [self._data], attrs={"slice": key})
         return node.output_at(0)
 
     def set_alias(self, alias: str):
@@ -596,13 +624,15 @@ class TracedGraph(object):
             for n in self._scopes[name]:
                 node = self.find_node(n)
                 for i in node.get_inputs():
-                    if self.find_producer(i).name not in nodes_set:
+                    if self.find_producer(i).name not in nodes_set and i.name not in g_inputs:
                         g_inputs.append(i.name)
                 for o in node.get_outputs():
                     consumers = self.find_consumers(o)
-                    if not consumers:
+                    if not consumers and o.name not in g_outputs:
                         g_outputs.append(o.name)
-                    elif any(c.name not in nodes_set for c in consumers):
+                    elif (
+                        any(c.name not in nodes_set for c in consumers) and o.name not in g_outputs
+                    ):
                         g_outputs.append(o.name)
             group = {
                 "name": name,

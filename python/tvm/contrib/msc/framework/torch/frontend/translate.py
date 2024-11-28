@@ -135,6 +135,7 @@ def from_torch(
         relax_mod = relay_to_relax(
             relay_mod, params, trans_config, build_config, opt_config, build_folder=build_folder
         )
+        print("relax_mod " + str(relax_mod))
     if not as_msc:
         return relax_mod, params
     graph, weights = from_relax(relax_mod, trans_config=trans_config, build_config=build_config)

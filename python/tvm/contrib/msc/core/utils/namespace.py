@@ -70,7 +70,6 @@ class MSCKey:
     ROOT_MARK = "$<root>"
 
     GLOBAL_TRACER = "tracer"
-    TRACE_PARSERS = "trace_parsers"
 
 
 class MSCFramework:
