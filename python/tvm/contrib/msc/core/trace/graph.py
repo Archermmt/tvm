@@ -16,8 +16,10 @@
 # under the License.
 """tvm.contrib.msc.core.frontend.trace.graph"""
 
-from typing import List, Any, Dict, Tuple, Iterable
-from tvm.contrib.msc.core.utils.namespace import MSCFramework
+from functools import partial
+from typing import List, Any, Dict, Tuple, Iterable, Union
+import numpy as np
+
 from tvm.contrib.msc.core import utils as msc_utils
 from .utils import trace_node
 
@@ -37,13 +39,15 @@ class TracedTensor(object):
         The layout of the tensor.
     device: str
         The device of tensor.
-    framework: str
-        The framework of the tensor.
+    module: str
+        The module name of the tensor.
     data:
         The data of the tensor.
     alias: str
         The alias.
     """
+
+    traced_attrs = {}
 
     def __init__(
         self,
@@ -51,7 +55,7 @@ class TracedTensor(object):
         shape: List[int],
         dtype: str,
         device: str = None,
-        framework: str = None,
+        module: str = None,
         layout: str = None,
         data: Any = None,
         alias: str = None,
@@ -60,7 +64,7 @@ class TracedTensor(object):
         self._shape = shape
         self._dtype = dtype
         self._device = device
-        self._framework = framework
+        self._module = module
         self._layout = layout
         self._data = data
         self._alias = alias
@@ -72,66 +76,87 @@ class TracedTensor(object):
             ";".join([str(s) for s in self._shape]) if self._shape else "()",
             self._dtype,
             "" if not self._layout else "," + self._layout,
-            self._framework or "any",
+            self._module or "any",
             self._device or "any",
         )
 
+    def __getattr__(self, name):
+        if name in self.traced_attrs:
+            return partial(self._traced_attr, attr_name=name)
+        if hasattr(self._data, name):
+            return getattr(self._data, name)
+        raise Exception("Can not find attribute {} form data {}".format(name, self._data))
+
     def __add__(self, other):
         output = self._data.__add__(self.to_data(other))
-        node = trace_node("add", [self, other], [output])
-        return node.output_at(0)
+        return self._trace_operator("add", [self, other], [output])
 
     def __sub__(self, other):
         output = self._data.__sub__(self.to_data(other))
-        node = trace_node("sub", [self, other], [output])
-        return node.output_at(0)
+        return self._trace_operator("sub", [self, other], [output])
 
     def __mul__(self, other):
         output = self._data.__mul__(self.to_data(other))
-        node = trace_node("mul", [self, other], [output])
-        return node.output_at(0)
+        return self._trace_operator("mul", [self, other], [output])
 
     def __truediv__(self, other):
         output = self._data.__truediv__(self.to_data(other))
-        node = trace_node("truediv", [self, other], [output])
-        return node.output_at(0)
+        return self._trace_operator("truediv", [self, other], [output])
 
     def __pow__(self, other):
         output = self._data.__pow__(self.to_data(other))
-        node = trace_node("pow", [self, other], [output])
-        return node.output_at(0)
+        return self._trace_operator("pow", [self, other], [output])
 
     def __eq__(self, other):
         output = self._data.__eq__(self.to_data(other))
-        node = trace_node("eq", [self, other], [output])
-        return node.output_at(0)
+        return self._trace_operator("eq", [self, other], [output])
 
     def __ne__(self, other):
         output = self._data.__ne__(self.to_data(other))
-        node = trace_node("ne", [self, other], [output])
-        return node.output_at(0)
+        return self._trace_operator("ne", [self, other], [output])
 
     def __le__(self, other):
         output = self._data.__le__(self.to_data(other))
-        node = trace_node("le", [self, other], [output])
-        return node.output_at(0)
+        return self._trace_operator("le", [self, other], [output])
 
     def __lt__(self, other):
         output = self._data.__lt__(self.to_data(other))
-        node = trace_node("lt", [self, other], [output])
-        return node.output_at(0)
+        return self._trace_operator("lt", [self, other], [output])
 
     def __ge__(self, other):
         output = self._data.__ge__(self.to_data(other))
-        node = trace_node("ge", [self, other], [output])
-        return node.output_at(0)
+        return self._trace_operator("ge", [self, other], [output])
 
     def __gt__(self, other):
         output = self._data.__gt__(self.to_data(other))
-        node = trace_node("gt", [self, other], [output])
-        return node.output_at(0)
+        return self._trace_operator("gt", [self, other], [output])
 
-    def _get_slice(self, slice_obj):
+    def __getitem__(self, key):
+        v_key, inputs = self._get_slice(key)
+        output = self._data.__getitem__(v_key)
+        return self._trace_operator("getitem", [self] + inputs, [output], {"slice": key})
+
+    def __setitem__(self, key, value):
+        v_key, inputs = self._get_slice(key)
+        self._data.__setitem__(v_key, self.to_data(value))
+        return self._trace_operator("setitem", [self, value] + inputs, [self._data], {"slice": key})
+
+    def _get_slice(self, slice_obj: List[Any]) -> Tuple[List[Any], List["TracedTensor"]]:
+        """Get the slice attribute
+
+        Parameters
+        ----------
+        slice_obj:
+            The slice attribute.
+
+        Returns
+        -------
+        slice: int
+            The valid slice.
+        inputs: list<TracedTensor>
+            The inputs tensors.
+        """
+
         inputs = []
         if isinstance(slice_obj, tuple):
             v_slice = tuple([self.to_data(s) for s in slice_obj])
@@ -142,16 +167,41 @@ class TracedTensor(object):
                 inputs.append(slice_obj)
         return v_slice, inputs
 
-    def __getitem__(self, key):
-        v_key, inputs = self._get_slice(key)
-        output = self._data.__getitem__(v_key)
-        node = trace_node("getitem", [self] + inputs, [output], attrs={"slice": key})
-        return node.output_at(0)
+    def _traced_attr(self, *args, attr_name: str = None, **kwargs):
+        assert attr_name in self.traced_attrs, "Can not find attr {} in traced_attrs".format(
+            attr_name
+        )
+        for info in self.traced_attrs[attr_name]:
+            if info["checker"](*args, **kwargs):
+                return info["func"](self, *args, **kwargs)
+        raise Exception("Can not match arg {}, kwargs {} for {}".format(args, kwargs, attr_name))
 
-    def __setitem__(self, key, value):
-        v_key, inputs = self._get_slice(key)
-        self._data.__setitem__(v_key, self.to_data(value))
-        node = trace_node("setitem", [self, value] + inputs, [self._data], attrs={"slice": key})
+    def _trace_operator(
+        self, optype: str, inputs: List[Any], outputs: List[Any], attrs: Dict[str, Any] = None
+    ) -> Union[List["TracedTensor"], "TracedTensor"]:
+        """Trace the operator and gte outputs
+
+        Parameters
+        ----------
+        optype: str
+            The type of node.
+        inputs: list<any>
+            The input datas.
+        outputs: list<any>
+            The output datas.
+        attrs: dict<string, any>
+            The attributes of the node.
+
+        Returns
+        -------
+        outputs: list<TracedTensor>/TracedTensor
+            The outputs.
+        """
+
+        outputs = [{"obj": o, "module": self._module} for o in outputs]
+        node = trace_node(optype, inputs, outputs, attrs=attrs)
+        if attrs and attrs.get("multi_outputs", False):
+            return node.get_ouputs()
         return node.output_at(0)
 
     def set_alias(self, alias: str):
@@ -195,8 +245,8 @@ class TracedTensor(object):
         return self._device
 
     @property
-    def framework(self):
-        return self._framework
+    def module(self):
+        return self._module
 
     @property
     def data(self):
@@ -206,27 +256,46 @@ class TracedTensor(object):
     def to_tensor(cls, obj: Any, name: str, **kwargs):
         """Create TracedTensor from tensor"""
 
+        try:
+            import torch  # pylint: disable=import-outside-toplevel
+
+            is_torch = isinstance(obj, torch.Tensor)
+        except:  # pylint: disable=bare-except
+            is_torch = False
+
         kwargs["data"] = obj
-        if isinstance(obj, int):
-            kwargs = msc_utils.update_dict({"shape": [], "dtype": "int"}, kwargs)
-        elif isinstance(obj, float):
-            kwargs = msc_utils.update_dict({"shape": [], "dtype": "float"}, kwargs)
-        elif isinstance(obj, str):
+        if isinstance(obj, str):
             kwargs = msc_utils.update_dict({"shape": ["seq:0:4096"], "dtype": "string"}, kwargs)
-        elif msc_utils.is_array(obj):
-            data = msc_utils.MSCArray(obj)
-            array = data._to_ndarray()
+        elif isinstance(obj, (int, np.int32)):
+            kwargs = msc_utils.update_dict({"shape": [], "dtype": "int32"}, kwargs)
+        elif isinstance(obj, (float, np.float32)):
+            kwargs = msc_utils.update_dict({"shape": [], "dtype": "float32"}, kwargs)
+        elif isinstance(obj, (bool, np.bool_)):
+            kwargs = msc_utils.update_dict({"shape": [], "dtype": "bool"}, kwargs)
+        elif isinstance(obj, np.ndarray):
+            kwargs = msc_utils.update_dict(
+                {
+                    "shape": obj.shape,
+                    "dtype": obj.dtype.name,
+                    "device": "cpu",
+                    "module": "numpy",
+                },
+                kwargs,
+            )
+        elif is_torch:
+            ref_obj = msc_utils.MSCArray(obj)
+            array = ref_obj._to_ndarray()
             kwargs = msc_utils.update_dict(
                 {
                     "shape": array.shape,
                     "dtype": array.dtype.name,
-                    "device": data.device,
-                    "framework": data.framework,
+                    "device": ref_obj.device,
+                    "module": "torch",
                 },
                 kwargs,
             )
         else:
-            raise Exception("Unexpected object " + str(obj))
+            raise Exception("Unexpected object {}({})".format(obj, type(obj)))
         return cls(name, **kwargs)
 
     @classmethod
@@ -436,24 +505,24 @@ class TracedNode(object):
 
         return self._attrs.get(key, default)
 
-    def infer_framework(self) -> str:
-        """Inference the framework of node
+    def infer_module(self) -> str:
+        """Inference the module of node
 
         Returns
         -------
-        framework: str
-            The framework of the node.
+        module: str
+            The module of the node.
         """
 
-        framework = None
+        module = None
         for i in self.get_inputs() + self.get_outputs():
-            if not i.framework:
+            if not i.module:
                 continue
-            if not framework:
-                framework = i.framework
-            assert framework == i.framework, "Find different frameworks of inputs: " + str(self)
-        assert framework, "Can not infer framework of " + str(self)
-        return framework
+            if not module:
+                module = i.module
+            assert module == i.module, "Find different modules of inputs: " + str(self)
+        assert module, "Can not infer module of " + str(self)
+        return module
 
     @property
     def name(self):
@@ -565,14 +634,12 @@ class TracedGraph(object):
                             {
                                 "dtype": i_array.cast().dtype.name,
                                 "device": i_array.device,
-                                "framework": i_array.framework,
+                                "module": i_array.module,
                             }
                         )
                         break
                     elif isinstance(i, TracedTensor):
-                        kwargs.update(
-                            {"dtype": i.dtype, "device": i.device, "framework": i.framework}
-                        )
+                        kwargs.update({"dtype": i.dtype, "device": i.device, "module": i.module})
                         break
                 c_node = self.add_node("constant", [], [kwargs], attrs=c_attrs)
                 v_inputs.append((c_node, 0))

@@ -14,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""tvm.contrib.msc.core.frontend.trace"""
+"""tvm.contrib.msc.core.trace"""
 
 from .tracer import *
-from .trace_parser import *
+from .parse import *

@@ -14,15 +14,6 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""tvm.contrib.msc.framework.torch.frontend.trace.torch_trace_parser"""
+"""tvm.contrib.msc.framework.torch.trace"""
 
-from tvm.contrib.msc.core.utils.namespace import MSCFramework
-from tvm.contrib.msc.core import utils as msc_utils
-from tvm.contrib.msc.core.frontend.trace import BaseTraceParser
-
-
-@msc_utils.register_trace_parser
-class TorchTraceParser(BaseTraceParser):
-    @classmethod
-    def framework(cls):
-        return MSCFramework.TORCH
+from .parse import *

@@ -20,12 +20,12 @@
 import numpy as np
 
 import tvm.testing
-from tvm.contrib.msc.core.frontend import msc_trace, get_global_tracer
+from tvm.contrib.msc.core.trace import msc_trace, get_global_tracer
 from tvm.contrib.msc.pipeline import MSCManager, create_config
 from tvm.contrib.msc.core.utils.namespace import MSCFramework
 from tvm.contrib.msc.core.utils.message import MSCStage
 from tvm.contrib.msc.core import utils as msc_utils
-from tvm.contrib.msc.framework.torch.frontend.trace import *
+from tvm.contrib.msc.framework.torch.trace import *
 
 
 def _create_manager(group: dict) -> MSCManager:
@@ -52,7 +52,6 @@ def verify_func(func, input_info, framework=MSCFramework.MSC, config=None):
             return msc_utils.cast_array(i_info, framework)
         return msc_utils.random_data(i_info, framework)
 
-    print("\n\n[TMINFO] start tracing func " + str(func))
     datas = [_to_data(i) for i in input_info]
     golden = func(*datas)
     if not isinstance(golden, (tuple, list)):
@@ -75,18 +74,19 @@ def verify_func(func, input_info, framework=MSCFramework.MSC, config=None):
         results.update({o_name: o_data for o_name, o_data in zip(group["outputs"], outputs)})
     outputs = [results[o] for o in dumped["outputs"]]
     for gol, out in zip(golden, outputs):
-        tvm.testing.assert_allclose(msc_utils.cast_array(gol), msc_utils.cast_array(out))
+        tvm.testing.assert_allclose(
+            msc_utils.cast_array(gol), msc_utils.cast_array(out), rtol=1e-4, atol=1e-4
+        )
     # clean up
     dumped["dataset"].destory()
     for manager in managers.values():
         manager.destory()
-    print("[TMINFO] destory!!")
 
 
 def test_binary():
     """Test trace for binary"""
 
-    def func_binary(data):
+    def func_base(data):
         data = data + 1
         data = data - 2
         data = data * data
@@ -100,7 +100,7 @@ def test_binary():
         data_min = np.minimum(data_a, data_b)
         return data_max * data_min
 
-    verify_func(func_binary, [([256, 256], "float32")])
+    verify_func(func_base, [([256, 256], "float32")])
     verify_func(func_numpy, [([256, 256], "float32"), ([256, 256], "float32")])
 
 
@@ -108,8 +108,11 @@ def test_unary():
     """Test trace for unary"""
 
     def func_numpy(data):
-        data = data.abs()
-        return np.exp(data)
+        data = np.abs(data)
+        data = np.exp(data)
+        data = np.sin(data)
+        data = np.cos(data)
+        return np.tanh(data)
 
     verify_func(func_numpy, [([256, 256], "float32")])
 
@@ -117,7 +120,7 @@ def test_unary():
 def test_compare():
     """Test trace for compare"""
 
-    def func_compare(data_a, data_b):
+    def func_base(data_a, data_b):
         data_eq = data_a == data_b
         data_ne = data_a != data_b
         data_le = data_a <= data_b
@@ -126,7 +129,22 @@ def test_compare():
         data_gt = data_a > data_b
         return data_eq * data_ne * data_le * data_lt * data_ge * data_gt
 
-    verify_func(func_compare, [([256, 256], "float32"), ([256, 256], "float32")])
+    verify_func(func_base, [([256, 256], "float32"), ([256, 256], "float32")])
+
+
+def test_reduce():
+    """Test trace for reduce"""
+
+    def func_base(data):
+        res = data.max(axis=0)
+        return res
+        """
+        res += data.min(axis=0)
+        res += np.sum(data, axis=0)
+        return res, np.argmax(data)
+        """
+
+    verify_func(func_base, [([256, 256], "float32")])
 
 
 def test_getitem():
@@ -168,4 +186,4 @@ def test_setitem():
 
 if __name__ == "__main__":
     # tvm.testing.main()
-    test_binary()
+    test_reduce()

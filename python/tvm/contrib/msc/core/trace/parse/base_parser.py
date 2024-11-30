@@ -14,79 +14,20 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""tvm.contrib.msc.core.frontend.trace.base_trace_parser"""
+"""tvm.contrib.msc.core.trace.parse.base_parser"""
 
 import logging
 from functools import partial
 from typing import Any, Dict, Callable
-import numpy as np
 
 from tvm import relax
 from tvm.contrib.msc.core import utils as msc_utils
 from tvm.contrib.msc.core.utils.register import MSCRegistery
-from .graph import *
+from ..graph import *
+from ..utils import register_trace_func
 
 
-def traced_func(*args, trace_name: str = None, **kwargs):
-    """The traced function
-
-    Parameters
-    ----------
-    name: str
-        The name of the func.
-    """
-
-    func = MSCRegistery.get(MSCRegistery.TRACE_FUNCS, {}).get(trace_name)
-    assert func, "Missing {} in trace funcs".format(trace_name)
-    inputs, attrs = [], {}
-    raw_args, raw_kwargs = [], {}
-    for idx, arg in enumerate(args):
-        if isinstance(arg, TracedTensor):
-            raw_args.append(arg.data)
-            inputs.append(arg)
-        else:
-            raw_args.append(arg)
-            attrs["arg_" + str(idx)] = arg
-    for k, v in kwargs.items():
-        if isinstance(v, TracedTensor):
-            raw_kwargs[k] = v.data
-            inputs.append(v)
-        else:
-            raw_kwargs[k] = v
-            attrs[k] = v
-    results = func(*raw_args, **raw_kwargs)
-    if isinstance(results, (tuple, list)):
-        attrs["multi_outputs"] = True
-    else:
-        results = [results]
-    node = trace_node(trace_name, inputs, results, attrs=attrs)
-    outputs = node.get_outputs()
-    if attrs.get("multi_outputs", False):
-        return outputs
-    return outputs[0]
-
-
-def register_trace_func(func: Any, name: str):
-    """Register a func for tracing
-
-    Parameters
-    ----------
-    func: callable
-        The func to be register.
-    name: str
-        The name of function.
-    """
-
-    trace_funcs = MSCRegistery.get(MSCRegistery.TRACE_FUNCS, {})
-    if name in trace_funcs:
-        return func
-    trace_funcs[name] = func
-    MSCRegistery.register(MSCRegistery.TRACE_FUNCS, trace_funcs)
-    return partial(traced_func, trace_name=name)
-
-
-@msc_utils.register_trace_parser
-class BaseTraceParser(object):
+class BaseParser(object):
     """Parser for tracing
 
     Parameters
@@ -116,7 +57,7 @@ class BaseTraceParser(object):
         """Setup the tracer"""
 
         self._convert_map = self._create_convert_map()
-        self._traced_funcs = {}
+        self._traced_funcs, self._tensor_attrs = {}, {}
         return {"converters": len(self._convert_map), "debug_level": self._debug_level}
 
     def convert(self, node: TracedNode) -> relax.Expr:
@@ -168,17 +109,43 @@ class BaseTraceParser(object):
         expr: relax.Expr
             The relax expr.
         name_hint: str
-            The name hint of expr
+            The name hint of expr.
 
         Returns
         -------
         var: relax.Var
-            The emitted var..
+            The emitted var.
         """
 
         if name_hint:
             return self._tracer.block_builder.emit(expr, name_hint)
         return self._tracer.block_builder.emit(expr)
+
+    def check_args_module(self, *args, module: str = None, **kwargs) -> bool:
+        """Infer the module of arguments
+
+        Parameters
+        -------
+        module: str
+            The module name.
+        args:
+            The arguments.
+        kwargs:
+            The kwargs.
+
+        Returns
+        -------
+        fit: bool
+            Whether all arguments belongs to the module.
+        """
+
+        for arg in args:
+            if isinstance(arg, TracedTensor) and arg.module != module:
+                return False
+        for value in kwargs.values():
+            if isinstance(value, TracedTensor) and value.module != module:
+                return False
+        return True
 
     def _unary_op(self, node: TracedNode, op: Callable) -> relax.Var:
         inputs = self.retrieve_args(node)
@@ -348,16 +315,10 @@ class BaseTraceParser(object):
             "setitem": self._setitem,
         }
 
-    def enable_trace(self) -> dict:
-        """Enable tracing
+    def enable_trace(self):
+        """Enable tracing"""
 
-        Returns
-        -------
-        traced_funcs:
-            The traced functions.
-        """
-
-        return self._traced_funcs
+        raise NotImplementedError("enable_trace is not implemented in " + str(self.__class__))
 
     def _register_func(self, module, func: callable, m_name: str = None, f_name: str = None):
         """Register function to be traced
@@ -376,10 +337,11 @@ class BaseTraceParser(object):
 
         m_name = m_name or module.__name__
         f_name = f_name or func.__name__
-        t_func = register_trace_func(func, "{}.{}".format(m_name, f_name))
+        t_func = register_trace_func(func, m_name, f_name)
         setattr(module, f_name, t_func)
         m_funcs = self._traced_funcs.setdefault(m_name, {"module": module, "funcs": []})
         m_funcs["funcs"].append(f_name)
+        return t_func
 
     def _unregister_func(self, module, f_name: str, m_name: str = None):
         """Unregister function being traced
@@ -398,7 +360,7 @@ class BaseTraceParser(object):
         trace_funcs = MSCRegistery.get(MSCRegistery.TRACE_FUNCS)
         t_name = "{}.{}".format(m_name, f_name)
         if t_name in trace_funcs:
-            setattr(module, f_name, trace_funcs[t_name])
+            setattr(module, f_name, trace_funcs[t_name]["func"])
             trace_funcs.pop(t_name)
         MSCRegistery.register(MSCRegistery.TRACE_FUNCS, trace_funcs)
 
@@ -429,42 +391,26 @@ class BaseTraceParser(object):
     def convert_map(self):
         return self._convert_map
 
+    @property
+    def traced_funcs(self):
+        return self._traced_funcs
+
+    @property
+    def tensor_attrs(self):
+        return self._tensor_attrs
+
     @classmethod
     def framework(cls):
         return "base"
 
 
 @msc_utils.register_trace_parser
-class MSCTraceParser(BaseTraceParser):
-    def _create_convert_map(self) -> Dict[str, Callable[[TracedNode], relax.Var]]:
-        """Create convert map for nodes
+class BasicParser(BaseParser):
+    def enable_trace(self):
+        """Enable tracing"""
 
-        Returns
-        -------
-        convert_map: list<str, callable>
-            The convert_map.
-        """
-
-        return {
-            "numpy.maximum": partial(self._binary_op, op=relax.op.maximum),
-            "numpy.minimum": partial(self._binary_op, op=relax.op.minimum),
-        }
-
-    def enable_trace(self) -> dict:
-        """Enable tracing
-
-        Returns
-        -------
-        traced_funcs:
-            The traced functions.
-        """
-
-        for f_name in dir(np):
-            func = getattr(np, f_name)
-            if any(k in func.__class__.__name__ for k in ["_ArrayFunctionDispatcher", "ufunc"]):
-                self._register_func(np, func)
-        return self._traced_funcs
+        return None
 
     @classmethod
     def framework(cls):
-        return MSCFramework.MSC
+        return "basic"
