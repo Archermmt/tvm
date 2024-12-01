@@ -17,7 +17,7 @@
 """tvm.contrib.msc.core.frontend.trace.tarcer"""
 
 import logging
-from functools import wraps, partial
+from functools import wraps
 
 import tvm
 from tvm import relax
@@ -55,23 +55,23 @@ class Tracer(object):
 
     def __init__(
         self,
-        dataset: str = "trace_datas",
-        workspace: str = "trace_workspace",
-        use_cache: bool = False,
         inputs: List[tuple] = None,
         outputs: List[str] = None,
         parsers: Dict[str, dict] = None,
         scopes: Dict[str, dict] = None,
+        dataset: str = "trace_datas",
+        workspace: str = "trace_workspace",
+        use_cache: bool = False,
         verbose: str = "info",
         logger: logging.Logger = None,
     ):
-        self._dataset = msc_utils.msc_dir(dataset, keep_history=use_cache)
-        self._workspace = msc_utils.msc_dir(workspace, keep_history=use_cache)
-        self._use_cache = use_cache
         self._inputs = inputs or []
         self._outputs = outputs or []
         self._parser_configs = parsers or ["basic", "numpy"]
         self._scopes = scopes or {}
+        self._dataset = msc_utils.msc_dir(dataset, keep_history=use_cache)
+        self._workspace = msc_utils.msc_dir(workspace, keep_history=use_cache)
+        self._use_cache = use_cache
         self._verbose = verbose
         self._logger = logger
         if not self._logger:
@@ -162,12 +162,24 @@ class Tracer(object):
                 in_idx, self._inputs
             )
             in_info = self._inputs[in_idx]
-            if len(in_info) == 3:
-                data = {"alias": in_info[0], "shape": in_info[1], "dtype": in_info[2], "obj": data}
-            elif len(in_info) == 2:
-                data = {"shape": in_info[0], "dtype": in_info[1], "obj": data}
-            elif len(in_info) == 1:
-                data = {"shape": in_info[0], "obj": data}
+            if isinstance(in_info, str):
+                data = {"alias": in_info, "obj": data}
+            elif isinstance(in_info, dict):
+                data = msc_utils.update_dict(in_info, {"obj": data})
+            elif isinstance(in_info, (tuple, list)):
+                if len(in_info) == 3:
+                    data = {
+                        "alias": in_info[0],
+                        "shape": in_info[1],
+                        "dtype": in_info[2],
+                        "obj": data,
+                    }
+                elif len(in_info) == 2:
+                    data = {"shape": in_info[0], "dtype": in_info[1], "obj": data}
+                elif len(in_info) == 1:
+                    data = {"shape": in_info[0], "obj": data}
+                else:
+                    raise Exception("Unexpected input info " + str(in_info))
             else:
                 raise Exception("Unexpected input info " + str(in_info))
         node = self._graph.add_node("input", [], [data], name=name)
@@ -214,6 +226,7 @@ class Tracer(object):
         """
 
         self.disable_trace()
+        print("graph " + str(self._graph))
 
         datas_info = {}
         for name, saver in self._savers.items():

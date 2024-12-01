@@ -61,7 +61,18 @@ class BaseParser(object):
         return {"converters": len(self._convert_map), "debug_level": self._debug_level}
 
     def convert(self, node: TracedNode) -> relax.Expr:
-        """Convert node to relax Expr"""
+        """Convert node to relax Expr
+
+        Parameters
+        -------
+        node: TracedNode
+            The traced node.
+
+        Returns
+        -------
+        expr: relax.Expr
+            The converted expr.
+        """
 
         assert node.optype in self._convert_map, "Convert is not support for {}".format(node.optype)
         expr = self._convert_map[node.optype](node)

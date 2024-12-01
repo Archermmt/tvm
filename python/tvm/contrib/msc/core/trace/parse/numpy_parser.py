@@ -28,6 +28,13 @@ from .base_parser import BaseParser
 
 @msc_utils.register_trace_parser
 class NumpyParser(BaseParser):
+    def trace_astype(self, data: TracedTensor, dtype: str):
+        res = data.data.astype(dtype)
+        node = trace_node(
+            "astype", [data], [{"obj": res, "module": "numpy"}], attrs={"dtype": dtype}
+        )
+        return node.output_at(0)
+
     def _reduce_op(self, node: TracedNode, op: Callable) -> relax.Var:
         axis = node.get_attr("axis")
         if axis is None and node.get_attr:
@@ -36,12 +43,9 @@ class NumpyParser(BaseParser):
         if keepdims is None:
             keepdims = node.get_arg_attr(2, False)
         data = self.retrieve_arg(node.input_at(0))
-        print("node " + str(node))
-        print("reduce of axis {}, keepdims {}".format(axis, keepdims))
         return self.emit(op(data, axis=axis, keepdims=keepdims))
 
     def argsort(self, node: TracedNode) -> relax.Var:
-        print("arg sort node " + str(node))
         data = self.retrieve_arg(node.input_at(0))
         axis = node.get_attr("axis")
         if axis is None:
@@ -136,7 +140,7 @@ class NumpyParser(BaseParser):
     def enable_trace(self) -> Tuple[dict, dict]:
         """Enable tracing"""
 
-        def _check_func(f_name, func):
+        def _check_func(f_name: str, func: callable):
             if any(k in func.__class__.__name__ for k in ["_ArrayFunctionDispatcher", "ufunc"]):
                 return True
             if f_name in ["ones", "zeros", "full"]:
@@ -153,20 +157,11 @@ class NumpyParser(BaseParser):
                     setattr(t_func, f_attr, getattr(func, f_attr))
 
         checker = partial(self.check_args_module, module="numpy")
-        np_attrs = ["max", "mean", "min", "sum"]
-        np_attrs.extend(["argmax", "argmin"])
+        t_attrs = ["max", "mean", "min", "sum", "argmax", "argmin"]
         self._tensor_attrs = {
-            key: {"func": getattr(np, key), "checker": checker} for key in np_attrs
+            key: {"func": getattr(np, key), "checker": checker} for key in t_attrs
         }
-
-        def _astype(data, dtype):
-            res = data.data.astype(dtype)
-            node = trace_node(
-                "astype", [data], [{"obj": res, "module": "numpy"}], attrs={"dtype": dtype}
-            )
-            return node.output_at(0)
-
-        self._tensor_attrs["astype"] = {"func": _astype, "checker": checker}
+        self._tensor_attrs["astype"] = {"func": self.trace_astype, "checker": checker}
 
     @classmethod
     def framework(cls):

@@ -19,6 +19,7 @@
 
 import numpy as np
 
+import torch
 import tvm.testing
 from tvm.contrib.msc.core.trace import msc_trace, get_global_tracer
 from tvm.contrib.msc.pipeline import MSCManager, create_config
@@ -29,6 +30,7 @@ from tvm.contrib.msc.framework.torch.trace import *
 
 
 def _create_manager(group: dict) -> MSCManager:
+    print("group " + str(group))
     config = create_config(
         group["inputs"],
         group["outputs"],
@@ -40,11 +42,19 @@ def _create_manager(group: dict) -> MSCManager:
     return MSCManager(group["model"], config)
 
 
-def verify_func(func, input_info, framework=MSCFramework.MSC, config=None):
+def verify_func(func, input_info, framework=MSCFramework.MSC, config=None, extra_parsers=None):
     """Compare source function and traced func"""
 
     config = config or {}
-    config.update({"dataset": "trace_datas", "workspace": "trace_workspace", "verbose": "critical"})
+    parsers = ["basic", "numpy"] + (extra_parsers or [])
+    config.update(
+        {
+            "parsers": parsers,
+            "dataset": "trace_datas",
+            "workspace": "trace_workspace",
+            "verbose": "critical",
+        }
+    )
 
     def _to_data(i_info):
         if isinstance(i_info, np.ndarray):
@@ -83,7 +93,7 @@ def verify_func(func, input_info, framework=MSCFramework.MSC, config=None):
 
 
 def test_create():
-    """Test trace for unary"""
+    """Test trace for create"""
 
     def func_numpy(data):
         res = np.zeros_like(data) + np.ones_like(data)
@@ -93,7 +103,13 @@ def test_create():
         res += np.full(data.shape, 4, dtype=data.dtype)
         return res
 
+    def func_torch(data):
+        res = torch.zeros_like(data) + torch.ones_like(data)
+        res += torch.full_like(data, 3)
+        return res
+
     verify_func(func_numpy, [([256, 256], "float32")])
+    verify_func(func_torch, [([256, 256], "float32")], MSCFramework.TORCH, extra_parsers=["torch"])
 
 
 def test_unary():
@@ -106,7 +122,17 @@ def test_unary():
         data = np.cos(data)
         return np.tanh(data)
 
+    def func_torch(data):
+        data = torch.abs(data)
+        data = torch.exp(data)
+        data = torch.sin(data)
+        data = torch.cos(data)
+        data = torch.tanh(data)
+        data = torch.relu(data)
+        return torch.nn.functional.gelu(data)
+
     verify_func(func_numpy, [([256, 256], "float32")])
+    verify_func(func_torch, [([256, 256], "float32")], MSCFramework.TORCH, extra_parsers=["torch"])
 
 
 def test_cast():
@@ -138,6 +164,7 @@ def test_binary():
         return data_max * data_min
 
     verify_func(func_base, [([256, 256], "float32")])
+    verify_func(func_base, [([256, 256], "float32")], MSCFramework.TORCH)
     verify_func(func_numpy, [([256, 256], "float32"), ([256, 256], "float32")])
 
 
@@ -224,4 +251,5 @@ def test_setitem():
 
 
 if __name__ == "__main__":
-    tvm.testing.main()
+    # tvm.testing.main()
+    test_unary()

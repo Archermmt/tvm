@@ -616,6 +616,7 @@ class TorchFXImporter(BaseFXGraphImporter):
             nn.Flatten: self._flatten_module,
             ## call_function and call_method
             # unary
+            "abs": self._unary_op(relax.op.abs),
             "acos": self._unary_op(relax.op.acos),
             "acosh": self._unary_op(relax.op.acosh),
             "asin": self._unary_op(relax.op.asin),
