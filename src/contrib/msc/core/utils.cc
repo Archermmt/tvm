@@ -407,6 +407,10 @@ const Array<String> ExprUtils::GetInputTypes(const String& optype, size_t inputs
   } else if (optype == "full" && as_relax) {
     input_types.push_back("shape");
     input_types.push_back("input");
+  } else if (optype == "ones" || optype == "zeros") {
+    if (inputs_num > 0) {
+      input_types.push_back("shape");
+    }
   } else if (optype == "strided_slice") {
     input_types.push_back("input");
     if (inputs_num > 1) {

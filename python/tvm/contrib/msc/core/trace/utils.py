@@ -102,13 +102,14 @@ def traced_func(*args, trace_name: str = None, **kwargs):
     assert info, "Missing {} in trace funcs".format(trace_name)
     inputs, attrs = [], {}
     raw_args, raw_kwargs = [], {}
-    for idx, arg in enumerate(args):
+    for arg in args:
         if arg.__class__.__name__ == "TracedTensor":
             raw_args.append(arg.data)
             inputs.append(arg)
+            attrs.setdefault("args", []).append(arg.name)
         else:
             raw_args.append(arg)
-            attrs["arg_" + str(idx)] = arg
+            attrs.setdefault("args", []).append(arg)
     for k, v in kwargs.items():
         if v.__class__.__name__ == "TracedTensor":
             raw_kwargs[k] = v.data

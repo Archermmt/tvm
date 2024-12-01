@@ -29,7 +29,6 @@ from tvm.contrib.msc.framework.torch.trace import *
 
 
 def _create_manager(group: dict) -> MSCManager:
-    print("group " + str(group))
     config = create_config(
         group["inputs"],
         group["outputs"],
@@ -83,6 +82,44 @@ def verify_func(func, input_info, framework=MSCFramework.MSC, config=None):
         manager.destory()
 
 
+def test_create():
+    """Test trace for unary"""
+
+    def func_numpy(data):
+        res = np.zeros_like(data) + np.ones_like(data)
+        res *= np.ones(data.shape, data.dtype)
+        res -= np.zeros(data.shape, data.dtype)
+        res += np.full_like(data, 3)
+        res += np.full(data.shape, 4, dtype=data.dtype)
+        return res
+
+    verify_func(func_numpy, [([256, 256], "float32")])
+
+
+def test_unary():
+    """Test trace for unary"""
+
+    def func_numpy(data):
+        data = np.abs(data)
+        data = np.exp(data)
+        data = np.sin(data)
+        data = np.cos(data)
+        return np.tanh(data)
+
+    verify_func(func_numpy, [([256, 256], "float32")])
+
+
+def test_cast():
+    """Test cast for unary"""
+
+    def func_numpy(data):
+        data_int = data.astype("int32")
+        data_round = np.round(data).astype(data_int.dtype)
+        return data_int + data_round
+
+    verify_func(func_numpy, [([256, 256], "float32")])
+
+
 def test_binary():
     """Test trace for binary"""
 
@@ -104,19 +141,6 @@ def test_binary():
     verify_func(func_numpy, [([256, 256], "float32"), ([256, 256], "float32")])
 
 
-def test_unary():
-    """Test trace for unary"""
-
-    def func_numpy(data):
-        data = np.abs(data)
-        data = np.exp(data)
-        data = np.sin(data)
-        data = np.cos(data)
-        return np.tanh(data)
-
-    verify_func(func_numpy, [([256, 256], "float32")])
-
-
 def test_compare():
     """Test trace for compare"""
 
@@ -135,16 +159,27 @@ def test_compare():
 def test_reduce():
     """Test trace for reduce"""
 
-    def func_base(data):
+    def func_numpy(data):
         res = data.max(axis=0)
-        return res
-        """
         res += data.min(axis=0)
-        res += np.sum(data, axis=0)
-        return res, np.argmax(data)
-        """
+        res += data.mean(axis=0)
+        res += data.sum(axis=0)
+        res2 = data.argmax(axis=0)
+        res2 += data.argmin(axis=0)
+        return res, res2
 
-    verify_func(func_base, [([256, 256], "float32")])
+    verify_func(func_numpy, [([256, 256], "float32")])
+
+
+def test_sort():
+    """Test sort for reduce"""
+
+    def func_numpy(data):
+        value = np.sort(data, axis=0)
+        args = np.argsort(data, axis=0)
+        return value.astype(args.dtype) * args
+
+    verify_func(func_numpy, [([256, 256], "float32")])
 
 
 def test_getitem():
@@ -159,8 +194,12 @@ def test_getitem():
         data = data[index1]
         return data[:, index2]
 
+    def func_reverse(data):
+        return data[::-1]
+
     verify_func(func_slice, [([1, 3, 10, 10], "float32")])
     verify_func(func_select, [([256, 256], "float32"), ([10], "int32"), ([10], "int32")])
+    verify_func(func_reverse, [([256, 256], "float32")])
 
 
 def test_setitem():
@@ -185,5 +224,4 @@ def test_setitem():
 
 
 if __name__ == "__main__":
-    # tvm.testing.main()
-    test_reduce()
+    tvm.testing.main()

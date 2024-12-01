@@ -234,14 +234,22 @@ class TracedTensor(object):
 
     @property
     def shape(self):
+        if "shape" in self.traced_attrs and hasattr(self._data, "shape"):
+            return self._trace_operator(
+                "shape", [self], [np.array(self._data.shape, dtype="int32")]
+            )
         return self._shape
 
     @property
     def dtype(self):
+        if "dtype" in self.traced_attrs and hasattr(self._data, "dtype"):
+            return self._data.dtype
         return self._dtype
 
     @property
     def device(self):
+        if "device" in self.traced_attrs and hasattr(self._data, "device"):
+            return self._data.device
         return self._device
 
     @property
@@ -268,6 +276,8 @@ class TracedTensor(object):
             kwargs = msc_utils.update_dict({"shape": ["seq:0:4096"], "dtype": "string"}, kwargs)
         elif isinstance(obj, (int, np.int32)):
             kwargs = msc_utils.update_dict({"shape": [], "dtype": "int32"}, kwargs)
+        elif isinstance(obj, (np.int64)):
+            kwargs = msc_utils.update_dict({"shape": [], "dtype": "int64"}, kwargs)
         elif isinstance(obj, (float, np.float32)):
             kwargs = msc_utils.update_dict({"shape": [], "dtype": "float32"}, kwargs)
         elif isinstance(obj, (bool, np.bool_)):
@@ -504,6 +514,27 @@ class TracedNode(object):
         """
 
         return self._attrs.get(key, default)
+
+    def get_arg_attr(self, idx: int, default: Any = None) -> Any:
+        """Get the argument attr by index
+
+        Parameters
+        ----------
+        idx: int
+            The index of arg attrs.
+        default:
+            The default value.
+
+        Returns
+        -------
+        attr:
+            The attr value.
+        """
+
+        args = self.get_attr("args")
+        if not args or len(args) <= idx:
+            return default
+        return args[idx]
 
     def infer_module(self) -> str:
         """Inference the module of node

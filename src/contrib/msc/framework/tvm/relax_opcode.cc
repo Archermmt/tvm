@@ -88,6 +88,19 @@ class RelaxAdaptivePool2dCodeGen : public RelaxOpCode {
   }
 };
 
+class RelaxArgsortCodeGen : public RelaxOpCode {
+  RELAX_OP_CODEGEN_METHODS(RelaxArgsortCodeGen)
+
+ protected:
+  void CodeGenBuild() final {
+    stack_.op_call()
+        .op_input_arg()
+        .op_arg<int>("axis")
+        .op_arg<bool>("descending")
+        .op_str_arg("dtype");
+  }
+};
+
 class RelaxAstypeCodeGen : public RelaxOpCode {
   RELAX_OP_CODEGEN_METHODS(RelaxAstypeCodeGen)
 
@@ -397,6 +410,15 @@ class RelaxFullCodeGen : public RelaxOpCode {
   }
 };
 
+class RelaxFullLikeCodeGen : public RelaxOpCode {
+  RELAX_OP_CODEGEN_METHODS(RelaxFullLikeCodeGen)
+
+ protected:
+  void CodeGenBuild() final {
+    stack_.op_call().op_input_arg().op_input_arg(1, "fill_value").op_str_arg("dtype");
+  }
+};
+
 class RelaxGetItemCodeGen : public RelaxOpCode {
   RELAX_OP_CODEGEN_METHODS(RelaxGetItemCodeGen)
 
@@ -596,6 +618,15 @@ class RelaxScatterNDCodeGen : public RelaxOpCode {
   }
 };
 
+class RelaxSortCodeGen : public RelaxOpCode {
+  RELAX_OP_CODEGEN_METHODS(RelaxSortCodeGen)
+
+ protected:
+  void CodeGenBuild() final {
+    stack_.op_call().op_input_arg().op_arg<int>("axis").op_arg<bool>("descending");
+  }
+};
+
 class RelaxResize2dCodeGen : public RelaxOpCode {
   RELAX_OP_CODEGEN_METHODS(RelaxResize2dCodeGen)
 
@@ -787,12 +818,14 @@ const std::shared_ptr<std::unordered_map<String, std::shared_ptr<RelaxOpCode>>> 
   map->emplace("std", std::make_shared<RelaxReduceAxisCodeGen>("relax.op.std", true));
 
   // axis && axes ops
+  map->emplace("flip", std::make_shared<RelaxAxisCodeGen>("relax.op.flip"));
   map->emplace("nn.log_softmax", std::make_shared<RelaxAxisCodeGen>("relax.op.nn.log_softmax"));
   map->emplace("nn.softmax", std::make_shared<RelaxAxisCodeGen>("relax.op.nn.softmax"));
   map->emplace("expand_dims", std::make_shared<RelaxAxesCodeGen>("relax.op.expand_dims"));
   map->emplace("squeeze", std::make_shared<RelaxAxesCodeGen>("relax.op.squeeze"));
 
   // math ops
+  map->emplace("argsort", std::make_shared<RelaxArgsortCodeGen>("relax.op.argsort"));
   map->emplace("astype", std::make_shared<RelaxAstypeCodeGen>("relax.op.astype"));
   map->emplace("broadcast_to", std::make_shared<RelaxBroadcastToCodeGen>("relax.op.broadcast_to"));
   map->emplace("cast", std::make_shared<RelaxAstypeCodeGen>("relax.op.astype"));
@@ -808,6 +841,7 @@ const std::shared_ptr<std::unordered_map<String, std::shared_ptr<RelaxOpCode>>> 
   map->emplace("scatter_elements",
                std::make_shared<RelaxScatterElementsCodeGen>("relax.op.scatter_elements"));
   map->emplace("scatter_nd", std::make_shared<RelaxScatterNDCodeGen>("relax.op.scatter_nd"));
+  map->emplace("sort", std::make_shared<RelaxSortCodeGen>("relax.op.sort"));
   map->emplace("split", std::make_shared<RelaxSplitCodeGen>("relax.op.split"));
   map->emplace("stack", std::make_shared<RelaxStackCodeGen>("relax.op.concat"));
   map->emplace("strided_slice",
@@ -819,6 +853,7 @@ const std::shared_ptr<std::unordered_map<String, std::shared_ptr<RelaxOpCode>>> 
   // create ops
   map->emplace("constant", std::make_shared<RelaxConstantCodeGen>("relax.Var"));
   map->emplace("full", std::make_shared<RelaxFullCodeGen>("relax.op.full"));
+  map->emplace("full_like", std::make_shared<RelaxFullLikeCodeGen>("relax.op.full_like"));
   map->emplace("ones", std::make_shared<RelaxCreateCodeGen>("relax.op.ones"));
   map->emplace("ones_like", std::make_shared<RelaxCreateLikeCodeGen>("relax.op.ones_like"));
   map->emplace("tril", std::make_shared<RelaxTriCodeGen>("relax.op.tril"));

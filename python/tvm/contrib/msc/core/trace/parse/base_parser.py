@@ -65,7 +65,7 @@ class BaseParser(object):
 
         assert node.optype in self._convert_map, "Convert is not support for {}".format(node.optype)
         expr = self._convert_map[node.optype](node)
-        if isinstance(expr, (relax.Var, relax.Constant)):
+        if isinstance(expr, (relax.Var, relax.Constant, relax.ShapeExpr)):
             return expr
         return self.emit(expr, node.name)
 
@@ -157,13 +157,18 @@ class BaseParser(object):
         assert len(inputs) == 2, "binary op only support 2 inputs, get " + str(inputs)
         return self.emit(op(*inputs))
 
-    def _constant(self, node: TracedNode) -> relax.Var:
+    def astype(self, node: TracedNode) -> relax.Var:
+        data = self.retrieve_arg(node.input_at(0))
+        dtype = node.get_attr("dtype") or node.get_arg_attr(1)
+        return relax.op.astype(data, str(dtype))
+
+    def constant(self, node: TracedNode) -> relax.Var:
         scalar, output = node.get_attr("scalar"), node.output_at(0)
         if scalar is None:
             return relax.const(msc_utils.cast_array(output.data), output.dtype)
         return relax.const(scalar, output.dtype)
 
-    def _getitem(self, node: TracedNode) -> relax.Var:
+    def getitem(self, node: TracedNode) -> relax.Var:
         a_slice = node.get_attr("slice")
         data = self.retrieve_arg(node.input_at(0))
         if isinstance(a_slice, int):
@@ -172,6 +177,13 @@ class BaseParser(object):
                 node.name + "." + str(a_slice),
             )
             return relax.op.reshape(sliced, list(data.struct_info.shape)[1:])
+        if isinstance(a_slice, slice):
+            if a_slice.start is None and a_slice.stop is None and a_slice.step == -1:
+                return relax.op.flip(data, axis=0)
+            stride_begin = [0 if a_slice.start is None else a_slice.start]
+            stride_end = [data.struct_info.shape[0] if a_slice.stop is None else a_slice.stop]
+            stride = [1 if a_slice.step is None else a_slice.step]
+            return relax.op.strided_slice(data, [0], stride_begin, stride_end, stride)
         if isinstance(a_slice, TracedTensor):
             return relax.op.take(data, self.retrieve_arg(a_slice), 0)
         take_indices, take_axes = [], []
@@ -228,7 +240,7 @@ class BaseParser(object):
         sliced_shape = [i for idx, i in enumerate(sliced_shape) if idx not in reduce_dim]
         return self.emit(relax.op.reshape(sliced, sliced_shape), node.name + "_reshape")
 
-    def _setitem(self, node: TracedNode) -> relax.Var:
+    def setitem(self, node: TracedNode) -> relax.Var:
         a_slice = node.get_attr("slice")
         data = self.retrieve_arg(node.input_at(0))
         updates = self.retrieve_arg(node.input_at(1))
@@ -285,6 +297,10 @@ class BaseParser(object):
             raise Exception("setitem with tensor only support int and bool")
         raise NotImplementedError("slice {} is not supported for setitem".format(a_slice))
 
+    def shape(self, node: TracedNode) -> relax.Var:
+        data = self.retrieve_arg(node.input_at(0))
+        return data.struct_info.shape
+
     def _create_convert_map(self) -> Dict[str, Callable[[TracedNode], relax.Var]]:
         """Create convert map for nodes
 
@@ -310,15 +326,12 @@ class BaseParser(object):
             "sub": partial(self._binary_op, op=relax.op.subtract),
             "truediv": partial(self._binary_op, op=relax.op.divide),
             # baisc ops
-            "constant": self._constant,
-            "getitem": self._getitem,
-            "setitem": self._setitem,
+            "astype": self.astype,
+            "constant": self.constant,
+            "getitem": self.getitem,
+            "setitem": self.setitem,
+            "shape": self.shape,
         }
-
-    def enable_trace(self):
-        """Enable tracing"""
-
-        raise NotImplementedError("enable_trace is not implemented in " + str(self.__class__))
 
     def _register_func(self, module, func: callable, m_name: str = None, f_name: str = None):
         """Register function to be traced

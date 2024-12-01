@@ -88,8 +88,7 @@ class Tracer(object):
 
         self._graph = None
         self._savers = {}
-        self._parsers, self._op_parsers = {}, {}
-        traced_funcs, tensor_attrs = {}, {}
+        self._parsers, self._ops_map = {}, {}
         for p_config in self._parser_configs:
             if isinstance(p_config, (tuple, list)):
                 m_name, config = p_config
@@ -97,35 +96,17 @@ class Tracer(object):
                 m_name, config = p_config, {}
             parser_cls = msc_utils.get_registered_trace_parser(m_name)
             assert parser_cls, "Can not find parser for " + str(m_name)
-            parser = parser_cls(self, config, debug_level=self._debug_level, logger=self._logger)
-            self._op_parsers.update({n: m_name for n in parser.convert_map})
-            parser.enable_trace()
-            traced_funcs[m_name] = parser.traced_funcs
-            for name, info in parser.tensor_attrs.items():
-                tensor_attrs.setdefault(name, []).append(info)
-            self._parsers[m_name] = parser
-        TracedTensor.traced_attrs = tensor_attrs
-        """
-        print("tensor_funcs " + str(tensor_funcs))
-
-        def _run_by_check(*args, ref_name=None, **kwargs):
-            for info in tensor_funcs[ref_name]:
-                if info["checker"](*args, **kwargs):
-                    print("args {}, kwargs {}".format(args, kwargs))
-                    return info["func"](*args, **kwargs)
-            raise Exception("Can not match arg {}, kwargs {} for {}".format(args, kwargs, info))
-        for name in tensor_funcs:
-            setattr(TracedTensor, name, partial(_run_by_check, ref_name=name))
-        """
-        if self._debug_level > 2:
-            self._logger.debug(msc_utils.msg_block(self.mark("Traced funcs"), traced_funcs))
-            self._logger.debug(msc_utils.msg_block(self.mark("Tensor funcs"), tensor_funcs))
+            self._parsers[m_name] = parser_cls(
+                self, config, debug_level=self._debug_level, logger=self._logger
+            )
+            self._ops_map.update({n: m_name for n in self._parsers[m_name].convert_map})
+        self.enable_trace()
         return {
             "dataset": self._dataset,
             "inputs": self._inputs,
             "outputs": self._outputs,
             "parsers": self._parsers,
-            "op_parsers": len(self._op_parsers),
+            "ops": len(self._ops_map),
             "scopes": self._scopes,
             "verbose": self._verbose,
             "use_cache": self._use_cache,
@@ -135,6 +116,29 @@ class Tracer(object):
         """Reset the tracer"""
 
         self._graph = TracedGraph("trace")
+
+    def enable_trace(self):
+        """Enable tracing"""
+
+        traced_funcs, tensor_attrs = {}, {}
+        for m_name, parser in self._parsers.items():
+            parser.enable_trace()
+            traced_funcs[m_name] = parser.traced_funcs
+            for name, info in parser.tensor_attrs.items():
+                tensor_attrs.setdefault(name, []).append(info)
+        for name in ["shape", "dtype", "device"]:
+            tensor_attrs.setdefault(name, []).append(None)
+        TracedTensor.traced_attrs = tensor_attrs
+        if self._debug_level > 2:
+            self._logger.debug(msc_utils.msg_block(self.mark("Traced funcs"), traced_funcs))
+            self._logger.debug(msc_utils.msg_block(self.mark("Tensor attrs"), tensor_attrs))
+
+    def disable_trace(self):
+        """Disable tracing"""
+
+        for parser in self._parsers.values():
+            parser.disable_trace()
+        TracedTensor.traced_attrs = {}
 
     def add_input(self, name: str, data: Any) -> TracedTensor:
         """Add input from data
@@ -209,11 +213,7 @@ class Tracer(object):
             The traced info.
         """
 
-        # disable tracing for parsing
-        for parser in self._parsers.values():
-            parser.disable_trace()
-
-        print("[TMIFO] graph " + str(self._graph))
+        self.disable_trace()
 
         datas_info = {}
         for name, saver in self._savers.items():
@@ -349,10 +349,8 @@ class Tracer(object):
         with self.block_builder.function(name="main", params=m_inputs, attrs=s_config.get("attrs")):
             for n_name in group["nodes"]:
                 node = self._graph.find_node(n_name)
-                assert node.optype in self._op_parsers, "op {} is not convertable".format(
-                    node.optype
-                )
-                result = self._parsers[self._op_parsers[node.optype]].convert(node)
+                assert node.optype in self._ops_map, "op {} is not convertable".format(node.optype)
+                result = self._parsers[self._ops_map[node.optype]].convert(node)
                 outputs = node.get_outputs()
                 if len(outputs) == 1 and not node.get_attr("multi_outputs", False):
                     self.env[outputs[0].name] = result

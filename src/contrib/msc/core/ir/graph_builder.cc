@@ -195,9 +195,18 @@ const MSCGraph RelaxGraphBuilder::Build(const relax::Function& func) {
     }
   }
   VisitExpr(func);
-  ICHECK(expr_tensor_map_.count(func->body->body))
-      << "Can not find seqexpr body " << func->body->body;
-  output_names = expr_tensor_map_[func->body->body];
+  const auto& ret = func->body->body;
+  if (const auto* t_node = ret.as<relax::TupleNode>()) {
+    for (const auto& f : t_node->fields) {
+      ICHECK(expr_tensor_map_.count(f)) << "Can not find return field " << f;
+      for (const auto& out : expr_tensor_map_[f]) {
+        output_names.push_back(out);
+      }
+    }
+  } else {
+    ICHECK(expr_tensor_map_.count(ret)) << "Can not find return " << ret;
+    output_names = expr_tensor_map_[ret];
+  }
   // remove const nodes as weights
   Array<MSCJoint> valid_nodes;
   std::set<String> ignore_inputs;
