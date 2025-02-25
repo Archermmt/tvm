@@ -16,6 +16,8 @@
 # under the License.
 """tvm.contrib.msc.core.frontend.trace.utils"""
 
+import inspect
+from inspect import signature
 from typing import List, Dict, Any
 from functools import partial
 
@@ -100,6 +102,21 @@ def traced_func(*args, trace_name: str = None, **kwargs):
 
     info = MSCRegistery.get(MSCRegistery.TRACE_FUNCS, {}).get(trace_name)
     assert info, "Missing {} in trace funcs".format(trace_name)
+    print("func {}:{}({})".format(trace_name, info["func"], type(info["func"])))
+    try:
+        sig = signature(info["func"])
+        print(
+            "parameters {}".format(
+                sig.parameters,
+            )
+        )
+    except:
+        pass
+    try:
+        print("args " + str(info["func"].__code__.co_varnames))
+    except:
+        pass
+
     inputs, attrs = [], {}
     raw_args, raw_kwargs = [], {}
     for arg in args:

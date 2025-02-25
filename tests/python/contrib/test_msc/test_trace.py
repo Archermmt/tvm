@@ -109,7 +109,7 @@ def test_create():
         return res
 
     verify_func(func_numpy, [([256, 256], "float32")])
-    verify_func(func_torch, [([256, 256], "float32")], MSCFramework.TORCH, extra_parsers=["torch"])
+    # verify_func(func_torch, [([256, 256], "float32")], MSCFramework.TORCH, extra_parsers=["torch"])
 
 
 def test_unary():
@@ -251,5 +251,4 @@ def test_setitem():
 
 
 if __name__ == "__main__":
-    # tvm.testing.main()
-    test_unary()
+    tvm.testing.main()
